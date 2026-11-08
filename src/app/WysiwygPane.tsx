@@ -19,11 +19,13 @@ export function WysiwygPane({
   document,
   mode,
   searchSignal,
+  jump,
   onChange,
 }: {
   document: DocumentState;
   mode: EditorMode;
   searchSignal: number;
+  jump: { index: number; token: number } | null;
   onChange(content: string): void;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -92,6 +94,12 @@ export function WysiwygPane({
       readOnly: document.readOnly,
     };
   }, [document.id, document.revision, document.readOnly, document.content, document.format, mode]);
+
+  // 大纲跳转：滚动到对应标题。见 doc/design.md §15.1。
+  useEffect(() => {
+    if (!jump) return;
+    editorRef.current?.scrollToHeading(jump.index);
+  }, [jump]);
 
   return (
     <div className="wysiwyg-wrap">

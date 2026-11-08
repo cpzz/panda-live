@@ -1,4 +1,4 @@
-import { useState, useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore, type ReactNode } from "react";
 import type { FileRef } from "../shared/ipc";
 import type { WorkspaceNode, WorkspaceStore } from "../services/workspace-store";
 
@@ -7,6 +7,8 @@ interface WorkspacePanelProps {
   onOpenFile(node: WorkspaceNode): void;
   onRenamed(oldPath: string, ref: FileRef): void;
   onDeleted(filePath: string, isDir: boolean): void;
+  /** 目录树下方的大纲等附加面板。 */
+  outline?: ReactNode;
 }
 
 interface PromptState {
@@ -115,7 +117,7 @@ function NodeRow({
 }
 
 /** 左侧工作区目录树。见 doc/design.md §12.5、§15.1。 */
-export function WorkspacePanel({ store, onOpenFile, onRenamed, onDeleted }: WorkspacePanelProps) {
+export function WorkspacePanel({ store, onOpenFile, onRenamed, onDeleted, outline }: WorkspacePanelProps) {
   const state = useSyncExternalStore(store.subscribe, store.getState);
   const [prompt, setPrompt] = useState<PromptState | null>(null);
   const [promptValue, setPromptValue] = useState("");
@@ -198,6 +200,8 @@ export function WorkspacePanel({ store, onOpenFile, onRenamed, onDeleted }: Work
             </button>
           </div>
         )}
+
+        {outline}
       </aside>
 
       {prompt && (

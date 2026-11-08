@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { EditorState } from "@codemirror/state";
 import { renderMarkdownToHtml } from "../formats/markdown/preview";
+import { buildOutline, type OutlineItem } from "../formats/outline";
 import { getFormatEntry, refreshExtensionFormats } from "../extensions/registry";
 import { sanitizeHtml } from "../render/html";
 import { resolveRelativePath } from "../utils/paths";
@@ -23,6 +24,7 @@ import type { CompileResult, EngineStatus } from "../shared/ipc";
 import type { Settings } from "../shared/settings";
 import { describeError, getErrorCode } from "../shared/errors";
 import { RecoveryDialog } from "./RecoveryDialog";
+import { OutlinePanel } from "./OutlinePanel";
 import { PdfPreview } from "./PdfPreview";
 import { PerformanceOverlay } from "./PerformanceOverlay";
 import { SettingsDialog } from "./SettingsDialog";
@@ -64,12 +66,14 @@ function SourcePane({
   document,
   mode,
   searchSignal,
+  jump,
   onChange,
   onSelection,
 }: {
   document: DocumentState;
   mode: EditorMode;
   searchSignal: number;
+  jump: { line: number; column: number; token: number } | null;
   onChange(content: string): void;
   onSelection(info: SelectionInfo): void;
 }) {
@@ -106,6 +110,12 @@ function SourcePane({
       editorRef.current?.openSearch();
     }
   }, [searchSignal, mode]);
+
+  // 大纲跳转：按行定位源码光标。
+  useEffect(() => {
+    if (!jump) return;
+    editorRef.current?.setCursor({ line: jump.line, column: jump.column });
+  }, [jump]);
 
   // Ctrl/Cmd+G 跳转行；不依赖 window.prompt（Electron 不支持）。见 §11.5。
   useEffect(() => {
@@ -597,6 +607,12 @@ export function App() {
   const [recoveries, setRecoveries] = useState<DraftEntry[]>([]);
   const [recent, setRecent] = useState<RecentEntry[]>([]);
   const [perfVisible, setPerfVisible] = useState(import.meta.env.DEV);
+  const [outline, setOutline] = useState<OutlineItem[]>([]);
+  const [sourceJump, setSourceJump] = useState<{ line: number; column: number; token: number } | null>(
+    null,
+  );
+  const [wysiwygJump, setWysiwygJump] = useState<{ index: number; token: number } | null>(null);
+  const jumpTokenRef = useRef(0);
 
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -612,6 +628,38 @@ export function App() {
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   const conflict = state.conflict;
+  const activeContent = active?.content ?? "";
+  const activeFormat = active?.format ?? "";
+  const activeId = active?.id ?? "";
+
+  // 大纲随内容变化防抖重建；仅 Markdown 与 LaTeX 提供大纲。见 doc/design.md §15.1。
+  useEffect(() => {
+    if (!activeId || (activeFormat !== "markdown" && activeFormat !== "latex")) {
+      setOutline([]);
+      return;
+    }
+    const timer = setTimeout(() => setOutline(buildOutline(activeContent, activeFormat)), 200);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [activeId, activeContent, activeFormat]);
+
+  const jumpToOutline = (item: OutlineItem): void => {
+    jumpTokenRef.current += 1;
+    const token = jumpTokenRef.current;
+    if (state.mode === "wysiwyg") {
+      setWysiwygJump({ index: item.index, token });
+      return;
+    }
+    if (state.mode === "source" || state.mode === "split") {
+      setSourceJump({ line: item.line, column: 1, token });
+      return;
+    }
+    const headings = document.querySelectorAll<HTMLElement>(
+      ".pane:not([hidden]) .markdown-body :is(h1,h2,h3,h4,h5,h6)",
+    );
+    headings[item.index]?.scrollIntoView({ block: "start", behavior: "smooth" });
+  };
 
   const saveSession = async (): Promise<void> => {
     const snapshot: SessionState = manager.buildSession({
@@ -966,6 +1014,7 @@ export function App() {
             onDeleted={(filePath) => {
               void manager.removeDocumentByPath(filePath);
             }}
+            outline={<OutlinePanel items={outline} onSelect={jumpToOutline} />}
           />
         )}
 
@@ -980,6 +1029,7 @@ export function App() {
                 document={active}
                 mode={state.mode}
                 searchSignal={searchSignal}
+                jump={wysiwygJump}
                 onChange={(content) => manager.updateContent(active.id, content)}
               />
             </section>
@@ -992,6 +1042,7 @@ export function App() {
                 document={active}
                 mode={state.mode}
                 searchSignal={searchSignal}
+                jump={sourceJump}
                 onChange={(content) => manager.updateContent(active.id, content)}
                 onSelection={(info) => {
                   setCursor(info);

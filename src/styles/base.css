@@ -593,6 +593,49 @@ button {
   color: var(--fg);
 }
 
+/* 侧栏大纲 */
+.outline-panel {
+  flex: 0 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 45%;
+  border-top: 1px solid var(--border);
+}
+
+.outline-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px;
+}
+
+.outline-list {
+  margin: 0;
+  padding: 0 0 8px;
+  overflow: auto;
+  list-style: none;
+}
+
+.outline-item {
+  width: 100%;
+  padding: 4px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--fg-muted, var(--muted));
+  font-size: 12.5px;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.outline-item:hover {
+  background: var(--surface);
+  color: var(--fg);
+}
+
 /* WYSIWYG 面板与查找 */
 .wysiwyg-wrap {
   flex: 1;

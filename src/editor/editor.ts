@@ -73,6 +73,26 @@ export class PandaEditor {
     this.view.focus();
   }
 
+  /** 滚动到第 index 个标题（从 0 开始），用于大纲跳转。见 doc/design.md §15.1。 */
+  scrollToHeading(index: number): void {
+    let count = 0;
+    let target: number | null = null;
+    this.view.state.doc.descendants((node, pos) => {
+      if (target !== null) return false;
+      if (node.type.name !== "heading") return true;
+      if (count === index) {
+        target = pos;
+        return false;
+      }
+      count += 1;
+      return true;
+    });
+    if (target === null) return;
+    const dom = this.view.domAtPos(target + 1);
+    const element = dom.node.nodeType === 1 ? (dom.node as HTMLElement) : dom.node.parentElement;
+    element?.scrollIntoView({ block: "start", behavior: "smooth" });
+  }
+
   /** 查找：返回当前匹配序号（从 1 开始）与总数。见 doc/design.md §11.5。 */
   search(term: string, options: SearchOptions): { active: number; total: number } {
     const state = setSearch(this.view, term, options);
