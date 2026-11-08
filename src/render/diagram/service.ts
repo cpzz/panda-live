@@ -122,6 +122,11 @@ export class DiagramRenderService {
     };
   }
 
+  /** 开发模式性能浮层读取图表缓存命中情况。见 doc/design.md §14.4。 */
+  cacheStats(): { hits: number; misses: number; entries: number } {
+    return this.cache.stats();
+  }
+
   /** 节点移除或来源/主题变化时取消排队任务并丢弃结果。 */
   cancel(id: string): void {
     const controller = this.controllers.get(id);

@@ -23,6 +23,8 @@ import type { CompileResult, EngineStatus } from "../shared/ipc";
 import type { Settings } from "../shared/settings";
 import { describeError, getErrorCode } from "../shared/errors";
 import { RecoveryDialog } from "./RecoveryDialog";
+import { PdfPreview } from "./PdfPreview";
+import { PerformanceOverlay } from "./PerformanceOverlay";
 import { SettingsDialog } from "./SettingsDialog";
 import { WorkspacePanel } from "./WorkspacePanel";
 import { WysiwygPane } from "./WysiwygPane";
@@ -437,11 +439,7 @@ function TexPreviewPane({
       {document.dirty && <p className="placeholder">当前有未保存修改，编译仅使用磁盘内容。</p>}
       {busy && <p className="placeholder">编译中…</p>}
       {result && result.ok && result.pdfKey ? (
-        <iframe
-          className="pdf-viewer"
-          title="LaTeX 预览"
-          src={`panda-pdf://${result.pdfKey}`}
-        />
+        <PdfPreview pdfKey={result.pdfKey} />
       ) : null}
       {result && !result.ok && result.diagnostics.length > 0 && (
         <ul className="tex-diagnostics">
@@ -598,6 +596,7 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [recoveries, setRecoveries] = useState<DraftEntry[]>([]);
   const [recent, setRecent] = useState<RecentEntry[]>([]);
+  const [perfVisible, setPerfVisible] = useState(import.meta.env.DEV);
 
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -798,6 +797,9 @@ export function App() {
           return;
         case "update.check":
           void checkUpdate();
+          return;
+        case "view.performance":
+          setPerfVisible((visible) => !visible);
           return;
         default:
           void manager.runMenuCommand(command);
@@ -1096,6 +1098,10 @@ export function App() {
         }}
         onClose={() => setRecoveries([])}
       />
+
+      {import.meta.env.DEV && perfVisible && (
+        <PerformanceOverlay onClose={() => setPerfVisible(false)} />
+      )}
     </div>
   );
 }

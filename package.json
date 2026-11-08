@@ -30,6 +30,7 @@
     "katex": "^0.19.1",
     "mathlive": "^0.111.4",
     "mermaid": "^11.17.2",
+    "pdfjs-dist": "^6.5.438",
     "prosemirror-commands": "^1.7.2",
     "prosemirror-dropcursor": "^1.8.4",
     "prosemirror-gapcursor": "^1.4.1",

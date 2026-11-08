@@ -161,7 +161,16 @@ function buildMenu(): void {
         { role: "resetZoom", label: "实际大小" },
         { role: "zoomIn", label: "放大" },
         { role: "zoomOut", label: "缩小" },
-        { type: "separator" },
+        ...(DEV_SERVER_URL
+          ? [
+              {
+                label: "性能浮层",
+                accelerator: "CmdOrCtrl+Alt+P",
+                click: () => sendCommand("view.performance"),
+              } satisfies MenuItemConstructorOptions,
+            ]
+          : []),
+        { type: "separator" as const },
         {
           label: "设置…",
           accelerator: "CmdOrCtrl+,",

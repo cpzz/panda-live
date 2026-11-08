@@ -173,4 +173,16 @@ describe("图表缓存", () => {
     await cache.set("k", "<svg/>");
     expect(await cache.get("k")).toBe("<svg/>");
   });
+
+  it("统计命中率与条目数", async () => {
+    const cache = new DiagramCache();
+    expect(cache.stats()).toEqual({ hits: 0, misses: 0, entries: 0 });
+    expect(await cache.get("x")).toBeNull();
+    await cache.set("x", "<svg/>");
+    expect(await cache.get("x")).toBe("<svg/>");
+    const stats = cache.stats();
+    expect(stats.hits).toBe(1);
+    expect(stats.misses).toBe(1);
+    expect(stats.entries).toBe(1);
+  });
 });

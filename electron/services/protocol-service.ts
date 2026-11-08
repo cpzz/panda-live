@@ -41,13 +41,24 @@ export function registerPandaSchemes(): void {
     {
       // TeX 编译产物：仅映射到 PDF 缓存目录内的已知键。见 §12.6。
       scheme: "panda-pdf",
-      privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true },
+      privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true, corsEnabled: true },
     },
   ]);
 }
 
 function textResponse(status: number, message: string): Response {
   return new Response(message, { status, headers: { "content-type": "text/plain; charset=utf-8" } });
+}
+
+/** PDF 协议的出错响应也需带 CORS 头，否则主窗口无法读取状态码。 */
+function pdfErrorResponse(status: number, message: string): Response {
+  return new Response(message, {
+    status,
+    headers: {
+      "content-type": "text/plain; charset=utf-8",
+      "access-control-allow-origin": "*",
+    },
+  });
 }
 
 function isSafeRelativePath(relative: string): boolean {
@@ -141,20 +152,26 @@ function registerPdfProtocol(pdfCacheRoot: string): void {
   protocol.handle("panda-pdf", async (request) => {
     try {
       const url = new URL(request.url);
-      const key = url.pathname.replace(/^\/+/, "").replace(/\.pdf$/i, "");
-      if (!/^[a-f0-9]{64}$/.test(key)) return textResponse(400, "Invalid cache key");
+      // 兼容 `panda-pdf://<key>`（键位于 host，标准 scheme 会补末尾斜杠）与 `panda-pdf:///<key>`。
+      const pathKey = url.pathname
+        .replace(/^\/+|\/+$/g, "")
+        .replace(/\.pdf$/i, "");
+      const key = url.hostname || pathKey;
+      if (!/^[a-f0-9]{64}$/.test(key)) return pdfErrorResponse(400, "Invalid cache key");
       const target = path.join(pdfCacheRoot, `${key}.pdf`);
-      if (!isPathInside(pdfCacheRoot, target)) return textResponse(403, "Path outside cache");
+      if (!isPathInside(pdfCacheRoot, target)) return pdfErrorResponse(403, "Path outside cache");
       const body = await fs.readFile(target);
       return new Response(body, {
         status: 200,
         headers: {
           "content-type": "application/pdf",
           "content-length": String(body.byteLength),
+          // PDF.js 在主窗口（file://）中跨源 fetch，需要显式允许来源。
+          "access-control-allow-origin": "*",
         },
       });
     } catch {
-      return textResponse(404, "Not found");
+      return pdfErrorResponse(404, "Not found");
     }
   });
 }

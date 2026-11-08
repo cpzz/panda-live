@@ -45,25 +45,46 @@ export class LruCache<T> {
 const MEMORY_CAPACITY = 100;
 export const INDEXED_DB_CAPACITY_BYTES = 200 * 1024 * 1024;
 
+export interface DiagramCacheStats {
+  hits: number;
+  misses: number;
+  /** 内存层当前条目数。 */
+  entries: number;
+}
+
 /** 两级缓存：内存优先，未命中再查持久层；持久层失败不影响渲染。 */
 export class DiagramCache {
   private readonly memory = new LruCache<string>(MEMORY_CAPACITY);
+  private hits = 0;
+  private misses = 0;
 
   constructor(private readonly storage?: DiagramCacheStorage) {}
 
+  stats(): DiagramCacheStats {
+    return { hits: this.hits, misses: this.misses, entries: this.memory.size };
+  }
+
   async get(key: string): Promise<string | null> {
     const cached = this.memory.get(key);
-    if (cached) return cached;
-    if (!this.storage) return null;
+    if (cached) {
+      this.hits += 1;
+      return cached;
+    }
+    if (!this.storage) {
+      this.misses += 1;
+      return null;
+    }
     try {
       const stored = await this.storage.get(key);
       if (stored) {
         this.memory.set(key, stored);
+        this.hits += 1;
         return stored;
       }
     } catch {
       // 持久缓存不可用时静默降级为仅内存缓存。
     }
+    this.misses += 1;
     return null;
   }
 

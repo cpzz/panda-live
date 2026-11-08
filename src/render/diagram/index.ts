@@ -41,6 +41,11 @@ export function onDiagramThemeChange(listener: (theme: DiagramTheme) => void): (
   return () => query.removeEventListener("change", handler);
 }
 
+/** 开发模式性能浮层读取缓存统计；服务尚未创建时返回 null，避免提前初始化沙箱。 */
+export function diagramCacheStats(): { hits: number; misses: number; entries: number } | null {
+  return service ? service.cacheStats() : null;
+}
+
 /** 应用退出或测试清理时释放沙箱 iframe。 */
 export function disposeDiagramSandbox(): void {
   pool?.dispose();

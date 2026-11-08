@@ -12,6 +12,7 @@ export const MENU_COMMANDS = [
   "workspace.open",
   "view.find",
   "view.settings",
+  "view.performance",
   "latex.compile",
   "update.check",
 ] as const;
