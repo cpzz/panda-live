@@ -6,6 +6,8 @@ import {
   type DocumentState,
   type EditorMode,
 } from "../services/document-manager";
+import { settingsStore } from "../services/settings-store";
+import { WorkspaceStore } from "../services/workspace-store";
 import { SourceEditor, type SelectionInfo, type SourceLanguage } from "../source/codemirror";
 import { renderMathml } from "../render/math/mathml";
 import {
@@ -13,6 +15,11 @@ import {
   getDiagramService,
   onDiagramThemeChange,
 } from "../render/diagram";
+import type { DraftEntry, RecentEntry, SessionState } from "../shared/ipc";
+import type { Settings } from "../shared/settings";
+import { RecoveryDialog } from "./RecoveryDialog";
+import { SettingsDialog } from "./SettingsDialog";
+import { WorkspacePanel } from "./WorkspacePanel";
 import { WysiwygPane } from "./WysiwygPane";
 
 const MODE_LABELS: Record<EditorMode, string> = {
@@ -36,6 +43,10 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function formatTime(ms: number): string {
+  return new Date(ms).toLocaleString("zh-CN", { hour12: false });
+}
+
 interface SavedEditorState {
   state: EditorState;
   revision: number;
@@ -45,17 +56,21 @@ interface SavedEditorState {
 function SourcePane({
   document,
   mode,
+  searchSignal,
   onChange,
   onSelection,
 }: {
   document: DocumentState;
   mode: EditorMode;
+  searchSignal: number;
   onChange(content: string): void;
   onSelection(info: SelectionInfo): void;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<SourceEditor | null>(null);
   const savedRef = useRef(new Map<string, SavedEditorState>());
+  const cursorRef = useRef(document.cursor);
+  cursorRef.current = document.cursor;
   const lastRef = useRef<{
     id: string;
     revision: number;
@@ -75,6 +90,12 @@ function SourcePane({
   }, []);
 
   useEffect(() => {
+    if (searchSignal > 0 && mode !== "wysiwyg" && mode !== "preview") {
+      editorRef.current?.openSearch();
+    }
+  }, [searchSignal, mode]);
+
+  useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
     let editor = editorRef.current;
@@ -88,6 +109,7 @@ function SourcePane({
         onSelection: (info) => callbacksRef.current.onSelection(info),
       });
       editorRef.current = editor;
+      if (cursorRef.current) editor.setCursor(cursorRef.current);
     } else {
       const previous = lastRef.current;
       if (previous && previous.id !== document.id) {
@@ -101,6 +123,7 @@ function SourcePane({
           editor.setState(saved.state);
         } else {
           editor.reset(document.content, document.readOnly, language);
+          if (cursorRef.current) editor.setCursor(cursorRef.current);
         }
         savedRef.current.delete(document.id);
       } else if (
@@ -114,7 +137,7 @@ function SourcePane({
     }
     lastRef.current = { id: document.id, revision: document.revision, mode, language };
     // 只响应标签切换、模式切换、外部重载与只读变化；普通输入由编辑器自身维护。
-  }, [document.id, document.revision, document.readOnly, mode, language]);
+  }, [document.id, document.revision, document.readOnly, mode, language, document.content]);
 
   return <div className="editor-host" ref={hostRef} />;
 }
@@ -250,17 +273,107 @@ export function App() {
   const managerRef = useRef<DocumentManager | null>(null);
   if (!managerRef.current) managerRef.current = new DocumentManager();
   const manager = managerRef.current;
+  const workspaceRef = useRef<WorkspaceStore | null>(null);
+  if (!workspaceRef.current) workspaceRef.current = new WorkspaceStore();
+  const workspaces = workspaceRef.current;
+
   const state = useSyncExternalStore(manager.subscribe, manager.getState);
+  const settings = useSyncExternalStore(settingsStore.subscribe, settingsStore.getState);
+  const workspace = useSyncExternalStore(workspaces.subscribe, workspaces.getState);
+
   const [cursor, setCursor] = useState<SelectionInfo>({ line: 1, column: 1 });
+  const [searchSignal, setSearchSignal] = useState(0);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [recoveries, setRecoveries] = useState<DraftEntry[]>([]);
+  const [recent, setRecent] = useState<RecentEntry[]>([]);
+
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  const workspaceStateRef = useRef(workspace);
+  workspaceStateRef.current = workspace;
+  const recentRef = useRef(recent);
+  recentRef.current = recent;
 
   const active = state.documents.find((doc) => doc.id === state.activeId) ?? null;
   const conflict = state.conflict;
 
+  const saveSession = async (): Promise<void> => {
+    const snapshot: SessionState = manager.buildSession({
+      mode: stateRef.current.mode,
+      sidebarVisible: workspaceStateRef.current.visible,
+      recent: recentRef.current,
+      workspace: workspaceStateRef.current.root
+        ? {
+            rootPath: workspaceStateRef.current.root.path,
+            expanded: workspaces.collectExpanded(),
+          }
+        : undefined,
+    });
+    await manager.saveSession(snapshot);
+  };
+
+  useEffect(() => {
+    manager.onSessionTick = saveSession;
+    manager.openWorkspaceFolder = () => workspaces.openPicker();
+    return () => {
+      manager.onSessionTick = null;
+      manager.openWorkspaceFolder = async () => undefined;
+    };
+  }, [manager, workspaces]);
+
+  useEffect(() => {
+    let disposed = false;
+    const bootstrap = async (): Promise<void> => {
+      const loaded = await settingsStore.load();
+      manager.setAutoSave(loaded.editor.autoSave);
+      manager.ensureSessionTimer();
+      const session = await window.panda.session.load();
+      if (session && !disposed) {
+        if (!session.sidebarVisible) workspaces.setVisible(false);
+        if (session.workspace) {
+          await workspaces.openPath(session.workspace.rootPath, session.workspace.expanded);
+        }
+        await manager.restoreSession(session);
+      }
+      const drafts = await window.panda.drafts.list();
+      if (!disposed && drafts.length > 0) setRecoveries(drafts);
+      const list = await window.panda.recent.list();
+      if (!disposed) setRecent(list);
+    };
+    void bootstrap();
+
+    const offFsChanged = window.panda.onFsChanged((event) => {
+      manager.handleFsChanged(event);
+      workspaces.handleFsChanged(event);
+    });
+    const onPageHide = (): void => {
+      void saveSession();
+    };
+    window.addEventListener("pagehide", onPageHide);
+    return () => {
+      disposed = true;
+      offFsChanged();
+      window.removeEventListener("pagehide", onPageHide);
+    };
+  }, [manager, workspaces]);
+
   useEffect(() => {
     return window.panda.onMenuCommand((command) => {
-      void manager.runMenuCommand(command);
+      switch (command) {
+        case "view.find":
+          setSearchSignal((value) => value + 1);
+          return;
+        case "view.settings":
+          setSettingsOpen(true);
+          return;
+        case "workspace.open":
+          void workspaces.openPicker();
+          return;
+        default:
+          void manager.runMenuCommand(command);
+      }
     });
-  }, [manager]);
+  }, [manager, workspaces]);
 
   useEffect(() => {
     setCursor({ line: 1, column: 1 });
@@ -273,25 +386,33 @@ export function App() {
           <span className="brand-mark" aria-hidden="true" />
           <span className="brand-name">Panda Live</span>
         </div>
+        <button
+          type="button"
+          className="icon-button"
+          aria-pressed={workspace.visible}
+          title={workspace.visible ? "折叠工作区" : "展开工作区"}
+          onClick={() => workspaces.setVisible(!workspace.visible)}
+        >
+          侧栏
+        </button>
         <div className="toolbar-actions">
+          <button type="button" className="button" onClick={() => manager.newDocument()}>
+            新建
+          </button>
           <button type="button" className="button" onClick={() => void manager.openFiles()}>
             打开
           </button>
-          <button
-            type="button"
-            className="button"
-            disabled={!active}
-            onClick={() => active && void manager.saveDocument(active.id)}
-          >
+          <button type="button" className="button" onClick={() => void manager.saveDocument(state.activeId ?? "")} disabled={!active}>
             保存
           </button>
-          <button
-            type="button"
-            className="button"
-            disabled={!active}
-            onClick={() => active && void manager.saveDocumentAs(active.id)}
-          >
+          <button type="button" className="button" onClick={() => active && void manager.saveDocumentAs(active.id)} disabled={!active}>
             另存为
+          </button>
+          <button type="button" className="button" onClick={() => setSearchSignal((value) => value + 1)} disabled={!active}>
+            查找
+          </button>
+          <button type="button" className="button" onClick={() => setSettingsOpen(true)}>
+            设置
           </button>
         </div>
         <div className="mode-switch" role="group" aria-label="视图模式">
@@ -330,11 +451,24 @@ export function App() {
 
       {conflict && (
         <div className="banner banner-warning" role="alert">
-          <span className="banner-text">文件已被外部修改。请选择处理方式。</span>
-          <button type="button" className="button small" onClick={() => void manager.reloadFromDisk(conflict.documentId)}>
+          <span className="banner-text">
+            {conflict.message}
+            {conflict.diskMtimeMs !== undefined && conflict.localMtimeMs !== undefined
+              ? `（本地修改于 ${formatTime(conflict.localMtimeMs)}）`
+              : ""}
+          </span>
+          <button
+            type="button"
+            className="button small"
+            onClick={() => void manager.reloadFromDisk(conflict.documentId)}
+          >
             重新加载
           </button>
-          <button type="button" className="button small" onClick={() => void manager.overwriteFromDisk(conflict.documentId)}>
+          <button
+            type="button"
+            className="button small"
+            onClick={() => void manager.overwriteFromDisk(conflict.documentId)}
+          >
             覆盖保存
           </button>
           <button
@@ -362,49 +496,91 @@ export function App() {
         </div>
       )}
 
-      {active ? (
-        <main className={`workspace mode-${state.mode}`}>
-          <section
-            className="pane wysiwyg-pane"
-            hidden={state.mode !== "wysiwyg"}
-            aria-label="所见即所得编辑"
-          >
-            <WysiwygPane
-              document={active}
-              mode={state.mode}
-              onChange={(content) => manager.updateContent(active.id, content)}
-            />
-          </section>
-          <section
-            className="pane source-pane"
-            hidden={state.mode === "preview" || state.mode === "wysiwyg"}
-            aria-label="源码编辑"
-          >
-            <SourcePane
-              document={active}
-              mode={state.mode}
-              onChange={(content) => manager.updateContent(active.id, content)}
-              onSelection={setCursor}
-            />
-          </section>
-          <section
-            className="pane"
-            hidden={state.mode === "source" || state.mode === "wysiwyg"}
-            aria-label="渲染预览"
-          >
-            <PreviewPane document={active} enabled={state.mode !== "source"} />
-          </section>
-        </main>
-      ) : (
-        <main className="empty-state">
-          <span className="brand-mark large" aria-hidden="true" />
-          <h1>打开一个文档开始编辑</h1>
-          <p>源码与渲染结果实时同步，保存时保留原文件编码与换行符。</p>
-          <button type="button" className="button primary" onClick={() => void manager.openFiles()}>
-            打开文件
-          </button>
-        </main>
-      )}
+      <div className="main-row">
+        {workspace.visible && (
+          <WorkspacePanel
+            store={workspaces}
+            onOpenFile={(node) => void manager.openWorkspaceFile(node.path, workspace.root?.rootId ?? null)}
+            onRenamed={(oldPath, ref) => void manager.repathDocument(oldPath, ref)}
+            onDeleted={(filePath) => {
+              void manager.removeDocumentByPath(filePath);
+            }}
+          />
+        )}
+
+        {active ? (
+          <main className={`workspace mode-${state.mode}`}>
+            <section
+              className="pane wysiwyg-pane"
+              hidden={state.mode !== "wysiwyg"}
+              aria-label="所见即所得编辑"
+            >
+              <WysiwygPane
+                document={active}
+                mode={state.mode}
+                searchSignal={searchSignal}
+                onChange={(content) => manager.updateContent(active.id, content)}
+              />
+            </section>
+            <section
+              className="pane source-pane"
+              hidden={state.mode === "preview" || state.mode === "wysiwyg"}
+              aria-label="源码编辑"
+            >
+              <SourcePane
+                document={active}
+                mode={state.mode}
+                searchSignal={searchSignal}
+                onChange={(content) => manager.updateContent(active.id, content)}
+                onSelection={(info) => {
+                  setCursor(info);
+                  manager.updateCursor(active.id, info);
+                }}
+              />
+            </section>
+            <section
+              className="pane"
+              hidden={state.mode === "source" || state.mode === "wysiwyg"}
+              aria-label="渲染预览"
+            >
+              <PreviewPane document={active} enabled={state.mode !== "source"} />
+            </section>
+          </main>
+        ) : (
+          <main className="empty-state">
+            <span className="brand-mark large" aria-hidden="true" />
+            <h1>打开一个文档开始编辑</h1>
+            <p>源码与渲染结果实时同步，保存时保留原文件编码与换行符。</p>
+            <div className="empty-actions">
+              <button type="button" className="button primary" onClick={() => manager.newDocument()}>
+                新建文档
+              </button>
+              <button type="button" className="button" onClick={() => void manager.openFiles()}>
+                打开文件
+              </button>
+            </div>
+            {recent.length > 0 && (
+              <div className="recent">
+                <h2>最近文件</h2>
+                <ul>
+                  {recent.map((entry) => (
+                    <li key={entry.path}>
+                      <button
+                        type="button"
+                        className="recent-item"
+                        title={entry.path}
+                        onClick={() => void manager.openPath(entry.path)}
+                      >
+                        {entry.name}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </main>
+        )}
+      </div>
 
       <footer className="statusbar">
         <span className="statusbar-name">{active?.path ?? "就绪"}</span>
@@ -425,9 +601,35 @@ export function App() {
             {formatSize(active.size)}
             {" · "}
             {state.mode === "wysiwyg" ? "所见即所得" : `行 ${cursor.line}，列 ${cursor.column}`}
+            {active.dirty ? " · 未保存" : " · 已保存"}
           </span>
         )}
+        <span className="statusbar-meta">{workspace.root ? workspace.root.name : "无工作区"}</span>
       </footer>
+
+      <SettingsDialog
+        open={settingsOpen}
+        settings={settings}
+        onClose={() => setSettingsOpen(false)}
+        onSave={(patch) => {
+          const next = patch as Settings;
+          manager.setAutoSave(next.editor.autoSave);
+          void settingsStore.update(next);
+        }}
+      />
+
+      <RecoveryDialog
+        entries={recoveries}
+        onRestore={(entry) => {
+          void manager.restoreDraft(entry);
+          setRecoveries((items) => items.filter((item) => item.key !== entry.key));
+        }}
+        onDiscard={(entry) => {
+          void manager.discardDraft(entry.key);
+          setRecoveries((items) => items.filter((item) => item.key !== entry.key));
+        }}
+        onClose={() => setRecoveries([])}
+      />
     </div>
   );
 }

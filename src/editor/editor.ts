@@ -6,6 +6,15 @@ import { DiagramNodeView } from "./nodeviews/diagram";
 import { GridNodeView, TabSetNodeView } from "./nodeviews/directive";
 import type { PMJson } from "./schema";
 import { createWysiwygState } from "./state";
+import {
+  clearSearch,
+  findNextMatch,
+  getSearchState,
+  replaceAllMatches,
+  replaceCurrentMatch,
+  setSearch,
+} from "./search";
+import type { SearchOptions } from "../services/search";
 
 export interface PandaEditorOptions {
   parent: HTMLElement;
@@ -62,6 +71,33 @@ export class PandaEditor {
 
   focus(): void {
     this.view.focus();
+  }
+
+  /** 查找：返回当前匹配序号（从 1 开始）与总数。见 doc/design.md §11.5。 */
+  search(term: string, options: SearchOptions): { active: number; total: number } {
+    const state = setSearch(this.view, term, options);
+    return {
+      active: state.ranges.length > 0 ? state.active + 1 : 0,
+      total: state.ranges.length,
+    };
+  }
+
+  findNext(direction: 1 | -1): { active: number; total: number } {
+    const index = findNextMatch(this.view, direction);
+    const state = getSearchState(this.view);
+    return { active: index >= 0 ? index + 1 : 0, total: state?.ranges.length ?? 0 };
+  }
+
+  replaceCurrent(replacement: string): number {
+    return replaceCurrentMatch(this.view, replacement);
+  }
+
+  replaceAll(replacement: string): number {
+    return replaceAllMatches(this.view, replacement);
+  }
+
+  clearSearch(): void {
+    clearSearch(this.view);
   }
 
   destroy(): void {

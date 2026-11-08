@@ -29,7 +29,7 @@ test("M0：打开、编辑、预览、保存并保留 BOM 与 CRLF", async () =>
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
   }, filePath);
 
-  await page.getByRole("button", { name: "打开文件" }).click();
+  await page.getByRole("button", { name: "打开文件", exact: true }).click();
   await expect(page.locator(".tab-name")).toHaveText("sample.md");
   await expect(page.locator(".cm-content")).toContainText("初始标题");
 

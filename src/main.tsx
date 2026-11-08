@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { App } from "./app/App";
 import "katex/dist/katex.min.css";
 import "./styles/base.css";
+import "./styles/theme.css";
 import "./styles/markdown.css";
 
 const container = document.getElementById("root");

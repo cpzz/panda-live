@@ -2,7 +2,13 @@ import { promises as fs } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 import { PandaError } from "../../src/shared/errors";
-import type { FileRef, ReadTextResult, WriteTextRequest, WriteTextResult } from "../../src/shared/ipc";
+import type {
+  DirEntry,
+  FileRef,
+  ReadTextResult,
+  WriteTextRequest,
+  WriteTextResult,
+} from "../../src/shared/ipc";
 import { decodeText, encodeText, sha256Hex } from "./text-codec";
 
 export function isPathInside(root: string, target: string): boolean {
@@ -49,6 +55,102 @@ export class FileService {
 
   getRoot(rootId: string): string | undefined {
     return this.roots.get(rootId);
+  }
+
+  /** 把用户选中的目录登记为允许根（工作区）。见 doc/design.md §12.5、§13.5。 */
+  async registerRoot(dirPath: string): Promise<FileRef> {
+    const absolute = path.resolve(dirPath);
+    let realDir: string;
+    try {
+      realDir = await fs.realpath(absolute);
+    } catch (error) {
+      throw mapIoError(error, absolute);
+    }
+    const stats = await fs.stat(realDir).catch((error: unknown) => {
+      throw mapIoError(error, absolute);
+    });
+    if (!stats.isDirectory()) {
+      throw new PandaError("E_FILE_NOT_FOUND", `不是目录：${absolute}`);
+    }
+    const rootId = createHash("sha256").update(realDir).digest("hex").slice(0, 16);
+    this.roots.set(rootId, realDir);
+    return { path: realDir, name: path.basename(realDir), rootId };
+  }
+
+  /** 列出目录项；语义排序：目录优先，再按名称本地化比较。 */
+  async listDir(dirPath: string): Promise<DirEntry[]> {
+    const target = await this.resolveAllowed(dirPath);
+    let entries: import("node:fs").Dirent[];
+    try {
+      entries = await fs.readdir(target, { withFileTypes: true });
+    } catch (error) {
+      throw mapIoError(error, target);
+    }
+    return entries
+      .map((entry) => ({
+        name: entry.name,
+        path: path.join(target, entry.name),
+        kind: entry.isDirectory() ? ("dir" as const) : ("file" as const),
+      }))
+      .sort((a, b) =>
+        a.kind === b.kind
+          ? a.name.localeCompare(b.name, "zh-Hans-CN")
+          : a.kind === "dir"
+            ? -1
+            : 1,
+      );
+  }
+
+  async createEntry(target: string, kind: "file" | "dir"): Promise<FileRef> {
+    const resolved = await this.resolveAllowed(target);
+    try {
+      if (kind === "dir") {
+        await fs.mkdir(resolved);
+      } else {
+        const handle = await fs.open(resolved, "wx");
+        await handle.close();
+      }
+    } catch (error) {
+      throw mapIoError(error, resolved);
+    }
+    return this.makeRef(resolved);
+  }
+
+  async renameEntry(target: string, newName: string): Promise<FileRef> {
+    // 只接受纯文件名，防止借重命名越权到其他目录。见 doc/design.md §13.5。
+    if (path.isAbsolute(newName) || /[\\/]/.test(newName) || newName.includes("..")) {
+      throw new PandaError("E_PAYLOAD_INVALID", `文件名不合法：${newName}`);
+    }
+    const resolved = await this.resolveAllowed(target);
+    const destination = path.join(path.dirname(resolved), newName);
+    try {
+      await fs.rename(resolved, destination);
+    } catch (error) {
+      throw mapIoError(error, destination);
+    }
+    return this.makeRef(await fs.realpath(destination).catch(() => destination));
+  }
+
+  async deleteEntry(target: string, recursive: boolean): Promise<void> {
+    const resolved = await this.resolveAllowed(target);
+    try {
+      await fs.rm(resolved, { recursive, force: false });
+    } catch (error) {
+      throw mapIoError(error, resolved);
+    }
+  }
+
+  /** 校验路径位于允许根内并返回真实路径；供监听等旁路使用。 */
+  async assertAllowed(target: string): Promise<string> {
+    return this.resolveAllowed(target);
+  }
+
+  private makeRef(target: string): FileRef {
+    const rootId = [...this.roots.entries()].find(([, root]) => isPathInside(root, target))?.[0];
+    if (!rootId) {
+      throw new PandaError("E_PATH_OUTSIDE_ROOT", `路径不在允许范围内：${target}`);
+    }
+    return { path: target, name: path.basename(target), rootId };
   }
 
   async readText(filePath: string): Promise<ReadTextResult> {

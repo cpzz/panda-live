@@ -1,0 +1,87 @@
+/*
+ * 显式主题覆盖。系统主题由 base.css 的 prefers-color-scheme 提供；
+ * 用户在选择“浅色/深色”时通过 :root[data-theme] 覆盖。见 doc/design.md §15.2。
+ */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg: #f6f7f8;
+  --surface: #ffffff;
+  --surface-muted: #eef0f2;
+  --fg: #1f2328;
+  --muted: #6b7280;
+  --border: #e3e6ea;
+  --border-strong: #d3d8de;
+  --accent: #2f7d5e;
+  --accent-strong: #256349;
+  --accent-soft: #e6f2ec;
+
+  --warning-bg: #fff7e6;
+  --warning-border: #f0c36d;
+  --error-bg: #fdeceb;
+  --error-border: #e8a29c;
+  --info-bg: #eaf3ff;
+  --info-border: #a9c8ea;
+
+  --code-bg: #f2f4f6;
+  --shadow: 0 6px 20px rgba(20, 25, 30, 0.08);
+
+  --editor-bg: #ffffff;
+  --editor-fg: #24292f;
+  --editor-gutter-bg: #f7f8f9;
+  --editor-gutter-fg: #9aa3ad;
+  --editor-active-line: rgba(47, 125, 94, 0.06);
+  --editor-selection: rgba(47, 125, 94, 0.16);
+  --search-match: rgba(240, 195, 109, 0.35);
+  --search-match-active: rgba(240, 195, 109, 0.65);
+
+  --cm-heading: #1f4d3d;
+  --cm-strong: #1f2328;
+  --cm-link: #1d6fa5;
+  --cm-code: #8a4b1f;
+  --cm-keyword: #7a3e9d;
+  --cm-muted: #8b949e;
+  --cm-punct: #6b7280;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #141618;
+  --surface: #1b1e21;
+  --surface-muted: #23272b;
+  --fg: #e4e7ea;
+  --muted: #98a1aa;
+  --border: #2c3137;
+  --border-strong: #3a4047;
+  --accent: #7cc7a6;
+  --accent-strong: #9ad9bd;
+  --accent-soft: #1d2f28;
+
+  --warning-bg: #2b2317;
+  --warning-border: #6b5730;
+  --error-bg: #2e2020;
+  --error-border: #6a3a37;
+  --info-bg: #1b2733;
+  --info-border: #35506a;
+
+  --code-bg: #22262a;
+  --shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+
+  --editor-bg: #1b1e21;
+  --editor-fg: #dfe4e8;
+  --editor-gutter-bg: #181b1e;
+  --editor-gutter-fg: #6d7781;
+  --editor-active-line: rgba(124, 199, 166, 0.07);
+  --editor-selection: rgba(124, 199, 166, 0.22);
+  --search-match: rgba(214, 168, 79, 0.3);
+  --search-match-active: rgba(214, 168, 79, 0.55);
+
+  --cm-heading: #8fd3b4;
+  --cm-strong: #f0f3f5;
+  --cm-link: #7fb8ef;
+  --cm-code: #e7b27a;
+  --cm-keyword: #c9a2f0;
+  --cm-muted: #77818b;
+  --cm-punct: #98a1aa;
+}

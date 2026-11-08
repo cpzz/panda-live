@@ -1,6 +1,15 @@
 export const MENU_COMMAND_CHANNEL = "menu:command";
 
-export const MENU_COMMANDS = ["file.open", "file.save", "file.saveAs"] as const;
+export const MENU_COMMANDS = [
+  "file.new",
+  "file.open",
+  "file.save",
+  "file.saveAs",
+  "file.close",
+  "workspace.open",
+  "view.find",
+  "view.settings",
+] as const;
 
 export type MenuCommand = (typeof MENU_COMMANDS)[number];
 

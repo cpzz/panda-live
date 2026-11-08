@@ -8,6 +8,7 @@ import { EditorState, type Plugin } from "prosemirror-state";
 import { tableEditing } from "prosemirror-tables";
 import { markdownSchema, type PMJson } from "./schema";
 import { nodeIdPlugin } from "./plugins/node-id";
+import { searchPlugin } from "./search";
 
 function buildInputRules(): InputRule[] {
   const heading = markdownSchema.nodes["heading"];
@@ -58,6 +59,7 @@ export function buildEditorPlugins(): Plugin[] {
     tableEditing(),
     inputRules({ rules: buildInputRules() }),
     nodeIdPlugin(),
+    searchPlugin(),
   ];
 }
 

@@ -22,6 +22,7 @@
     "@codemirror/search": "^6.7.2",
     "@lezer/highlight": "^1.2.5",
     "@plantuml/core": "^1.2026.9",
+    "chokidar": "^6.0.0",
     "codemirror": "^6.0.2",
     "dompurify": "^3.4.17",
     "katex": "^0.19.1",

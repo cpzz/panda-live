@@ -3,8 +3,16 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { registerFileHandlers } from "./ipc/files";
 import { registerAppHandlers } from "./ipc/router";
+import { registerStorageHandlers } from "./ipc/storage";
+import { registerWorkspaceHandlers } from "./ipc/workspace";
+import { DraftService } from "./services/draft-service";
 import { FileService } from "./services/file-service";
 import { handlePandaProtocols, registerPandaSchemes } from "./services/protocol-service";
+import { SessionService } from "./services/session-service";
+import { SettingsService } from "./services/settings-service";
+import { WorkspaceService } from "./services/workspace-service";
+import { FS_CHANGED_CHANNEL } from "../src/shared/events";
+import type { SessionState } from "../src/shared/ipc";
 import { MENU_COMMAND_CHANNEL, type MenuCommand } from "../src/shared/menu";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -12,6 +20,11 @@ const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL;
 
 const files = new FileService();
 let mainWindow: BrowserWindow | null = null;
+let session: SessionService;
+let settings: SettingsService;
+let drafts: DraftService;
+let workspaces: WorkspaceService | undefined;
+let windowStateTimer: ReturnType<typeof setTimeout> | null = null;
 
 // 开发期把用户数据放到项目内，避免与正式实例的缓存/单实例锁互相干扰。
 const devUserDataDir = process.env.PANDA_USER_DATA_DIR;
@@ -30,9 +43,19 @@ function buildMenu(): void {
       label: "文件",
       submenu: [
         {
+          label: "新建",
+          accelerator: "CmdOrCtrl+N",
+          click: () => sendCommand("file.new"),
+        },
+        {
           label: "打开…",
           accelerator: "CmdOrCtrl+O",
           click: () => sendCommand("file.open"),
+        },
+        {
+          label: "打开文件夹…",
+          accelerator: "CmdOrCtrl+Shift+O",
+          click: () => sendCommand("workspace.open"),
         },
         {
           label: "保存",
@@ -43,6 +66,11 @@ function buildMenu(): void {
           label: "另存为…",
           accelerator: "CmdOrCtrl+Shift+S",
           click: () => sendCommand("file.saveAs"),
+        },
+        {
+          label: "关闭标签",
+          accelerator: "CmdOrCtrl+W",
+          click: () => sendCommand("file.close"),
         },
         { type: "separator" },
         { role: "quit", label: "退出" },
@@ -58,6 +86,12 @@ function buildMenu(): void {
         { role: "copy", label: "复制" },
         { role: "paste", label: "粘贴" },
         { role: "selectAll", label: "全选" },
+        { type: "separator" },
+        {
+          label: "查找替换",
+          accelerator: "CmdOrCtrl+F",
+          click: () => sendCommand("view.find"),
+        },
       ],
     },
     {
@@ -69,16 +103,24 @@ function buildMenu(): void {
         { role: "resetZoom", label: "实际大小" },
         { role: "zoomIn", label: "放大" },
         { role: "zoomOut", label: "缩小" },
+        { type: "separator" },
+        {
+          label: "设置…",
+          accelerator: "CmdOrCtrl+,",
+          click: () => sendCommand("view.settings"),
+        },
       ],
     },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-function createWindow(): void {
+function createWindow(bounds?: SessionState["window"]): void {
   const window = new BrowserWindow({
-    width: 1280,
-    height: 820,
+    x: bounds?.x,
+    y: bounds?.y,
+    width: bounds?.width ?? 1280,
+    height: bounds?.height ?? 820,
     minWidth: 960,
     minHeight: 640,
     show: false,
@@ -98,7 +140,20 @@ function createWindow(): void {
   });
 
   mainWindow = window;
+  if (bounds?.maximized) window.maximize();
   window.once("ready-to-show", () => window.show());
+
+  // 窗口尺寸/位置每 500 ms 防抖写回会话。见 doc/design.md §12.4。
+  const saveBounds = (): void => {
+    if (windowStateTimer) clearTimeout(windowStateTimer);
+    windowStateTimer = setTimeout(() => {
+      if (window.isDestroyed()) return;
+      void session.saveWindow({ ...window.getNormalBounds(), maximized: window.isMaximized() });
+    }, 500);
+  };
+  window.on("resize", saveBounds);
+  window.on("move", saveBounds);
+
   window.on("closed", () => {
     if (mainWindow === window) mainWindow = null;
   });
@@ -122,11 +177,25 @@ function createWindow(): void {
 }
 
 async function bootstrap(): Promise<void> {
+  const userDataDir = app.getPath("userData");
+  settings = new SettingsService(userDataDir);
+  session = new SessionService(userDataDir);
+  drafts = new DraftService(userDataDir);
+  const workspaceService = new WorkspaceService(files, (event) => {
+    mainWindow?.webContents.send(FS_CHANGED_CHANNEL, event);
+  });
+  workspaces = workspaceService;
+  await settings.load();
+
   handlePandaProtocols(files, path.join(__dirname, "../dist"));
   registerAppHandlers();
   registerFileHandlers({ files, getWindow: () => mainWindow });
+  registerWorkspaceHandlers({ files, workspaces: workspaceService, getWindow: () => mainWindow });
+  registerStorageHandlers({ settings, session, drafts });
   buildMenu();
-  createWindow();
+
+  const saved = await session.load();
+  createWindow(saved?.window);
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -149,6 +218,10 @@ if (!app.requestSingleInstanceLock()) {
     app.quit();
   });
 }
+
+app.on("before-quit", () => {
+  void workspaces?.dispose();
+});
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();

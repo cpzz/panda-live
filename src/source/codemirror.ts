@@ -2,6 +2,7 @@ import { basicSetup } from "codemirror";
 import { markdown } from "@codemirror/lang-markdown";
 import { xml } from "@codemirror/lang-xml";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
+import { closeSearchPanel, openSearchPanel, search } from "@codemirror/search";
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
@@ -92,6 +93,8 @@ function createState(
     extensions: [
       basicSetup,
       language === "xml" ? xml() : markdown(),
+      // 源码模式的查找替换复用 CodeMirror 搜索面板与匹配装饰（§11.5）。
+      search({ top: true }),
       EditorView.lineWrapping,
       EditorState.tabSize.of(2),
       syntaxHighlighting(pandaHighlight),
@@ -155,6 +158,32 @@ export class SourceEditor {
   }
 
   focus(): void {
+    this.view.focus();
+  }
+
+  openSearch(): void {
+    openSearchPanel(this.view);
+  }
+
+  closeSearch(): void {
+    closeSearchPanel(this.view);
+  }
+
+  /** 当前光标位置；用于会话恢复。 */
+  getCursor(): { line: number; column: number } {
+    const head = this.view.state.selection.main.head;
+    const line = this.view.state.doc.lineAt(head);
+    return { line: line.number, column: head - line.from + 1 };
+  }
+
+  /** 按行/列定位光标并滚动到可见区域。 */
+  setCursor(cursor: { line: number; column: number }): void {
+    const lineInfo = this.view.state.doc.line(Math.min(Math.max(1, cursor.line), this.view.state.doc.lines));
+    const offset = Math.min(lineInfo.to, lineInfo.from + Math.max(0, cursor.column - 1));
+    this.view.dispatch({
+      selection: { anchor: offset },
+      scrollIntoView: true,
+    });
     this.view.focus();
   }
 

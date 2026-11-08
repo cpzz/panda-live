@@ -4,6 +4,7 @@ import { PandaEditor } from "../editor/editor";
 import { parseMarkdown } from "../formats/markdown/parse";
 import { serializeMarkdown } from "../formats/markdown/serialize";
 import type { DocumentState, EditorMode } from "../services/document-manager";
+import { SearchPanel } from "./SearchPanel";
 
 interface SavedWysiwygState {
   state: EditorState;
@@ -17,10 +18,12 @@ interface SavedWysiwygState {
 export function WysiwygPane({
   document,
   mode,
+  searchSignal,
   onChange,
 }: {
   document: DocumentState;
   mode: EditorMode;
+  searchSignal: number;
   onChange(content: string): void;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -90,5 +93,14 @@ export function WysiwygPane({
     };
   }, [document.id, document.revision, document.readOnly, document.content, document.format, mode]);
 
-  return <div className="wysiwyg-host" ref={hostRef} />;
+  return (
+    <div className="wysiwyg-wrap">
+      <SearchPanel
+        editor={editorRef.current}
+        openSignal={searchSignal}
+        onClose={() => undefined}
+      />
+      <div className="wysiwyg-host" ref={hostRef} />
+    </div>
+  );
 }
