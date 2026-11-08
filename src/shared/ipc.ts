@@ -3,6 +3,7 @@ import type { PandaErrorPayload } from "./errors";
 import type { MenuCommand } from "./menu";
 import type { Settings } from "./settings";
 import type {
+  ExtensionCommandInfo,
   ExtensionFormatInfo,
   ExtensionInfo,
   ExtensionParseResult,
@@ -349,6 +350,7 @@ export const ipcRequestSchemas = {
   "shell:openExternal": z.object({ url: z.string().min(1) }),
   "ext:list": z.undefined(),
   "ext:formats": z.undefined(),
+  "ext:commands": z.undefined(),
   "ext:install": z.undefined(),
   "ext:enable": z.object({ id: z.string().min(1) }),
   "ext:disable": z.object({ id: z.string().min(1) }),
@@ -413,6 +415,7 @@ export interface IpcResponseMap {
   "shell:openExternal": void;
   "ext:list": ExtensionInfo[];
   "ext:formats": ExtensionFormatInfo[];
+  "ext:commands": ExtensionCommandInfo[];
   "ext:install": ExtensionInfo;
   "ext:enable": void;
   "ext:disable": void;
@@ -478,6 +481,7 @@ export interface PandaApi {
   ext: {
     list(): Promise<ExtensionInfo[]>;
     formats(): Promise<ExtensionFormatInfo[]>;
+    commands(): Promise<ExtensionCommandInfo[]>;
     install(): Promise<ExtensionInfo>;
     enable(id: string): Promise<void>;
     disable(id: string): Promise<void>;

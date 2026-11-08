@@ -26,6 +26,7 @@ import type { CompileResult, EngineStatus } from "../shared/ipc";
 import type { Settings } from "../shared/settings";
 import { describeError, getErrorCode } from "../shared/errors";
 import { RecoveryDialog } from "./RecoveryDialog";
+import { CommandPalette, type CommandItem } from "./CommandPalette";
 import { OutlinePanel } from "./OutlinePanel";
 import { PdfPreview } from "./PdfPreview";
 import { PerformanceOverlay } from "./PerformanceOverlay";
@@ -645,6 +646,8 @@ export function App() {
   const [recent, setRecent] = useState<RecentEntry[]>([]);
   const [perfVisible, setPerfVisible] = useState(import.meta.env.DEV);
   const [problemsOpen, setProblemsOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [extensionCommands, setExtensionCommands] = useState<CommandItem[]>([]);
   const problemsState = useSyncExternalStore(problemStore.subscribe, problemStore.getState);
   const [outline, setOutline] = useState<OutlineItem[]>([]);
   const [sourceJump, setSourceJump] = useState<{ line: number; column: number; token: number } | null>(
@@ -893,6 +896,46 @@ export function App() {
     });
   }, [manager]);
 
+  // 命令面板：Ctrl/Cmd+Shift+P 切换；打开时拉取扩展命令。见 doc/design.md §15.1。
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "p") {
+        event.preventDefault();
+        setPaletteOpen((open) => !open);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown, true);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!paletteOpen) return;
+    let cancelled = false;
+    void window.panda.ext
+      .commands()
+      .then((list) => {
+        if (cancelled) return;
+        setExtensionCommands(
+          list.map((item) => ({
+            id: `ext:${item.id}`,
+            title: item.title,
+            run: async () => {
+              await window.panda.ext.command(item.id);
+              manager.showNotice("info", `已执行：${item.title}`);
+            },
+          })),
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setExtensionCommands([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [paletteOpen, manager]);
+
   useEffect(() => {
     return window.panda.onMenuCommand((command) => {
       switch (command) {
@@ -923,6 +966,9 @@ export function App() {
         case "view.performance":
           setPerfVisible((visible) => !visible);
           return;
+        case "view.commandPalette":
+          setPaletteOpen(true);
+          return;
         default:
           void manager.runMenuCommand(command);
       }
@@ -932,6 +978,62 @@ export function App() {
   useEffect(() => {
     setCursor({ line: 1, column: 1 });
   }, [state.activeId]);
+
+  const paletteCommands: CommandItem[] = [
+    { id: "file.new", title: "新建文档", shortcut: "Ctrl+N", run: () => manager.newDocument() },
+    { id: "file.open", title: "打开文件…", shortcut: "Ctrl+O", run: () => void manager.openFiles() },
+    {
+      id: "workspace.open",
+      title: "打开文件夹…",
+      shortcut: "Ctrl+Shift+O",
+      run: () => void workspaces.openPicker(),
+    },
+    {
+      id: "file.save",
+      title: "保存",
+      shortcut: "Ctrl+S",
+      run: () => {
+        if (state.activeId) void manager.saveDocument(state.activeId);
+      },
+    },
+    {
+      id: "file.saveAs",
+      title: "另存为…",
+      shortcut: "Ctrl+Shift+S",
+      run: () => {
+        if (active) void manager.saveDocumentAs(active.id);
+      },
+    },
+    {
+      id: "file.close",
+      title: "关闭当前标签",
+      shortcut: "Ctrl+W",
+      run: () => {
+        if (active) void manager.closeDocument(active.id);
+      },
+    },
+    { id: "file.exportHtml", title: "导出 HTML…", run: () => void exportHtmlActive() },
+    { id: "file.exportPdf", title: "导出 PDF…", run: () => void exportPdfActive() },
+    { id: "file.exportSvg", title: "导出图表 SVG…", run: () => void exportSvgActive() },
+    { id: "view.find", title: "查找替换", shortcut: "Ctrl+F", run: () => setSearchSignal((value) => value + 1) },
+    { id: "view.settings", title: "打开设置…", shortcut: "Ctrl+,", run: () => setSettingsOpen(true) },
+    { id: "latex.compile", title: "编译 LaTeX", shortcut: "Ctrl+B", run: () => setCompileSignal((value) => value + 1) },
+    { id: "update.check", title: "检查更新", run: () => void checkUpdate() },
+    { id: "view.mode.wysiwyg", title: "视图模式：所见即所得", run: () => manager.setMode("wysiwyg") },
+    { id: "view.mode.source", title: "视图模式：源码", run: () => manager.setMode("source") },
+    { id: "view.mode.split", title: "视图模式：分栏", run: () => manager.setMode("split") },
+    { id: "view.mode.preview", title: "视图模式：预览", run: () => manager.setMode("preview") },
+    ...(import.meta.env.DEV
+      ? [
+          {
+            id: "view.performance",
+            title: "切换性能浮层",
+            run: () => setPerfVisible((visible) => !visible),
+          },
+        ]
+      : []),
+    ...extensionCommands,
+  ];
 
   return (
     <div className="app">
@@ -1215,6 +1317,19 @@ export function App() {
           </button>
         )}
       </footer>
+
+      <CommandPalette
+        open={paletteOpen}
+        commands={paletteCommands}
+        onClose={() => setPaletteOpen(false)}
+        onRun={async (command) => {
+          try {
+            await command.run();
+          } catch (reason) {
+            manager.showNotice("error", describeError(reason));
+          }
+        }}
+      />
 
       <SettingsDialog
         open={settingsOpen}

@@ -161,6 +161,10 @@ function buildMenu(): void {
         { role: "resetZoom", label: "实际大小" },
         { role: "zoomIn", label: "放大" },
         { role: "zoomOut", label: "缩小" },
+        {
+          label: "命令面板…",
+          click: () => sendCommand("view.commandPalette"),
+        },
         ...(DEV_SERVER_URL
           ? [
               {

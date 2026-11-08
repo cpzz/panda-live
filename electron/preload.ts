@@ -60,6 +60,7 @@ const api: PandaApi = {
   ext: {
     list: () => invoke("ext:list", undefined),
     formats: () => invoke("ext:formats", undefined),
+    commands: () => invoke("ext:commands", undefined),
     install: () => invoke("ext:install", undefined),
     enable: (id) => invoke("ext:enable", { id }),
     disable: (id) => invoke("ext:disable", { id }),

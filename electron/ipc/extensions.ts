@@ -13,6 +13,8 @@ export function registerExtensionHandlers({ extensions, getWindow }: ExtensionHa
 
   handle("ext:formats", () => extensions.formats());
 
+  handle("ext:commands", () => extensions.commands());
+
   handle("ext:install", async () => {
     const window = getWindow();
     const options = {

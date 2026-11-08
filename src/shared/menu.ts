@@ -13,6 +13,7 @@ export const MENU_COMMANDS = [
   "view.find",
   "view.settings",
   "view.performance",
+  "view.commandPalette",
   "latex.compile",
   "update.check",
 ] as const;
