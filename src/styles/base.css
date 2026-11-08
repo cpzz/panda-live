@@ -434,6 +434,114 @@ button {
   white-space: nowrap;
 }
 
+.statusbar-button {
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.statusbar-button:hover,
+.statusbar-button.active {
+  border-color: var(--border-strong);
+  background: var(--surface);
+  color: var(--fg);
+}
+
+/* 问题面板 */
+.problem-panel {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  max-height: 30vh;
+  min-height: 0;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.problem-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.problem-panel-title {
+  font-weight: 600;
+  font-size: 12.5px;
+}
+
+.problem-panel-count {
+  flex: 1;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.problem-list {
+  overflow: auto;
+  padding: 4px 0;
+}
+
+.problem-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 4px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--fg);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.problem-row:hover {
+  background: var(--surface-muted);
+}
+
+.problem-severity {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.problem-row.error .problem-severity {
+  background: var(--error-bg);
+  color: var(--danger, #cf222e);
+}
+
+.problem-row.warning .problem-severity {
+  background: var(--warning-bg);
+  color: #9a6b00;
+}
+
+.problem-row.info .problem-severity {
+  background: var(--info-bg);
+  color: var(--accent-strong);
+}
+
+.problem-message {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.problem-line,
+.problem-source {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* 滚动条 */
 ::-webkit-scrollbar {
   width: 10px;

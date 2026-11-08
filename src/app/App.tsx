@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { EditorState } from "@codemirror/state";
 import { renderMarkdownToHtml } from "../formats/markdown/preview";
+import { parseMarkdown } from "../formats/markdown/parse";
 import { buildOutline, type OutlineItem } from "../formats/outline";
+import { EMPTY_PROBLEMS, problemStore, type Problem } from "../services/problem-store";
 import { getFormatEntry, refreshExtensionFormats } from "../extensions/registry";
 import { sanitizeHtml } from "../render/html";
 import { resolveRelativePath } from "../utils/paths";
@@ -27,6 +29,7 @@ import { RecoveryDialog } from "./RecoveryDialog";
 import { OutlinePanel } from "./OutlinePanel";
 import { PdfPreview } from "./PdfPreview";
 import { PerformanceOverlay } from "./PerformanceOverlay";
+import { ProblemPanel } from "./ProblemPanel";
 import { SettingsDialog } from "./SettingsDialog";
 import { WorkspacePanel } from "./WorkspacePanel";
 import { WysiwygPane } from "./WysiwygPane";
@@ -335,10 +338,22 @@ function ExtensionPreviewPane({
           setHtml(sanitizeHtml(preview.html));
           const diagnostic = preview.diagnostics.find((item) => item.severity === "error");
           setError(diagnostic?.message ?? null);
+          problemStore.setSource(
+            document.id,
+            "extension",
+            [...parsed.diagnostics, ...preview.diagnostics].map((item) => ({
+              severity: item.severity,
+              message: item.message,
+              line: item.line,
+              column: item.column,
+            })),
+          );
         } catch (reason) {
           if (cancelled) return;
+          const message = reason instanceof Error ? reason.message : String(reason);
           setHtml("");
-          setError(reason instanceof Error ? reason.message : String(reason));
+          setError(message);
+          problemStore.setSource(document.id, "extension", [{ severity: "error", message }]);
         }
       })();
     }, 200);
@@ -346,7 +361,11 @@ function ExtensionPreviewPane({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [document.content, document.path, extensionId, providerId, enabled]);
+  }, [document.content, document.path, document.id, extensionId, providerId, enabled]);
+
+  useEffect(() => {
+    if (!enabled || !extensionId) problemStore.setSource(document.id, "extension", []);
+  }, [document.id, extensionId, enabled]);
 
   if (!entry?.extensionId) {
     return (
@@ -380,6 +399,24 @@ function TexPreviewPane({
   const [result, setResult] = useState<CompileResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // 编译诊断汇入问题面板。见 doc/design.md §15.1。
+  useEffect(() => {
+    if (!enabled) {
+      problemStore.setSource(document.id, "latex", []);
+      return;
+    }
+    problemStore.setSource(
+      document.id,
+      "latex",
+      (result?.diagnostics ?? []).map((item) => ({
+        severity: item.severity,
+        message: item.message,
+        line: item.line,
+        column: item.column,
+      })),
+    );
+  }, [document.id, result, enabled]);
 
   const detect = async (): Promise<void> => {
     try {
@@ -607,6 +644,8 @@ export function App() {
   const [recoveries, setRecoveries] = useState<DraftEntry[]>([]);
   const [recent, setRecent] = useState<RecentEntry[]>([]);
   const [perfVisible, setPerfVisible] = useState(import.meta.env.DEV);
+  const [problemsOpen, setProblemsOpen] = useState(false);
+  const problemsState = useSyncExternalStore(problemStore.subscribe, problemStore.getState);
   const [outline, setOutline] = useState<OutlineItem[]>([]);
   const [sourceJump, setSourceJump] = useState<{ line: number; column: number; token: number } | null>(
     null,
@@ -643,6 +682,41 @@ export function App() {
       clearTimeout(timer);
     };
   }, [activeId, activeContent, activeFormat]);
+
+  const problems = activeId ? (problemsState.byDocument[activeId] ?? EMPTY_PROBLEMS) : EMPTY_PROBLEMS;
+  const errorCount = problems.filter((problem) => problem.severity === "error").length;
+  const warningCount = problems.filter((problem) => problem.severity === "warning").length;
+
+  // Markdown 解析诊断汇入问题面板。见 doc/design.md §15.1。
+  useEffect(() => {
+    if (!activeId) return;
+    if (activeFormat !== "markdown") {
+      problemStore.setSource(activeId, "markdown", []);
+      return;
+    }
+    const timer = setTimeout(() => {
+      problemStore.setSource(
+        activeId,
+        "markdown",
+        parseMarkdown(activeContent).diagnostics.map((item) => ({
+          severity: item.severity,
+          message: item.message,
+          line: item.line,
+          column: item.column,
+        })),
+      );
+    }, 300);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [activeId, activeContent, activeFormat]);
+
+  const jumpToProblem = (problem: Problem): void => {
+    if (problem.line === undefined) return;
+    if (state.mode === "wysiwyg" || state.mode === "preview") manager.setMode("source");
+    jumpTokenRef.current += 1;
+    setSourceJump({ line: problem.line, column: problem.column ?? 1, token: jumpTokenRef.current });
+  };
 
   const jumpToOutline = (item: OutlineItem): void => {
     jumpTokenRef.current += 1;
@@ -1098,6 +1172,14 @@ export function App() {
         )}
       </div>
 
+      {problemsOpen && (
+        <ProblemPanel
+          problems={problems}
+          onSelect={jumpToProblem}
+          onClose={() => setProblemsOpen(false)}
+        />
+      )}
+
       <footer className="statusbar">
         <span className="statusbar-name">{active?.path ?? "就绪"}</span>
         {active && (
@@ -1121,6 +1203,17 @@ export function App() {
           </span>
         )}
         <span className="statusbar-meta">{workspace.root ? workspace.root.name : "无工作区"}</span>
+        {(problems.length > 0 || problemsOpen) && (
+          <button
+            type="button"
+            className={problemsOpen ? "statusbar-button active" : "statusbar-button"}
+            aria-label="问题面板"
+            aria-expanded={problemsOpen}
+            onClick={() => setProblemsOpen((value) => !value)}
+          >
+            错误 {errorCount} · 警告 {warningCount}
+          </button>
+        )}
       </footer>
 
       <SettingsDialog
