@@ -1,6 +1,7 @@
 import { renderMarkdownToHtml } from "../formats/markdown/preview";
 import { getDiagramService } from "../render/diagram";
 import { katexCssInline } from "../render/export-fonts";
+import { resolveRelativePath } from "../utils/paths";
 import type { DocumentState } from "../services/document-manager";
 
 const EXPORT_CSP =
@@ -58,13 +59,33 @@ export interface HtmlExportOptions {
   theme: "light" | "dark";
 }
 
-/** 生成独立 HTML：内联 KaTeX 字体、消毒图表 SVG、写入 CSP，不含脚本。 */
+/** 把相对图片内联为 data URL，保证导出文件离线可用。见 §12.8。 */
+async function inlineImages(html: string, baseFilePath: string | null): Promise<string> {
+  if (!baseFilePath) return html;
+  const parsed = new DOMParser().parseFromString(html, "text/html");
+  for (const image of [...parsed.querySelectorAll("img")]) {
+    const src = image.getAttribute("src") ?? "";
+    const resolved = resolveRelativePath(baseFilePath, src);
+    if (!resolved) continue;
+    try {
+      const file = await window.panda.fs.readBase64({ path: resolved });
+      image.setAttribute("src", `data:${file.mime};base64,${file.data}`);
+    } catch {
+      // 读取失败时保留原始引用
+    }
+  }
+  return parsed.body.innerHTML;
+}
+
+/**
+ * 生成独立 HTML：内联 KaTeX 字体、消毒图表 SVG、内联图片、写入 CSP，不含脚本。
+ */
 export async function buildDocumentHtml(
   document: DocumentState,
   options: HtmlExportOptions,
 ): Promise<string> {
   const rendered = await renderMarkdownToHtml(document.content);
-  const body = await inlineDiagrams(rendered, options.theme);
+  const body = await inlineImages(await inlineDiagrams(rendered, options.theme), document.path);
   const title = escapeTitle(document.name.replace(/\.(md|markdown|mdown|mkd|qmd|rmd|mdx)$/i, ""));
   return `<!doctype html>
 <html lang="zh-CN">

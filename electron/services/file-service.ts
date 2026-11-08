@@ -5,11 +5,24 @@ import { PandaError } from "../../src/shared/errors";
 import type {
   DirEntry,
   FileRef,
+  ReadBase64Result,
   ReadTextResult,
   WriteTextRequest,
   WriteTextResult,
 } from "../../src/shared/ipc";
+
 import { decodeText, encodeText, sha256Hex } from "./text-codec";
+
+const BINARY_MIME: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".svg": "image/svg+xml",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2",
+};
 
 export function isPathInside(root: string, target: string): boolean {
   const relative = path.relative(root, target);
@@ -159,6 +172,22 @@ export class FileService {
     try {
       const stats = await fs.stat(target);
       return { size: stats.size, mtimeMs: stats.mtimeMs, isFile: stats.isFile() };
+    } catch (error) {
+      throw mapIoError(error, target);
+    }
+  }
+
+  /** 读取图片等二进制资源为 base64，用于 HTML 导出内联。见 §12.8。 */
+  async readBase64(filePath: string): Promise<ReadBase64Result> {
+    const target = await this.resolveAllowed(filePath);
+    try {
+      const stats = await fs.stat(target);
+      if (!stats.isFile()) {
+        throw new PandaError("E_FILE_NOT_FOUND", `不是文件：${target}`);
+      }
+      const bytes = await fs.readFile(target);
+      const mime = BINARY_MIME[path.extname(target).toLowerCase()] ?? "application/octet-stream";
+      return { data: bytes.toString("base64"), mime, size: bytes.byteLength };
     } catch (error) {
       throw mapIoError(error, target);
     }

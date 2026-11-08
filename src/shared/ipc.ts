@@ -71,6 +71,16 @@ export interface WriteTextResult {
   hash: string;
 }
 
+export interface ReadBase64Request {
+  path: string;
+}
+
+export interface ReadBase64Result {
+  data: string;
+  mime: string;
+  size: number;
+}
+
 export interface DirEntry {
   name: string;
   path: string;
@@ -243,6 +253,13 @@ export interface CompileResult {
   diagnostics: TexDiagnostic[];
 }
 
+export interface UpdateStatus {
+  status: "not-configured" | "latest" | "available" | "error";
+  currentVersion: string;
+  latestVersion?: string;
+  message?: string;
+}
+
 export type IpcEnvelope<T> =
   | { ok: true; data: T }
   | { ok: false; error: PandaErrorPayload };
@@ -311,6 +328,7 @@ export const ipcRequestSchemas = {
     content: z.string(),
     baseHash: z.string(),
   }),
+  "fs:readBase64": z.object({ path: z.string().min(1) }),
   "fs:readDir": z.object({ path: z.string().min(1) }),
   "fs:create": z.object({ path: z.string().min(1), kind: z.enum(["file", "dir"]) }),
   "fs:rename": z.object({ path: z.string().min(1), newName: z.string().min(1) }),
@@ -359,6 +377,8 @@ export const ipcRequestSchemas = {
   "export:pdf": z.object({ html: z.string(), suggestedName: z.string().min(1) }),
   "latex:detect": z.undefined(),
   "latex:compile": z.object({ jobId: z.string().min(1), rootPath: z.string().min(1) }),
+  "app:pendingOpenPaths": z.undefined(),
+  "update:check": z.undefined(),
   "app:getInfo": z.undefined(),
 } as const;
 
@@ -372,6 +392,7 @@ export interface IpcResponseMap {
   "dialog:saveAs": FileRef | null;
   "fs:readText": ReadTextResult;
   "fs:writeText": WriteTextResult;
+  "fs:readBase64": ReadBase64Result;
   "fs:readDir": ReadDirResult;
   "fs:create": FileRef;
   "fs:rename": FileRef;
@@ -406,6 +427,8 @@ export interface IpcResponseMap {
   "export:pdf": PdfExportResult;
   "latex:detect": EngineStatus;
   "latex:compile": CompileResult;
+  "app:pendingOpenPaths": string[];
+  "update:check": UpdateStatus;
   "app:getInfo": AppInfo;
 }
 
@@ -419,6 +442,7 @@ export interface PandaApi {
   fs: {
     readText(request: ReadTextRequest): Promise<ReadTextResult>;
     writeText(request: WriteTextRequest): Promise<WriteTextResult>;
+    readBase64(request: ReadBase64Request): Promise<ReadBase64Result>;
     readDir(request: ReadDirRequest): Promise<ReadDirResult>;
     stat(request: StatRequest): Promise<StatResult>;
     create(request: CreateRequest): Promise<FileRef>;
@@ -481,6 +505,8 @@ export interface PandaApi {
   };
   app: {
     getInfo(): Promise<AppInfo>;
+    /** 启动参数或文件关联带来的待打开路径；取走即清空。 */
+    pendingOpenPaths(): Promise<string[]>;
   };
   export: {
     pdf(request: PdfExportRequest): Promise<PdfExportResult>;
@@ -489,6 +515,11 @@ export interface PandaApi {
     detect(): Promise<EngineStatus>;
     compile(request: CompileRequest): Promise<CompileResult>;
   };
+  update: {
+    check(): Promise<UpdateStatus>;
+  };
   onMenuCommand(listener: (command: MenuCommand) => void): () => void;
   onFsChanged(listener: (event: FsChangedEvent) => void): () => void;
+  /** 第二实例或文件关联传入的待打开文件。 */
+  onOpenPath(listener: (path: string) => void): () => void;
 }

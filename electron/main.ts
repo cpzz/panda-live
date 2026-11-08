@@ -6,7 +6,7 @@ import { registerFileHandlers } from "./ipc/files";
 import { registerExportHandlers } from "./ipc/export";
 import { registerExtensionHandlers } from "./ipc/extensions";
 import { registerLatexHandlers } from "./ipc/latex";
-import { registerAppHandlers } from "./ipc/router";
+import { handle, registerAppHandlers } from "./ipc/router";
 import { registerStorageHandlers } from "./ipc/storage";
 import { registerWorkspaceHandlers } from "./ipc/workspace";
 import { DraftService } from "./services/draft-service";
@@ -16,10 +16,11 @@ import { FileService } from "./services/file-service";
 import { handlePandaProtocols, registerPandaSchemes } from "./services/protocol-service";
 import { SessionService } from "./services/session-service";
 import { SettingsService } from "./services/settings-service";
+import { UpdateService } from "./services/update-service";
 import { WorkspaceService } from "./services/workspace-service";
 import { TexCompiler } from "./tex/compiler";
 import { detectEngines } from "./tex/engine";
-import { FS_CHANGED_CHANNEL } from "../src/shared/events";
+import { APP_OPEN_PATH_CHANNEL, FS_CHANGED_CHANNEL } from "../src/shared/events";
 import type { SessionState } from "../src/shared/ipc";
 import { MENU_COMMAND_CHANNEL, type MenuCommand } from "../src/shared/menu";
 
@@ -34,6 +35,27 @@ let drafts: DraftService;
 let workspaces: WorkspaceService | undefined;
 let extensions: ExtensionService | undefined;
 let windowStateTimer: ReturnType<typeof setTimeout> | null = null;
+const pendingOpenPaths: string[] = [];
+
+const DOCUMENT_EXTENSION = /\.(md|markdown|mdown|mkd|qmd|rmd|mdx|tex|latex|mathml|mml|puml|plantuml|mmd|mermaid|adoc)$/i;
+
+/** 从命令行参数提取可打开的文档路径（文件关联 / 第二实例）。见 §12.7。 */
+function extractOpenPaths(argv: readonly string[]): string[] {
+  return argv
+    .filter((arg) => !arg.startsWith("-") && DOCUMENT_EXTENSION.test(arg))
+    .map((arg) => path.resolve(arg));
+}
+
+function deliverOpenPaths(paths: string[]): void {
+  if (paths.length === 0) return;
+  if (!mainWindow) {
+    pendingOpenPaths.push(...paths);
+    return;
+  }
+  for (const filePath of paths) {
+    mainWindow.webContents.send(APP_OPEN_PATH_CHANNEL, { path: filePath });
+  }
+}
 
 // 开发期把用户数据放到项目内，避免与正式实例的缓存/单实例锁互相干扰。
 const devUserDataDir = process.env.PANDA_USER_DATA_DIR;
@@ -147,6 +169,20 @@ function buildMenu(): void {
         },
       ],
     },
+    {
+      label: "帮助",
+      submenu: [
+        {
+          id: "check-update",
+          label: "检查更新…",
+          click: () => sendCommand("update.check"),
+        },
+        {
+          label: "关于 Panda Live",
+          enabled: false,
+        },
+      ],
+    },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
@@ -246,6 +282,10 @@ async function bootstrap(): Promise<void> {
   registerWorkspaceHandlers({ files, workspaces: workspaceService, getWindow: () => mainWindow });
   registerStorageHandlers({ settings, session, drafts });
   registerExtensionHandlers({ extensions: extensionService, getWindow: () => mainWindow });
+  handle("app:pendingOpenPaths", () => pendingOpenPaths.splice(0));
+  handle("update:check", () =>
+    new UpdateService(app.getVersion(), process.env["PANDA_UPDATE_FEED"]).check(),
+  );
   registerExportHandlers({ exports: new ExportService(() => mainWindow, userDataDir), getWindow: () => mainWindow });
   registerLatexHandlers({
     compiler: new TexCompiler(files, userDataDir, () => detectEngines()),
@@ -254,6 +294,8 @@ async function bootstrap(): Promise<void> {
 
   const saved = await session.load();
   createWindow(saved?.window);
+  // 启动参数（文件关联）先入队，渲染进程就绪后通过 IPC 取走。
+  pendingOpenPaths.push(...extractOpenPaths(process.argv.slice(1)));
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -265,10 +307,11 @@ if (!app.requestSingleInstanceLock()) {
   console.error("[lifecycle] 单实例锁获取失败：已有实例运行，或用户数据目录不可写");
   app.quit();
 } else {
-  app.on("second-instance", () => {
+  app.on("second-instance", (_event, argv) => {
     if (!mainWindow) return;
     if (mainWindow.isMinimized()) mainWindow.restore();
     mainWindow.focus();
+    deliverOpenPaths(extractOpenPaths(argv));
   });
 
   app.whenReady().then(bootstrap).catch((error: unknown) => {

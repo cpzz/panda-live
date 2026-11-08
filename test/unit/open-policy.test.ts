@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decideOpenPolicy } from "../../src/services/open-policy";
+import { BLOCK_SOURCE_THRESHOLD, decideOpenPolicy, preferSourceByBlocks } from "../../src/services/open-policy";
 
 const MB = 1024 * 1024;
 
@@ -23,5 +23,10 @@ describe("打开文件降级策略", () => {
   it("超过 50 MB 拒绝打开", () => {
     const policy = decideOpenPolicy(51 * MB);
     expect(policy.reject).toBe(true);
+  });
+
+  it("顶层块超过 8000 时默认源码模式", () => {
+    expect(preferSourceByBlocks(BLOCK_SOURCE_THRESHOLD)).toBe(false);
+    expect(preferSourceByBlocks(BLOCK_SOURCE_THRESHOLD + 1)).toBe(true);
   });
 });

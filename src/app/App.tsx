@@ -3,6 +3,7 @@ import type { EditorState } from "@codemirror/state";
 import { renderMarkdownToHtml } from "../formats/markdown/preview";
 import { getFormatEntry, refreshExtensionFormats } from "../extensions/registry";
 import { sanitizeHtml } from "../render/html";
+import { resolveRelativePath } from "../utils/paths";
 import {
   DocumentManager,
   type DocumentState,
@@ -83,6 +84,8 @@ function SourcePane({
   } | null>(null);
   const callbacksRef = useRef({ onChange, onSelection });
   callbacksRef.current = { onChange, onSelection };
+  const [gotoOpen, setGotoOpen] = useState(false);
+  const [gotoValue, setGotoValue] = useState("");
 
   const language: SourceLanguage = (() => {
     const syntax = getFormatEntry(document.format)?.syntax ?? "plain";
@@ -101,6 +104,23 @@ function SourcePane({
       editorRef.current?.openSearch();
     }
   }, [searchSignal, mode]);
+
+  // Ctrl/Cmd+G 跳转行；不依赖 window.prompt（Electron 不支持）。见 §11.5。
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "g") {
+        event.preventDefault();
+        setGotoValue("");
+        setGotoOpen(true);
+      }
+    };
+    host.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      host.removeEventListener("keydown", onKeyDown, true);
+    };
+  }, []);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -146,7 +166,50 @@ function SourcePane({
     // 只响应标签切换、模式切换、外部重载与只读变化；普通输入由编辑器自身维护。
   }, [document.id, document.revision, document.readOnly, mode, language, document.content]);
 
-  return <div className="editor-host" ref={hostRef} />;
+  return (
+    <div className="source-wrap">
+      {gotoOpen && (
+        <form
+          className="goto-line"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const [lineText, columnText] = gotoValue.split(":");
+            const line = Number(lineText);
+            const column = Number(columnText);
+            if (Number.isFinite(line) && line > 0) {
+              editorRef.current?.setCursor({
+                line,
+                column: Number.isFinite(column) && column > 0 ? column : 1,
+              });
+            }
+            setGotoOpen(false);
+          }}
+        >
+          <input
+            autoFocus
+            className="goto-input"
+            placeholder="行:列"
+            aria-label="跳转到行"
+            value={gotoValue}
+            onChange={(event) => setGotoValue(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.preventDefault();
+                setGotoOpen(false);
+              }
+            }}
+          />
+          <button type="submit" className="button small">
+            跳转
+          </button>
+          <button type="button" className="button small ghost" onClick={() => setGotoOpen(false)}>
+            取消
+          </button>
+        </form>
+      )}
+      <div className="editor-host" ref={hostRef} />
+    </div>
+  );
 }
 
 function MathmlPreviewPane({ document, enabled }: { document: DocumentState; enabled: boolean }) {
@@ -405,6 +468,52 @@ function TexPreviewPane({
   );
 }
 
+function MarkdownPreview({ html, doc }: { html: string; doc: DocumentState }) {
+  const hostRef = useRef<HTMLElement>(null);
+
+  // 超过 1 MB 的图片改为占位 + 手动加载。见 doc/design.md §14.3。
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host || !doc.path) return;
+    let cancelled = false;
+    for (const image of [...host.querySelectorAll("img")]) {
+      const src = image.getAttribute("src") ?? "";
+      const resolved = resolveRelativePath(doc.path, src);
+      if (!resolved) continue;
+      void window.panda.fs
+        .stat({ path: resolved })
+        .then((stats) => {
+          if (cancelled || stats.size <= 1024 * 1024) return;
+          const wrapper = globalThis.document.createElement("div");
+          wrapper.className = "big-image-placeholder";
+          const label = globalThis.document.createElement("span");
+          label.textContent = `图片较大（${(stats.size / (1024 * 1024)).toFixed(1)} MB），未自动加载`;
+          const button = globalThis.document.createElement("button");
+          button.type = "button";
+          button.className = "button small";
+          button.textContent = "加载图片";
+          button.addEventListener("click", () => {
+            void window.panda.fs.readBase64({ path: resolved }).then((file) => {
+              const loaded = globalThis.document.createElement("img");
+              loaded.src = `data:${file.mime};base64,${file.data}`;
+              wrapper.replaceWith(loaded);
+            });
+          });
+          wrapper.append(label, button);
+          image.replaceWith(wrapper);
+        })
+        .catch(() => undefined);
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [html, doc.path]);
+
+  return (
+    <article className="markdown-body" ref={hostRef} dangerouslySetInnerHTML={{ __html: html }} />
+  );
+}
+
 function PreviewPane({
   document,
   enabled,
@@ -465,7 +574,7 @@ function PreviewPane({
       {error ? (
         <p className="placeholder">预览渲染失败：{error}</p>
       ) : (
-        <article className="markdown-body" dangerouslySetInnerHTML={{ __html: html }} />
+        <MarkdownPreview html={html} doc={document} />
       )}
     </div>
   );
@@ -496,6 +605,7 @@ export function App() {
   workspaceStateRef.current = workspace;
   const recentRef = useRef(recent);
   recentRef.current = recent;
+  const dragTabRef = useRef<string | null>(null);
 
   const active = state.documents.find((doc) => doc.id === state.activeId) ?? null;
   const activeRef = useRef(active);
@@ -581,6 +691,30 @@ export function App() {
     }
   };
 
+  const checkUpdate = async (): Promise<void> => {
+    try {
+      const result = await window.panda.update.check();
+      switch (result.status) {
+        case "not-configured":
+          manager.showNotice("info", result.message ?? "未配置更新源");
+          return;
+        case "available":
+          manager.showNotice(
+            "info",
+            `发现新版本 ${result.latestVersion ?? ""}（当前 ${result.currentVersion}）`,
+          );
+          return;
+        case "latest":
+          manager.showNotice("info", `当前已是最新版本（${result.currentVersion}）`);
+          return;
+        default:
+          manager.showNotice("error", `更新检查失败：${result.message ?? ""}`);
+      }
+    } catch (reason) {
+      manager.showNotice("error", describeError(reason));
+    }
+  };
+
   useEffect(() => {
     manager.onSessionTick = saveSession;
     manager.openWorkspaceFolder = () => workspaces.openPicker();
@@ -609,6 +743,11 @@ export function App() {
       if (!disposed && drafts.length > 0) setRecoveries(drafts);
       const list = await window.panda.recent.list();
       if (!disposed) setRecent(list);
+      // 文件关联/启动参数带来的文档
+      const pending = await window.panda.app.pendingOpenPaths();
+      for (const filePath of pending) {
+        await manager.openPath(filePath);
+      }
     };
     void bootstrap();
 
@@ -626,6 +765,12 @@ export function App() {
       window.removeEventListener("pagehide", onPageHide);
     };
   }, [manager, workspaces]);
+
+  useEffect(() => {
+    return window.panda.onOpenPath((filePath) => {
+      void manager.openPath(filePath);
+    });
+  }, [manager]);
 
   useEffect(() => {
     return window.panda.onMenuCommand((command) => {
@@ -650,6 +795,9 @@ export function App() {
           return;
         case "file.exportSvg":
           void exportSvgActive();
+          return;
+        case "update.check":
+          void checkUpdate();
           return;
         default:
           void manager.runMenuCommand(command);
@@ -719,10 +867,39 @@ export function App() {
             key={doc.id}
             type="button"
             role="tab"
+            draggable
             aria-selected={doc.id === state.activeId}
             className={doc.id === state.activeId ? "tab active" : "tab"}
             onClick={() => manager.setActive(doc.id)}
-            title={doc.path ?? doc.name}
+            onMouseDown={(event) => {
+              // 阻止中键在按钮上触发自动滚动。
+              if (event.button === 1) event.preventDefault();
+            }}
+            onAuxClick={(event) => {
+              if (event.button !== 1) return;
+              event.preventDefault();
+              void manager.closeDocument(doc.id);
+            }}
+            onDragStart={(event) => {
+              dragTabRef.current = doc.id;
+              event.dataTransfer.effectAllowed = "move";
+              event.dataTransfer.setData("text/plain", doc.id);
+            }}
+            onDragOver={(event) => {
+              if (!dragTabRef.current || dragTabRef.current === doc.id) return;
+              event.preventDefault();
+              event.dataTransfer.dropEffect = "move";
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              const fromId = dragTabRef.current ?? event.dataTransfer.getData("text/plain");
+              dragTabRef.current = null;
+              if (fromId) manager.moveDocument(fromId, doc.id);
+            }}
+            onDragEnd={() => {
+              dragTabRef.current = null;
+            }}
+            title={`${doc.path ?? doc.name}（拖拽排序，中键关闭）`}
           >
             {doc.dirty && <span className="tab-dot" aria-label="未保存" />}
             <span className="tab-name">{doc.name}</span>

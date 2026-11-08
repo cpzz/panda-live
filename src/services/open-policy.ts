@@ -20,3 +20,10 @@ export function decideOpenPolicy(size: number): OpenPolicy {
     preferSource: size > PREFER_SOURCE_ABOVE,
   };
 }
+
+/** 顶层块数量阈值：超过后默认源码模式。见 doc/design.md §14.3。 */
+export const BLOCK_SOURCE_THRESHOLD = 8000;
+
+export function preferSourceByBlocks(blockCount: number): boolean {
+  return blockCount > BLOCK_SOURCE_THRESHOLD;
+}

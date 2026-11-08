@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
-import { FS_CHANGED_CHANNEL } from "../src/shared/events";
+import { APP_OPEN_PATH_CHANNEL, FS_CHANGED_CHANNEL } from "../src/shared/events";
 import { isMenuCommand, MENU_COMMAND_CHANNEL } from "../src/shared/menu";
 import type { FsChangedEvent, IpcEnvelope, PandaApi } from "../src/shared/ipc";
 
@@ -24,6 +24,7 @@ const api: PandaApi = {
   fs: {
     readText: (request) => invoke("fs:readText", request),
     writeText: (request) => invoke("fs:writeText", request),
+    readBase64: (request) => invoke("fs:readBase64", request),
     readDir: (request) => invoke("fs:readDir", request),
     stat: (request) => invoke("fs:stat", request),
     create: (request) => invoke("fs:create", request),
@@ -72,6 +73,7 @@ const api: PandaApi = {
   },
   app: {
     getInfo: () => invoke("app:getInfo", undefined),
+    pendingOpenPaths: () => invoke("app:pendingOpenPaths", undefined),
   },
   export: {
     pdf: (request) => invoke("export:pdf", request),
@@ -79,6 +81,9 @@ const api: PandaApi = {
   latex: {
     detect: () => invoke("latex:detect", undefined),
     compile: (request) => invoke("latex:compile", request),
+  },
+  update: {
+    check: () => invoke("update:check", undefined),
   },
   onMenuCommand: (listener) => {
     const handler = (_event: IpcRendererEvent, payload: unknown): void => {
@@ -100,6 +105,16 @@ const api: PandaApi = {
     ipcRenderer.on(FS_CHANGED_CHANNEL, handler);
     return () => {
       ipcRenderer.off(FS_CHANGED_CHANNEL, handler);
+    };
+  },
+  onOpenPath: (listener) => {
+    const handler = (_event: IpcRendererEvent, payload: unknown): void => {
+      const filePath = (payload as { path?: unknown } | null | undefined)?.path;
+      if (typeof filePath === "string" && filePath.length > 0) listener(filePath);
+    };
+    ipcRenderer.on(APP_OPEN_PATH_CHANNEL, handler);
+    return () => {
+      ipcRenderer.off(APP_OPEN_PATH_CHANNEL, handler);
     };
   },
 };

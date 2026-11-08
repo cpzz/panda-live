@@ -13,6 +13,7 @@ export const MENU_COMMANDS = [
   "view.find",
   "view.settings",
   "latex.compile",
+  "update.check",
 ] as const;
 
 export type MenuCommand = (typeof MENU_COMMANDS)[number];

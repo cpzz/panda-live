@@ -10,7 +10,8 @@ import type {
   TextEncoding,
 } from "../shared/ipc";
 import { detectFormatEntry } from "../extensions/registry";
-import { decideOpenPolicy } from "./open-policy";
+import { parseMarkdown } from "../formats/markdown/parse";
+import { decideOpenPolicy, preferSourceByBlocks } from "./open-policy";
 
 export type { EditorMode };
 
@@ -168,6 +169,20 @@ export class DocumentManager {
   setActive(id: string): void {
     if (!this.state.documents.some((doc) => doc.id === id)) return;
     this.commit({ activeId: id });
+    this.scheduleSessionSave();
+  }
+
+  /** 调整标签顺序：把 fromId 移动到 toId 的位置，激活标签保持不变。 */
+  moveDocument(fromId: string, toId: string): void {
+    if (fromId === toId) return;
+    const documents = [...this.state.documents];
+    const fromIndex = documents.findIndex((doc) => doc.id === fromId);
+    const toIndex = documents.findIndex((doc) => doc.id === toId);
+    if (fromIndex < 0 || toIndex < 0) return;
+    const [moved] = documents.splice(fromIndex, 1);
+    if (!moved) return;
+    documents.splice(toIndex, 0, moved);
+    this.commit({ documents });
     this.scheduleSessionSave();
   }
 
@@ -580,6 +595,17 @@ export class DocumentManager {
       }
       const data = await window.panda.fs.readText({ path: ref.path });
       const watchId = await this.watchFile(ref.path);
+      let forceSource = policy.preferSource;
+      let blockLimit = false;
+      if (!forceSource && detectFormatEntry(ref.name)?.id === "markdown") {
+        try {
+          const blocks = parseMarkdown(data.content).doc.content?.length ?? 0;
+          blockLimit = preferSourceByBlocks(blocks);
+          forceSource = blockLimit;
+        } catch {
+          // 解析失败时交给编辑器侧的 raw_markdown 兜底
+        }
+      }
       const document: DocumentState = {
         id: createId(),
         name: ref.name,
@@ -603,13 +629,15 @@ export class DocumentManager {
       this.commit({
         documents: [...this.state.documents, document],
         activeId: document.id,
-        mode: policy.preferSource
+        mode: forceSource
           ? "source"
           : document.format === "markdown" || this.state.mode !== "wysiwyg"
             ? this.state.mode
             : "source",
       });
-      if (policy.preferSource) {
+      if (blockLimit) {
+        this.notify("info", "文档顶层块超过 8000，已默认切换到源码模式");
+      } else if (policy.preferSource) {
         this.notify("info", "文件较大，已默认切换到源码模式");
       }
       if (!options.silentRecent) {

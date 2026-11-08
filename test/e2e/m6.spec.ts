@@ -62,9 +62,15 @@ test("M6：导出 HTML 内联数学与图表且不含脚本", async () => {
   const userDataDir = await prepareUserData();
   const mdPath = path.join(tempDir, "export.md");
   const htmlPath = path.join(tempDir, "export.html");
+  // 1×1 透明 PNG，用于验证图片内联
+  const png = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+    "base64",
+  );
+  await fs.writeFile(path.join(tempDir, "pixel.png"), png);
   await fs.writeFile(
     mdPath,
-    "# 导出标题\n\n公式 $a^2+b^2=c^2$。\n\n```plantuml\n@startuml\nAlice -> Bob : Hello\n@enduml\n```\n",
+    "# 导出标题\n\n公式 $a^2+b^2=c^2$。\n\n![像素](pixel.png)\n\n```plantuml\n@startuml\nAlice -> Bob : Hello\n@enduml\n```\n",
     "utf8",
   );
 
@@ -83,6 +89,7 @@ test("M6：导出 HTML 内联数学与图表且不含脚本", async () => {
     expect(html).toContain("data:font/woff2;base64,");
     expect(html).toContain('class="diagram-export"');
     expect(html).toContain("<svg");
+    expect(html).toContain("data:image/png;base64,");
     expect(html).not.toContain("<script");
   } finally {
     await app.close();
