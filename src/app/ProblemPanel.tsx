@@ -4,6 +4,8 @@ const SOURCE_LABELS: Record<ProblemSource, string> = {
   markdown: "解析",
   latex: "LaTeX",
   extension: "扩展",
+  diagram: "图表",
+  math: "公式",
 };
 
 const SEVERITY_LABELS: Record<Problem["severity"], string> = {

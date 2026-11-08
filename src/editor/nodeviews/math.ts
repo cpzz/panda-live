@@ -2,6 +2,7 @@ import DOMPurify from "dompurify";
 import type { Node as PMNode } from "prosemirror-model";
 import type { EditorView, NodeView } from "prosemirror-view";
 import { renderKatex } from "../../render/math/katex";
+import { problemStore } from "../../services/problem-store";
 
 const KATEX_PROFILE = { USE_PROFILES: { html: true, mathMl: true, svg: true } } as const;
 
@@ -15,14 +16,17 @@ export class MathNodeView implements NodeView {
   readonly dom: HTMLElement;
   private node: PMNode;
   private editing = false;
+  private readonly problemKey: string;
 
   constructor(
     node: PMNode,
     private readonly view: EditorView,
     private readonly getPos: GetPos,
     private readonly displayMode: boolean,
+    private readonly documentId?: string,
   ) {
     this.node = node;
+    this.problemKey = String(node.attrs.nodeId ?? `math-${Math.random().toString(36).slice(2, 10)}`);
     this.dom = document.createElement(displayMode ? "div" : "span");
     this.dom.className = displayMode ? "math-node math-node-block" : "math-node math-node-inline";
     this.dom.title = "双击编辑公式";
@@ -54,11 +58,28 @@ export class MathNodeView implements NodeView {
       this.dom.innerHTML = DOMPurify.sanitize(result.html, KATEX_PROFILE);
       this.dom.classList.remove("math-node-error");
       this.dom.title = "双击编辑公式";
+      this.reportProblem(null);
     } else {
       this.dom.textContent = `${this.displayMode ? "$$" : "$"}${source}${this.displayMode ? "$$" : "$"}`;
       this.dom.classList.add("math-node-error");
       this.dom.title = `公式错误：${result.error}`;
+      this.reportProblem(`公式渲染失败：${result.error}`);
     }
+  }
+
+  /** 公式渲染诊断汇入问题面板；错误清除时移除对应条目。 */
+  private reportProblem(message: string | null): void {
+    if (!this.documentId) return;
+    problemStore.setEntry(
+      this.documentId,
+      "math",
+      this.problemKey,
+      message ? [{ severity: "error", message }] : [],
+    );
+  }
+
+  destroy(): void {
+    this.reportProblem(null);
   }
 
   private async startEditing(): Promise<void> {

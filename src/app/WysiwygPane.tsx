@@ -56,6 +56,7 @@ export function WysiwygPane({
         parent: host,
         docJson: parseMarkdown(document.content).doc,
         readOnly: document.readOnly,
+        documentId: document.id,
         onChange: (docJson) => onChangeRef.current(serializeMarkdown(docJson)),
       });
       editorRef.current = editor;

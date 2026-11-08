@@ -293,6 +293,16 @@ function DiagramPreviewPane({ document, enabled }: { document: DocumentState; en
     };
   }, [document.content, requestId, kind, theme, enabled]);
 
+  // 格式级图表预览错误汇入问题面板。
+  useEffect(() => {
+    problemStore.setEntry(
+      document.id,
+      "diagram",
+      "preview",
+      enabled && error ? [{ severity: "error", message: `图表渲染失败：${error}` }] : [],
+    );
+  }, [document.id, error, enabled]);
+
   return (
     <div className="preview-pane">
       {error ? (

@@ -10,7 +10,7 @@ describe("问题汇总", () => {
     const problems = store.getState().byDocument["doc-1"] ?? [];
     expect(problems).toHaveLength(2);
     expect(problems.map((item) => item.source)).toEqual(["markdown", "extension"]);
-    expect(problems.map((item) => item.id)).toEqual(["markdown:0", "extension:0"]);
+    expect(problems.map((item) => item.id)).toEqual(["markdown::0", "extension::0"]);
 
     store.setSource("doc-1", "markdown", []);
     const remaining = store.getState().byDocument["doc-1"] ?? [];
@@ -42,5 +42,18 @@ describe("问题汇总", () => {
   it("没有问题时返回稳定的空数组", () => {
     const store = new ProblemStore();
     expect(store.getState().byDocument["missing"] ?? EMPTY_PROBLEMS).toBe(EMPTY_PROBLEMS);
+  });
+
+  it("按分组键覆盖单个节点的诊断", () => {
+    const store = new ProblemStore();
+    store.setEntry("doc-1", "diagram", "node-a", [{ severity: "error", message: "图表 A 失败" }]);
+    store.setEntry("doc-1", "diagram", "node-b", [{ severity: "error", message: "图表 B 失败" }]);
+    expect(store.getState().byDocument["doc-1"]).toHaveLength(2);
+
+    store.setEntry("doc-1", "diagram", "node-a", []);
+    const remaining = store.getState().byDocument["doc-1"] ?? [];
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0]?.message).toBe("图表 B 失败");
+    expect(remaining[0]?.key).toBe("node-b");
   });
 });

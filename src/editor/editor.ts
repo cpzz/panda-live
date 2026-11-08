@@ -31,6 +31,8 @@ export interface PandaEditorOptions {
   parent: HTMLElement;
   docJson: PMJson;
   readOnly: boolean;
+  /** 所属文档 ID，用于把节点级诊断汇入问题面板。 */
+  documentId: string;
   /** 文档变化后回调 ProseMirror JSON；序列化由调用方负责。 */
   onChange(docJson: PMJson): void;
 }
@@ -72,11 +74,11 @@ export class PandaEditor {
       attributes: { class: "markdown-body prose-editor", spellcheck: "false" },
       editable: () => !this.readOnly,
       nodeViews: {
-        math_inline: (node, view, getPos) => new MathNodeView(node, view, getPos, false),
-        math_block: (node, view, getPos) => new MathNodeView(node, view, getPos, true),
+        math_inline: (node, view, getPos) => new MathNodeView(node, view, getPos, false, options.documentId),
+        math_block: (node, view, getPos) => new MathNodeView(node, view, getPos, true, options.documentId),
         mathml_inline: (node) => new MathmlNodeView(node, false),
         mathml_block: (node) => new MathmlNodeView(node, true),
-        diagram_block: (node, view, getPos) => new DiagramNodeView(node, view, getPos),
+        diagram_block: (node, view, getPos) => new DiagramNodeView(node, view, getPos, options.documentId),
         tab_set: (node) => new TabSetNodeView(node),
         grid: (node) => new GridNodeView(node),
       },

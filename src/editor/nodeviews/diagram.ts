@@ -6,6 +6,7 @@ import {
   onDiagramThemeChange,
 } from "../../render/diagram";
 import type { DiagramKind } from "../../render/diagram/types";
+import { problemStore } from "../../services/problem-store";
 
 const EDIT_COMMIT_DELAY_MS = 300;
 
@@ -33,6 +34,7 @@ export class DiagramNodeView implements NodeView {
     node: PMNode,
     private readonly view: EditorView,
     private readonly getPos: () => number | undefined,
+    private readonly documentId?: string,
   ) {
     this.node = node;
     this.instanceId = `diagram-${Math.random().toString(36).slice(2, 10)}`;
@@ -136,6 +138,7 @@ export class DiagramNodeView implements NodeView {
     this.themeCleanup();
     if (this.commitTimer) clearTimeout(this.commitTimer);
     getDiagramService().cancel(`${this.nodeId}:${this.instanceId}`);
+    this.reportProblem(null);
   }
 
   private showPlaceholder(): void {
@@ -176,10 +179,23 @@ export class DiagramNodeView implements NodeView {
       // SVG 已在父窗口经 DOMPurify 消毒，不执行内联脚本。
       svgHost.innerHTML = result.svg;
       this.body.append(svgHost);
+      this.reportProblem(null);
       return;
     }
 
+    if (result.code !== "E_CANCELLED") this.reportProblem(`图表渲染失败：${result.error}`);
     this.showError(result.error, result.code === "E_RENDER_TIMEOUT" || result.code === "E_RENDER_FAILED");
+  }
+
+  /** 图表诊断汇入问题面板；同一节点重复上报会覆盖旧条目。见 doc/design.md §15.1。 */
+  private reportProblem(message: string | null): void {
+    if (!this.documentId) return;
+    problemStore.setEntry(
+      this.documentId,
+      "diagram",
+      `${this.nodeId}:${this.instanceId}`,
+      message ? [{ severity: "error", message }] : [],
+    );
   }
 
   private showError(message: string, retryable: boolean): void {

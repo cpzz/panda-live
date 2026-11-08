@@ -2,7 +2,7 @@
 
 export type ProblemSeverity = "error" | "warning" | "info";
 
-export type ProblemSource = "markdown" | "latex" | "extension";
+export type ProblemSource = "markdown" | "latex" | "extension" | "diagram" | "math";
 
 export interface Problem {
   /** 来源内唯一标识，用于 React key。 */
@@ -14,9 +14,11 @@ export interface Problem {
   line?: number;
   /** 1-based 列号。 */
   column?: number;
+  /** 同一来源内的分组键：按节点上报时用于覆盖该节点的旧诊断。 */
+  key: string;
 }
 
-export type ProblemInput = Omit<Problem, "id" | "source">;
+export type ProblemInput = Omit<Problem, "id" | "source" | "key">;
 
 export interface ProblemState {
   byDocument: Record<string, Problem[]>;
@@ -42,11 +44,19 @@ export class ProblemStore {
   };
 
   setSource(documentId: string, source: ProblemSource, items: readonly ProblemInput[]): void {
+    this.setEntry(documentId, source, "", items);
+  }
+
+  /**
+   * 按分组键覆盖诊断：同一来源下不同节点各自维护条目，
+   * 例如多个图表节点分别上报渲染错误。
+   */
+  setEntry(documentId: string, source: ProblemSource, key: string, items: readonly ProblemInput[]): void {
     const current = this.state.byDocument[documentId] ?? EMPTY_PROBLEMS;
-    const retained = current.filter((problem) => problem.source !== source);
+    const retained = current.filter((problem) => !(problem.source === source && problem.key === key));
     const next: Problem[] = [
       ...retained,
-      ...items.map((item, index) => ({ id: `${source}:${index}`, source, ...item })),
+      ...items.map((item, index) => ({ id: `${source}:${key}:${index}`, source, key, ...item })),
     ];
     this.commit(documentId, next);
   }
