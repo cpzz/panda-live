@@ -9,7 +9,7 @@ import type {
   SessionState,
   TextEncoding,
 } from "../shared/ipc";
-import { detectFormat, type BuiltinDocumentFormat } from "../formats/registry";
+import { detectFormatEntry } from "../extensions/registry";
 
 export type { EditorMode };
 
@@ -22,7 +22,8 @@ export interface DocumentState {
   name: string;
   path: string | null;
   rootId: string | null;
-  format: BuiltinDocumentFormat;
+  /** 格式 id：内置格式名，或扩展贡献的 provider id。 */
+  format: string;
   content: string;
   savedContent: string;
   dirty: boolean;
@@ -325,7 +326,7 @@ export class DocumentManager {
         path: ref.path,
         name: ref.name,
         rootId: ref.rootId,
-        format: detectFormat(ref.name),
+        format: detectFormatEntry(ref.name)?.id ?? "text",
         savedContent: content,
         dirty: current.content !== content,
         eol: data.eol,
@@ -420,7 +421,7 @@ export class DocumentManager {
       path: ref.path,
       name: ref.name,
       rootId: ref.rootId,
-      format: detectFormat(ref.name),
+      format: detectFormatEntry(ref.name)?.id ?? "text",
       watchId,
     }));
   }
@@ -565,7 +566,7 @@ export class DocumentManager {
         name: ref.name,
         path: ref.path,
         rootId: ref.rootId || null,
-        format: detectFormat(ref.name),
+        format: detectFormatEntry(ref.name)?.id ?? "text",
         content: data.content,
         savedContent: data.content,
         dirty: false,

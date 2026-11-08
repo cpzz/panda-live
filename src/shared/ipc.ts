@@ -2,6 +2,12 @@ import { z } from "zod";
 import type { PandaErrorPayload } from "./errors";
 import type { MenuCommand } from "./menu";
 import type { Settings } from "./settings";
+import type {
+  ExtensionFormatInfo,
+  ExtensionInfo,
+  ExtensionParseResult,
+  ExtensionPreviewResult,
+} from "./extensions";
 
 export type { MenuCommand } from "./menu";
 
@@ -271,6 +277,32 @@ export const ipcRequestSchemas = {
   "draft:remove": z.object({ key: z.string().min(1) }),
   "shell:reveal": z.object({ path: z.string().min(1) }),
   "shell:openExternal": z.object({ url: z.string().min(1) }),
+  "ext:list": z.undefined(),
+  "ext:formats": z.undefined(),
+  "ext:install": z.undefined(),
+  "ext:enable": z.object({ id: z.string().min(1) }),
+  "ext:disable": z.object({ id: z.string().min(1) }),
+  "ext:uninstall": z.object({ id: z.string().min(1) }),
+  "ext:openFolder": z.object({ id: z.string().min(1).optional() }).optional(),
+  "ext:reload": z.object({ id: z.string().min(1) }),
+  "ext:preview": z.object({
+    extensionId: z.string().min(1),
+    providerId: z.string().min(1),
+    doc: z.unknown(),
+    path: z.string().nullable().optional(),
+  }),
+  "ext:parse": z.object({
+    extensionId: z.string().min(1),
+    providerId: z.string().min(1),
+    source: z.string(),
+    path: z.string().nullable().optional(),
+  }),
+  "ext:serialize": z.object({
+    extensionId: z.string().min(1),
+    providerId: z.string().min(1),
+    doc: z.unknown(),
+  }),
+  "ext:command": z.object({ id: z.string().min(1), args: z.unknown().optional() }),
   "app:getInfo": z.undefined(),
 } as const;
 
@@ -302,6 +334,18 @@ export interface IpcResponseMap {
   "draft:remove": void;
   "shell:reveal": void;
   "shell:openExternal": void;
+  "ext:list": ExtensionInfo[];
+  "ext:formats": ExtensionFormatInfo[];
+  "ext:install": ExtensionInfo;
+  "ext:enable": void;
+  "ext:disable": void;
+  "ext:uninstall": void;
+  "ext:openFolder": void;
+  "ext:reload": void;
+  "ext:preview": ExtensionPreviewResult;
+  "ext:parse": ExtensionParseResult;
+  "ext:serialize": { source: string };
+  "ext:command": unknown;
   "app:getInfo": AppInfo;
 }
 
@@ -345,6 +389,34 @@ export interface PandaApi {
   shell: {
     reveal(path: string): Promise<void>;
     openExternal(url: string): Promise<void>;
+  };
+  ext: {
+    list(): Promise<ExtensionInfo[]>;
+    formats(): Promise<ExtensionFormatInfo[]>;
+    install(): Promise<ExtensionInfo>;
+    enable(id: string): Promise<void>;
+    disable(id: string): Promise<void>;
+    uninstall(id: string): Promise<void>;
+    openFolder(id?: string): Promise<void>;
+    reload(id: string): Promise<void>;
+    preview(request: {
+      extensionId: string;
+      providerId: string;
+      doc: unknown;
+      path?: string | null;
+    }): Promise<ExtensionPreviewResult>;
+    parse(request: {
+      extensionId: string;
+      providerId: string;
+      source: string;
+      path?: string | null;
+    }): Promise<ExtensionParseResult>;
+    serialize(request: {
+      extensionId: string;
+      providerId: string;
+      doc: unknown;
+    }): Promise<{ source: string }>;
+    command(id: string, args?: unknown): Promise<unknown>;
   };
   app: {
     getInfo(): Promise<AppInfo>;

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { EditorState } from "@codemirror/state";
 import { renderMarkdownToHtml } from "../formats/markdown/preview";
+import { getFormatEntry, refreshExtensionFormats } from "../extensions/registry";
+import { sanitizeHtml } from "../render/html";
 import {
   DocumentManager,
   type DocumentState,
@@ -80,7 +82,10 @@ function SourcePane({
   const callbacksRef = useRef({ onChange, onSelection });
   callbacksRef.current = { onChange, onSelection };
 
-  const language: SourceLanguage = document.format === "mathml" ? "xml" : "markdown";
+  const language: SourceLanguage = (() => {
+    const syntax = getFormatEntry(document.format)?.syntax ?? "plain";
+    return syntax === "xml" ? "xml" : syntax === "markdown" ? "markdown" : "plain";
+  })();
 
   useEffect(() => {
     return () => {
@@ -218,6 +223,73 @@ function DiagramPreviewPane({ document, enabled }: { document: DocumentState; en
   );
 }
 
+function ExtensionPreviewPane({
+  document,
+  enabled,
+}: {
+  document: DocumentState;
+  enabled: boolean;
+}) {
+  const entry = getFormatEntry(document.format);
+  const [html, setHtml] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const extensionId = entry?.extensionId ?? null;
+  const providerId = entry?.id ?? "";
+
+  useEffect(() => {
+    if (!enabled || !extensionId) return;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      void (async () => {
+        try {
+          const parsed = await window.panda.ext.parse({
+            extensionId,
+            providerId,
+            source: document.content,
+            path: document.path,
+          });
+          const preview = await window.panda.ext.preview({
+            extensionId,
+            providerId,
+            doc: parsed.doc,
+            path: document.path,
+          });
+          if (cancelled) return;
+          setHtml(sanitizeHtml(preview.html));
+          const diagnostic = preview.diagnostics.find((item) => item.severity === "error");
+          setError(diagnostic?.message ?? null);
+        } catch (reason) {
+          if (cancelled) return;
+          setHtml("");
+          setError(reason instanceof Error ? reason.message : String(reason));
+        }
+      })();
+    }, 200);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [document.content, document.path, extensionId, providerId, enabled]);
+
+  if (!entry?.extensionId) {
+    return (
+      <div className="preview-pane">
+        <p className="placeholder">该格式的扩展已被禁用，按纯文本打开</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="preview-pane">
+      {error ? (
+        <p className="placeholder">扩展预览诊断：{error}</p>
+      ) : (
+        <article className="markdown-body extension-preview" dangerouslySetInnerHTML={{ __html: html }} />
+      )}
+    </div>
+  );
+}
+
 function PreviewPane({ document, enabled }: { document: DocumentState; enabled: boolean }) {
   const [html, setHtml] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -244,6 +316,10 @@ function PreviewPane({ document, enabled }: { document: DocumentState; enabled: 
     };
   }, [document.content, supported, enabled]);
 
+  const entry = getFormatEntry(document.format);
+  if (entry?.extensionId) {
+    return <ExtensionPreviewPane document={document} enabled={enabled} />;
+  }
   if (document.format === "mathml") {
     return <MathmlPreviewPane document={document} enabled={enabled} />;
   }
@@ -327,6 +403,7 @@ export function App() {
       const loaded = await settingsStore.load();
       manager.setAutoSave(loaded.editor.autoSave);
       manager.ensureSessionTimer();
+      await refreshExtensionFormats();
       const session = await window.panda.session.load();
       if (session && !disposed) {
         if (!session.sidebarVisible) workspaces.setVisible(false);
@@ -615,6 +692,9 @@ export function App() {
           const next = patch as Settings;
           manager.setAutoSave(next.editor.autoSave);
           void settingsStore.update(next);
+        }}
+        onExtensionsChanged={() => {
+          void refreshExtensionFormats();
         }}
       />
 

@@ -1,11 +1,14 @@
 import { app, BrowserWindow, Menu, nativeTheme, type MenuItemConstructorOptions } from "electron";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { registerFileHandlers } from "./ipc/files";
+import { registerExtensionHandlers } from "./ipc/extensions";
 import { registerAppHandlers } from "./ipc/router";
 import { registerStorageHandlers } from "./ipc/storage";
 import { registerWorkspaceHandlers } from "./ipc/workspace";
 import { DraftService } from "./services/draft-service";
+import { ExtensionService } from "./services/extension-service";
 import { FileService } from "./services/file-service";
 import { handlePandaProtocols, registerPandaSchemes } from "./services/protocol-service";
 import { SessionService } from "./services/session-service";
@@ -24,6 +27,7 @@ let session: SessionService;
 let settings: SettingsService;
 let drafts: DraftService;
 let workspaces: WorkspaceService | undefined;
+let extensions: ExtensionService | undefined;
 let windowStateTimer: ReturnType<typeof setTimeout> | null = null;
 
 // 开发期把用户数据放到项目内，避免与正式实例的缓存/单实例锁互相干扰。
@@ -187,11 +191,26 @@ async function bootstrap(): Promise<void> {
   workspaces = workspaceService;
   await settings.load();
 
-  handlePandaProtocols(files, path.join(__dirname, "../dist"));
+  const appRoot = path.join(__dirname, "..");
+  const builtRunner = path.join(__dirname, "host-runner.cjs");
+  const sourceRunner = path.join(appRoot, "electron", "extensions", "host-runner.cjs");
+  const extensionService = new ExtensionService({
+    userDataDir,
+    appRoot,
+    appVersion: app.getVersion(),
+    hostRunnerPath: existsSync(builtRunner) ? builtRunner : sourceRunner,
+  });
+  extensions = extensionService;
+  await extensionService.init();
+
+  handlePandaProtocols(files, path.join(__dirname, "../dist"), (extensionId) =>
+    extensionService.resolveProtocolRoot(extensionId),
+  );
   registerAppHandlers();
   registerFileHandlers({ files, getWindow: () => mainWindow });
   registerWorkspaceHandlers({ files, workspaces: workspaceService, getWindow: () => mainWindow });
   registerStorageHandlers({ settings, session, drafts });
+  registerExtensionHandlers({ extensions: extensionService, getWindow: () => mainWindow });
   buildMenu();
 
   const saved = await session.load();
@@ -221,6 +240,7 @@ if (!app.requestSingleInstanceLock()) {
 
 app.on("before-quit", () => {
   void workspaces?.dispose();
+  extensions?.dispose();
 });
 
 app.on("window-all-closed", () => {

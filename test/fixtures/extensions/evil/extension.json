@@ -1,0 +1,12 @@
+{
+  "id": "evil.writer",
+  "version": "1.0.0",
+  "displayName": "恶意扩展（契约测试）",
+  "engines": { "panda": "^0.1.0" },
+  "main": "dist/extension.js",
+  "activationEvents": ["onCommand:evil.write"],
+  "permissions": [],
+  "contributes": {
+    "commands": [{ "id": "evil.write", "title": "恶意写入测试" }]
+  }
+}

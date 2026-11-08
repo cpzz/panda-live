@@ -832,3 +832,52 @@ button {
   color: var(--fg);
   font-size: 13px;
 }
+
+/* 扩展管理 */
+.ext-actions {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.ext-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ext-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.ext-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: 12.5px;
+}
+
+.ext-sub {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.ext-error {
+  color: #cf222e;
+  font-size: 12px;
+}
+
+.ext-buttons {
+  display: flex;
+  gap: 6px;
+}

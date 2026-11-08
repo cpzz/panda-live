@@ -33,6 +33,11 @@ export function registerPandaSchemes(): void {
       scheme: "panda-sandbox",
       privileges: { standard: true, secure: true, supportFetchAPI: false, corsEnabled: true },
     },
+    {
+      // 扩展静态资源：只读，仅允许已启用扩展目录内的相对路径。见 §7.6.5、§12.6。
+      scheme: "panda-ext",
+      privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true, corsEnabled: true },
+    },
   ]);
 }
 
@@ -88,11 +93,52 @@ function registerSandboxProtocol(distRoot: string): void {
 }
 
 /**
+ * 扩展静态资源：`panda-ext://<extensionId>/<相对路径>`，仅已启用扩展可访问。
+ * 见 doc/design.md §7.6.5、§12.6。
+ */
+function registerExtensionProtocol(resolveRoot: (extensionId: string) => string | null): void {
+  protocol.handle("panda-ext", async (request) => {
+    try {
+      const url = new URL(request.url);
+      const root = resolveRoot(url.hostname);
+      if (!root) return textResponse(404, "Unknown or disabled extension");
+
+      const relative = decodeURIComponent(url.pathname.replace(/^\/+/, ""));
+      if (!isSafeRelativePath(relative)) return textResponse(400, "Invalid path");
+
+      const realRoot = await fs.realpath(root);
+      const target = path.resolve(realRoot, relative);
+      if (!isPathInside(realRoot, target)) return textResponse(403, "Path outside extension");
+
+      const realTarget = await fs.realpath(target);
+      if (!isPathInside(realRoot, realTarget)) return textResponse(403, "Symlink outside extension");
+
+      const stats = await fs.stat(realTarget);
+      if (!stats.isFile()) return textResponse(404, "Not a file");
+
+      const body = await fs.readFile(realTarget);
+      const contentType = MIME_TYPES[path.extname(realTarget).toLowerCase()] ?? "application/octet-stream";
+      return new Response(body, {
+        status: 200,
+        headers: { "content-type": contentType, "content-length": String(body.byteLength) },
+      });
+    } catch {
+      return textResponse(404, "Not found");
+    }
+  });
+}
+
+/**
  * 资源协议处理器：只接受 `rootId + 相对路径`，拒绝绝对路径、`..` 与符号链接逃逸。
  * 见 doc/design.md §12.6、§13.5。
  */
-export function handlePandaProtocols(files: FileService, distRoot?: string): void {
+export function handlePandaProtocols(
+  files: FileService,
+  distRoot?: string,
+  resolveExtensionRoot?: (extensionId: string) => string | null,
+): void {
   if (distRoot) registerSandboxProtocol(distRoot);
+  if (resolveExtensionRoot) registerExtensionProtocol(resolveExtensionRoot);
 
   protocol.handle("panda-res", async (request) => {
     try {

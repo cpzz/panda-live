@@ -1,15 +1,23 @@
 import { useEffect, useState } from "react";
 import type { Settings } from "../shared/settings";
+import { ExtensionSettings } from "./ExtensionSettings";
 
 interface SettingsDialogProps {
   open: boolean;
   settings: Settings;
   onClose(): void;
   onSave(patch: unknown): void;
+  onExtensionsChanged(): void;
 }
 
-/** 设置对话框：外观、编辑、图表与隐私分组。见 doc/design.md §15.3。 */
-export function SettingsDialog({ open, settings, onClose, onSave }: SettingsDialogProps) {
+/** 设置对话框：外观、编辑、图表、隐私与扩展分组。见 doc/design.md §15.3。 */
+export function SettingsDialog({
+  open,
+  settings,
+  onClose,
+  onSave,
+  onExtensionsChanged,
+}: SettingsDialogProps) {
   const [draft, setDraft] = useState<Settings>(settings);
 
   useEffect(() => {
@@ -140,6 +148,8 @@ export function SettingsDialog({ open, settings, onClose, onSave }: SettingsDial
             </label>
             <p className="settings-note">草稿与缓存仅写入应用数据目录，不会上传。</p>
           </section>
+
+          <ExtensionSettings onChanged={onExtensionsChanged} />
         </div>
 
         <footer className="modal-footer">

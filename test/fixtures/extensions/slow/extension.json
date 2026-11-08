@@ -1,0 +1,12 @@
+{
+  "id": "slow.blocker",
+  "version": "1.0.0",
+  "displayName": "激活超时扩展（契约测试）",
+  "engines": { "panda": "^0.1.0" },
+  "main": "dist/extension.js",
+  "activationEvents": ["onCommand:slow.run"],
+  "permissions": [],
+  "contributes": {
+    "commands": [{ "id": "slow.run", "title": "激活超时测试" }]
+  }
+}

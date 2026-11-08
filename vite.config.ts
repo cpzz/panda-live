@@ -1,5 +1,6 @@
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { copyFileSync, mkdirSync } from "node:fs";
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 
@@ -7,9 +8,9 @@ const rootDir = dirname(fileURLToPath(import.meta.url));
 
 const BASE_CSP = [
   "default-src 'self'",
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: panda-res:",
-  "font-src 'self' data:",
+  "style-src 'self' 'unsafe-inline' panda-ext:",
+  "img-src 'self' data: blob: panda-res: panda-ext:",
+  "font-src 'self' data: panda-ext:",
   "worker-src 'self' blob:",
   "frame-src 'self' panda-pdf: panda-sandbox:",
   "object-src 'none'",
@@ -46,9 +47,25 @@ function contentSecurityPolicy(): Plugin {
   };
 }
 
+/**
+ * 扩展宿主以独立 CJS 文件运行在 Utility Process 中，构建时复制到 dist-electron。
+ * 开发态由主进程回退到源码路径，因此无需额外的构建入口。
+ */
+function copyExtensionHost(): Plugin {
+  return {
+    name: "panda-copy-extension-host",
+    writeBundle() {
+      const source = resolve(rootDir, "electron/extensions/host-runner.cjs");
+      const targetDir = resolve(rootDir, "dist-electron");
+      mkdirSync(targetDir, { recursive: true });
+      copyFileSync(source, resolve(targetDir, "host-runner.cjs"));
+    },
+  };
+}
+
 export default defineConfig({
   base: "./",
-  plugins: [react(), contentSecurityPolicy()],
+  plugins: [react(), contentSecurityPolicy(), copyExtensionHost()],
   build: {
     target: "esnext",
     outDir: "dist",

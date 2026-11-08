@@ -12,7 +12,7 @@ export interface SelectionInfo {
   column: number;
 }
 
-export type SourceLanguage = "markdown" | "xml";
+export type SourceLanguage = "markdown" | "xml" | "plain";
 
 export interface SourceEditorOptions {
   parent: HTMLElement;
@@ -92,7 +92,7 @@ function createState(
     doc,
     extensions: [
       basicSetup,
-      language === "xml" ? xml() : markdown(),
+      language === "xml" ? xml() : language === "markdown" ? markdown() : [],
       // 源码模式的查找替换复用 CodeMirror 搜索面板与匹配装饰（§11.5）。
       search({ top: true }),
       EditorView.lineWrapping,
