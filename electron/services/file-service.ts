@@ -153,6 +153,17 @@ export class FileService {
     return { path: target, name: path.basename(target), rootId };
   }
 
+  /** 读取文件大小与时间戳，用于打开前的大小阈值判断。见 §12.1、§14.3。 */
+  async stat(filePath: string): Promise<{ size: number; mtimeMs: number; isFile: boolean }> {
+    const target = await this.resolveAllowed(filePath);
+    try {
+      const stats = await fs.stat(target);
+      return { size: stats.size, mtimeMs: stats.mtimeMs, isFile: stats.isFile() };
+    } catch (error) {
+      throw mapIoError(error, target);
+    }
+  }
+
   async readText(filePath: string): Promise<ReadTextResult> {
     const target = await this.resolveAllowed(filePath);
     let bytes: Buffer;

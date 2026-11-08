@@ -881,3 +881,36 @@ button {
   display: flex;
   gap: 6px;
 }
+
+/* TeX 预览 */
+.tex-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pdf-viewer {
+  flex: 1;
+  width: 100%;
+  min-height: 480px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.tex-diagnostics {
+  margin: 0;
+  padding-left: 18px;
+  color: #cf222e;
+  font-size: 12.5px;
+}
+
+.tex-diagnostic.warning {
+  color: var(--muted);
+}
+
+.tex-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

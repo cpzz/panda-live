@@ -1,4 +1,4 @@
-import { describeError, getErrorCode } from "../shared/errors";
+import { describeError, getErrorCode, PandaError } from "../shared/errors";
 import type {
   EditorMode,
   Eol,
@@ -10,6 +10,7 @@ import type {
   TextEncoding,
 } from "../shared/ipc";
 import { detectFormatEntry } from "../extensions/registry";
+import { decideOpenPolicy } from "./open-policy";
 
 export type { EditorMode };
 
@@ -200,6 +201,11 @@ export class DocumentManager {
     if (!doc) return;
     if (doc.cursor?.line === cursor.line && doc.cursor?.column === cursor.column) return;
     this.patchDocument(id, () => ({ cursor }));
+  }
+
+  /** 供导出等外部流程复用提示条。 */
+  showNotice(kind: Notice["kind"], message: string): void {
+    this.notify(kind, message);
   }
 
   dismissNotice(): void {
@@ -559,6 +565,19 @@ export class DocumentManager {
       return;
     }
     try {
+      const stats = await window.panda.fs.stat({ path: ref.path });
+      const policy = decideOpenPolicy(stats.size);
+      if (policy.reject) {
+        throw new PandaError("E_FILE_TOO_LARGE", `文件超过 50 MB，拒绝打开：${ref.name}`);
+      }
+      if (
+        policy.confirm &&
+        !window.confirm(
+          `文件约 ${(stats.size / (1024 * 1024)).toFixed(1)} MB，打开可能较慢，是否继续？`,
+        )
+      ) {
+        return;
+      }
       const data = await window.panda.fs.readText({ path: ref.path });
       const watchId = await this.watchFile(ref.path);
       const document: DocumentState = {
@@ -584,11 +603,15 @@ export class DocumentManager {
       this.commit({
         documents: [...this.state.documents, document],
         activeId: document.id,
-        mode:
-          document.format === "markdown" || this.state.mode !== "wysiwyg"
+        mode: policy.preferSource
+          ? "source"
+          : document.format === "markdown" || this.state.mode !== "wysiwyg"
             ? this.state.mode
             : "source",
       });
+      if (policy.preferSource) {
+        this.notify("info", "文件较大，已默认切换到源码模式");
+      }
       if (!options.silentRecent) {
         await window.panda.recent.add({ path: ref.path }).catch(() => undefined);
       }

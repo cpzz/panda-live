@@ -1,6 +1,6 @@
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { copyFileSync, mkdirSync } from "node:fs";
+import { copyFileSync, mkdirSync, readFileSync } from "node:fs";
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 
@@ -63,9 +63,36 @@ function copyExtensionHost(): Plugin {
   };
 }
 
+/**
+ * 以 `?inline-binary` 导入二进制资源时，转为 data URL 字符串。
+ * 用于导出 HTML 时内联 KaTeX 字体，保证离线打开显示正确。
+ */
+function inlineBinaryAssets(): Plugin {
+  const MIME: Record<string, string> = {
+    ".woff2": "font/woff2",
+    ".woff": "font/woff",
+    ".ttf": "font/ttf",
+    ".png": "image/png",
+    ".svg": "image/svg+xml",
+  };
+  return {
+    name: "panda-inline-binary",
+    enforce: "pre",
+    load(id) {
+      const [filePath, query] = id.split("?");
+      if (!query || !query.includes("inline-binary") || !filePath) return null;
+      const absolute = filePath.startsWith("/") ? resolve(rootDir, `.${filePath}`) : resolve(filePath);
+      const mime = MIME[absolute.slice(absolute.lastIndexOf("."))];
+      if (!mime) return null;
+      const base64 = readFileSync(absolute).toString("base64");
+      return `export default "data:${mime};base64,${base64}";`;
+    },
+  };
+}
+
 export default defineConfig({
   base: "./",
-  plugins: [react(), contentSecurityPolicy(), copyExtensionHost()],
+  plugins: [react(), contentSecurityPolicy(), copyExtensionHost(), inlineBinaryAssets()],
   build: {
     target: "esnext",
     outDir: "dist",

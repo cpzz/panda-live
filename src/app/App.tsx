@@ -18,7 +18,9 @@ import {
   onDiagramThemeChange,
 } from "../render/diagram";
 import type { DraftEntry, RecentEntry, SessionState } from "../shared/ipc";
+import type { CompileResult, EngineStatus } from "../shared/ipc";
 import type { Settings } from "../shared/settings";
+import { describeError, getErrorCode } from "../shared/errors";
 import { RecoveryDialog } from "./RecoveryDialog";
 import { SettingsDialog } from "./SettingsDialog";
 import { WorkspacePanel } from "./WorkspacePanel";
@@ -290,7 +292,128 @@ function ExtensionPreviewPane({
   );
 }
 
-function PreviewPane({ document, enabled }: { document: DocumentState; enabled: boolean }) {
+function TexPreviewPane({
+  document,
+  enabled,
+  compileSignal,
+}: {
+  document: DocumentState;
+  enabled: boolean;
+  compileSignal: number;
+}) {
+  const [engines, setEngines] = useState<EngineStatus | null>(null);
+  const [result, setResult] = useState<CompileResult | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const detect = async (): Promise<void> => {
+    try {
+      setEngines(await window.panda.latex.detect());
+    } catch {
+      setEngines({ available: false, engines: [] });
+    }
+  };
+
+  const compile = async (): Promise<void> => {
+    if (!document.path) {
+      setError("请先保存 .tex 文件后再编译");
+      return;
+    }
+    setBusy(true);
+    try {
+      const compiled = await window.panda.latex.compile({
+        jobId: `tex:${document.id}:${Date.now()}`,
+        rootPath: document.path,
+      });
+      setResult(compiled);
+      setError(null);
+    } catch (reason) {
+      setResult(null);
+      setError(describeError(reason));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    if (enabled) void detect();
+  }, [enabled]);
+
+  // 保存后 1.5 s 防抖编译；dirty 时提示并等待下次保存。见 §9.5。
+  useEffect(() => {
+    if (!enabled || !document.path || document.dirty || !engines?.available) return;
+    const timer = setTimeout(() => {
+      void compile();
+    }, 1500);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [document.path, document.savedContent, document.dirty, enabled, engines?.available]);
+
+  useEffect(() => {
+    if (compileSignal > 0) void compile();
+  }, [compileSignal]);
+
+  if (engines && !engines.available) {
+    return (
+      <div className="preview-pane">
+        <div className="tex-placeholder">
+          <p>未检测到 TeX 引擎（Tectonic / latexmk / xelatex）。</p>
+          <p className="placeholder">安装任一引擎后点击“重新检测”；其他功能不受影响。</p>
+          <button type="button" className="button small" onClick={() => void detect()}>
+            重新检测
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="preview-pane tex-preview">
+      {error && <p className="placeholder">{error}</p>}
+      {document.dirty && <p className="placeholder">当前有未保存修改，编译仅使用磁盘内容。</p>}
+      {busy && <p className="placeholder">编译中…</p>}
+      {result && result.ok && result.pdfKey ? (
+        <iframe
+          className="pdf-viewer"
+          title="LaTeX 预览"
+          src={`panda-pdf://${result.pdfKey}`}
+        />
+      ) : null}
+      {result && !result.ok && result.diagnostics.length > 0 && (
+        <ul className="tex-diagnostics">
+          {result.diagnostics.map((diagnostic, index) => (
+            <li key={`${index}-${diagnostic.message}`} className={`tex-diagnostic ${diagnostic.severity}`}>
+              {diagnostic.line !== undefined ? `第 ${diagnostic.line} 行：` : ""}
+              {diagnostic.message}
+            </li>
+          ))}
+        </ul>
+      )}
+      {!result && engines?.available && !busy && (
+        <p className="placeholder">保存后自动编译，或点击下方按钮手动编译。</p>
+      )}
+      <div className="tex-actions">
+        <button type="button" className="button small" disabled={busy} onClick={() => void compile()}>
+          {busy ? "编译中…" : "编译"}
+        </button>
+        <span className="settings-note">
+          {engines?.engines.length ? `引擎：${engines.engines[0]?.id}` : "正在检测引擎…"}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function PreviewPane({
+  document,
+  enabled,
+  compileSignal,
+}: {
+  document: DocumentState;
+  enabled: boolean;
+  compileSignal: number;
+}) {
   const [html, setHtml] = useState("");
   const [error, setError] = useState<string | null>(null);
   const supported = document.format === "markdown";
@@ -319,6 +442,9 @@ function PreviewPane({ document, enabled }: { document: DocumentState; enabled: 
   const entry = getFormatEntry(document.format);
   if (entry?.extensionId) {
     return <ExtensionPreviewPane document={document} enabled={enabled} />;
+  }
+  if (document.format === "latex") {
+    return <TexPreviewPane document={document} enabled={enabled} compileSignal={compileSignal} />;
   }
   if (document.format === "mathml") {
     return <MathmlPreviewPane document={document} enabled={enabled} />;
@@ -359,6 +485,7 @@ export function App() {
 
   const [cursor, setCursor] = useState<SelectionInfo>({ line: 1, column: 1 });
   const [searchSignal, setSearchSignal] = useState(0);
+  const [compileSignal, setCompileSignal] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [recoveries, setRecoveries] = useState<DraftEntry[]>([]);
   const [recent, setRecent] = useState<RecentEntry[]>([]);
@@ -371,6 +498,10 @@ export function App() {
   recentRef.current = recent;
 
   const active = state.documents.find((doc) => doc.id === state.activeId) ?? null;
+  const activeRef = useRef(active);
+  activeRef.current = active;
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
   const conflict = state.conflict;
 
   const saveSession = async (): Promise<void> => {
@@ -386,6 +517,68 @@ export function App() {
         : undefined,
     });
     await manager.saveSession(snapshot);
+  };
+
+  const exportTheme = (): "light" | "dark" => {
+    const theme = settingsRef.current.appearance.theme;
+    if (theme === "light") return "light";
+    if (theme === "dark") return "dark";
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  };
+
+  const exportHtmlActive = async (): Promise<void> => {
+    const doc = activeRef.current;
+    if (!doc) return;
+    if (doc.format !== "markdown") {
+      manager.showNotice("error", "仅 Markdown 文档支持导出 HTML");
+      return;
+    }
+    try {
+      const { buildDocumentHtml, saveHtml } = await import("../services/export-service");
+      const html = await buildDocumentHtml(doc, { theme: exportTheme() });
+      const savedPath = await saveHtml(doc, html);
+      if (savedPath) manager.showNotice("info", `已导出 HTML：${savedPath}`);
+    } catch (reason) {
+      manager.showNotice("error", describeError(reason));
+    }
+  };
+
+  const exportPdfActive = async (): Promise<void> => {
+    const doc = activeRef.current;
+    if (!doc) return;
+    if (doc.format !== "markdown") {
+      manager.showNotice("error", "仅 Markdown 文档支持导出 PDF");
+      return;
+    }
+    try {
+      const { buildDocumentHtml } = await import("../services/export-service");
+      const html = await buildDocumentHtml(doc, { theme: exportTheme() });
+      const result = await window.panda.export.pdf({
+        html,
+        suggestedName: `${doc.name.replace(/\.[^.]+$/, "")}.pdf`,
+      });
+      manager.showNotice("info", `已导出 PDF：${result.path}`);
+    } catch (reason) {
+      if (getErrorCode(reason) === "E_CANCELLED") return;
+      manager.showNotice("error", describeError(reason));
+    }
+  };
+
+  const exportSvgActive = async (): Promise<void> => {
+    const doc = activeRef.current;
+    if (!doc) return;
+    if (doc.format !== "plantuml" && doc.format !== "mermaid") {
+      manager.showNotice("error", "仅 PlantUML / Mermaid 文档支持导出 SVG");
+      return;
+    }
+    try {
+      const { exportDiagramSvg } = await import("../services/export-service");
+      const savedPath = await exportDiagramSvg(doc);
+      if (savedPath) manager.showNotice("info", `已导出 SVG：${savedPath}`);
+    } catch (reason) {
+      if (getErrorCode(reason) === "E_CANCELLED") return;
+      manager.showNotice("error", describeError(reason));
+    }
   };
 
   useEffect(() => {
@@ -445,6 +638,18 @@ export function App() {
           return;
         case "workspace.open":
           void workspaces.openPicker();
+          return;
+        case "latex.compile":
+          setCompileSignal((value) => value + 1);
+          return;
+        case "file.exportHtml":
+          void exportHtmlActive();
+          return;
+        case "file.exportPdf":
+          void exportPdfActive();
+          return;
+        case "file.exportSvg":
+          void exportSvgActive();
           return;
         default:
           void manager.runMenuCommand(command);
@@ -620,7 +825,11 @@ export function App() {
               hidden={state.mode === "source" || state.mode === "wysiwyg"}
               aria-label="渲染预览"
             >
-              <PreviewPane document={active} enabled={state.mode !== "source"} />
+              <PreviewPane
+                document={active}
+                enabled={state.mode !== "source"}
+                compileSignal={compileSignal}
+              />
             </section>
           </main>
         ) : (

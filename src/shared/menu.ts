@@ -6,9 +6,13 @@ export const MENU_COMMANDS = [
   "file.save",
   "file.saveAs",
   "file.close",
+  "file.exportHtml",
+  "file.exportPdf",
+  "file.exportSvg",
   "workspace.open",
   "view.find",
   "view.settings",
+  "latex.compile",
 ] as const;
 
 export type MenuCommand = (typeof MENU_COMMANDS)[number];

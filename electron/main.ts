@@ -3,17 +3,22 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { registerFileHandlers } from "./ipc/files";
+import { registerExportHandlers } from "./ipc/export";
 import { registerExtensionHandlers } from "./ipc/extensions";
+import { registerLatexHandlers } from "./ipc/latex";
 import { registerAppHandlers } from "./ipc/router";
 import { registerStorageHandlers } from "./ipc/storage";
 import { registerWorkspaceHandlers } from "./ipc/workspace";
 import { DraftService } from "./services/draft-service";
+import { ExportService } from "./services/export-service";
 import { ExtensionService } from "./services/extension-service";
 import { FileService } from "./services/file-service";
 import { handlePandaProtocols, registerPandaSchemes } from "./services/protocol-service";
 import { SessionService } from "./services/session-service";
 import { SettingsService } from "./services/settings-service";
 import { WorkspaceService } from "./services/workspace-service";
+import { TexCompiler } from "./tex/compiler";
+import { detectEngines } from "./tex/engine";
 import { FS_CHANGED_CHANNEL } from "../src/shared/events";
 import type { SessionState } from "../src/shared/ipc";
 import { MENU_COMMAND_CHANNEL, type MenuCommand } from "../src/shared/menu";
@@ -77,6 +82,22 @@ function buildMenu(): void {
           click: () => sendCommand("file.close"),
         },
         { type: "separator" },
+        {
+          id: "export-html",
+          label: "导出 HTML…",
+          click: () => sendCommand("file.exportHtml"),
+        },
+        {
+          id: "export-pdf",
+          label: "导出 PDF…",
+          click: () => sendCommand("file.exportPdf"),
+        },
+        {
+          id: "export-svg",
+          label: "导出 SVG…",
+          click: () => sendCommand("file.exportSvg"),
+        },
+        { type: "separator" },
         { role: "quit", label: "退出" },
       ],
     },
@@ -95,6 +116,17 @@ function buildMenu(): void {
           label: "查找替换",
           accelerator: "CmdOrCtrl+F",
           click: () => sendCommand("view.find"),
+        },
+      ],
+    },
+    {
+      label: "工具",
+      submenu: [
+        {
+          id: "latex-compile",
+          label: "编译 LaTeX",
+          accelerator: "CmdOrCtrl+B",
+          click: () => sendCommand("latex.compile"),
         },
       ],
     },
@@ -203,14 +235,21 @@ async function bootstrap(): Promise<void> {
   extensions = extensionService;
   await extensionService.init();
 
-  handlePandaProtocols(files, path.join(__dirname, "../dist"), (extensionId) =>
-    extensionService.resolveProtocolRoot(extensionId),
+  handlePandaProtocols(
+    files,
+    path.join(__dirname, "../dist"),
+    (extensionId) => extensionService.resolveProtocolRoot(extensionId),
+    path.join(userDataDir, "cache", "pdf"),
   );
   registerAppHandlers();
   registerFileHandlers({ files, getWindow: () => mainWindow });
   registerWorkspaceHandlers({ files, workspaces: workspaceService, getWindow: () => mainWindow });
   registerStorageHandlers({ settings, session, drafts });
   registerExtensionHandlers({ extensions: extensionService, getWindow: () => mainWindow });
+  registerExportHandlers({ exports: new ExportService(() => mainWindow, userDataDir), getWindow: () => mainWindow });
+  registerLatexHandlers({
+    compiler: new TexCompiler(files, userDataDir, () => detectEngines()),
+  });
   buildMenu();
 
   const saved = await session.load();

@@ -38,6 +38,11 @@ export function registerPandaSchemes(): void {
       scheme: "panda-ext",
       privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true, corsEnabled: true },
     },
+    {
+      // TeX 编译产物：仅映射到 PDF 缓存目录内的已知键。见 §12.6。
+      scheme: "panda-pdf",
+      privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true },
+    },
   ]);
 }
 
@@ -129,6 +134,32 @@ function registerExtensionProtocol(resolveRoot: (extensionId: string) => string 
 }
 
 /**
+ * TeX 编译产物：`panda-pdf://<cacheKey>`，只接受 64 位十六进制键。
+ * 见 doc/design.md §12.6。
+ */
+function registerPdfProtocol(pdfCacheRoot: string): void {
+  protocol.handle("panda-pdf", async (request) => {
+    try {
+      const url = new URL(request.url);
+      const key = url.pathname.replace(/^\/+/, "").replace(/\.pdf$/i, "");
+      if (!/^[a-f0-9]{64}$/.test(key)) return textResponse(400, "Invalid cache key");
+      const target = path.join(pdfCacheRoot, `${key}.pdf`);
+      if (!isPathInside(pdfCacheRoot, target)) return textResponse(403, "Path outside cache");
+      const body = await fs.readFile(target);
+      return new Response(body, {
+        status: 200,
+        headers: {
+          "content-type": "application/pdf",
+          "content-length": String(body.byteLength),
+        },
+      });
+    } catch {
+      return textResponse(404, "Not found");
+    }
+  });
+}
+
+/**
  * 资源协议处理器：只接受 `rootId + 相对路径`，拒绝绝对路径、`..` 与符号链接逃逸。
  * 见 doc/design.md §12.6、§13.5。
  */
@@ -136,9 +167,11 @@ export function handlePandaProtocols(
   files: FileService,
   distRoot?: string,
   resolveExtensionRoot?: (extensionId: string) => string | null,
+  pdfCacheRoot?: string,
 ): void {
   if (distRoot) registerSandboxProtocol(distRoot);
   if (resolveExtensionRoot) registerExtensionProtocol(resolveExtensionRoot);
+  if (pdfCacheRoot) registerPdfProtocol(pdfCacheRoot);
 
   protocol.handle("panda-res", async (request) => {
     try {

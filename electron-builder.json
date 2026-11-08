@@ -1,13 +1,16 @@
 {
   "appId": "com.pandalive.app",
   "productName": "Panda Live",
+  "asar": true,
+  "electronDist": "node_modules/electron/dist",
   "directories": {
     "output": "release"
   },
   "files": [
     "dist/**/*",
     "dist-electron/**/*",
-    "extensions/**/*"
+    "extensions/**/*",
+    "!node_modules/**/*"
   ],
   "win": {
     "target": ["nsis"]

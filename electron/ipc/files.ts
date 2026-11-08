@@ -45,4 +45,6 @@ export function registerFileHandlers({ files, getWindow }: FileHandlerOptions): 
   handle("fs:readText", async (request) => files.readText(request.path));
 
   handle("fs:writeText", async (request) => files.writeText(request));
+
+  handle("fs:stat", async (request) => files.stat(request.path));
 }

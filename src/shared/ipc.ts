@@ -191,6 +191,58 @@ export interface AppInfo {
   userDataPath: string;
 }
 
+export interface StatRequest {
+  path: string;
+}
+
+export interface StatResult {
+  size: number;
+  mtimeMs: number;
+  isFile: boolean;
+}
+
+export interface PdfExportRequest {
+  html: string;
+  suggestedName: string;
+}
+
+export interface PdfExportResult {
+  path: string;
+}
+
+export type EngineId = "tectonic" | "latexmk" | "xelatex";
+
+export interface EngineInfo {
+  id: EngineId;
+  path: string;
+  version: string;
+}
+
+export interface EngineStatus {
+  available: boolean;
+  engines: EngineInfo[];
+}
+
+export interface TexDiagnostic {
+  severity: "error" | "warning";
+  message: string;
+  file?: string;
+  line?: number;
+  column?: number;
+}
+
+export interface CompileRequest {
+  jobId: string;
+  /** 编译根文件，必须位于允许根目录内且已保存。 */
+  rootPath: string;
+}
+
+export interface CompileResult {
+  ok: boolean;
+  pdfKey?: string;
+  diagnostics: TexDiagnostic[];
+}
+
 export type IpcEnvelope<T> =
   | { ok: true; data: T }
   | { ok: false; error: PandaErrorPayload };
@@ -303,6 +355,10 @@ export const ipcRequestSchemas = {
     doc: z.unknown(),
   }),
   "ext:command": z.object({ id: z.string().min(1), args: z.unknown().optional() }),
+  "fs:stat": z.object({ path: z.string().min(1) }),
+  "export:pdf": z.object({ html: z.string(), suggestedName: z.string().min(1) }),
+  "latex:detect": z.undefined(),
+  "latex:compile": z.object({ jobId: z.string().min(1), rootPath: z.string().min(1) }),
   "app:getInfo": z.undefined(),
 } as const;
 
@@ -346,6 +402,10 @@ export interface IpcResponseMap {
   "ext:parse": ExtensionParseResult;
   "ext:serialize": { source: string };
   "ext:command": unknown;
+  "fs:stat": StatResult;
+  "export:pdf": PdfExportResult;
+  "latex:detect": EngineStatus;
+  "latex:compile": CompileResult;
   "app:getInfo": AppInfo;
 }
 
@@ -360,6 +420,7 @@ export interface PandaApi {
     readText(request: ReadTextRequest): Promise<ReadTextResult>;
     writeText(request: WriteTextRequest): Promise<WriteTextResult>;
     readDir(request: ReadDirRequest): Promise<ReadDirResult>;
+    stat(request: StatRequest): Promise<StatResult>;
     create(request: CreateRequest): Promise<FileRef>;
     rename(request: RenameRequest): Promise<FileRef>;
     remove(request: DeleteRequest): Promise<void>;
@@ -420,6 +481,13 @@ export interface PandaApi {
   };
   app: {
     getInfo(): Promise<AppInfo>;
+  };
+  export: {
+    pdf(request: PdfExportRequest): Promise<PdfExportResult>;
+  };
+  latex: {
+    detect(): Promise<EngineStatus>;
+    compile(request: CompileRequest): Promise<CompileResult>;
   };
   onMenuCommand(listener: (command: MenuCommand) => void): () => void;
   onFsChanged(listener: (event: FsChangedEvent) => void): () => void;

@@ -25,6 +25,7 @@ const api: PandaApi = {
     readText: (request) => invoke("fs:readText", request),
     writeText: (request) => invoke("fs:writeText", request),
     readDir: (request) => invoke("fs:readDir", request),
+    stat: (request) => invoke("fs:stat", request),
     create: (request) => invoke("fs:create", request),
     rename: (request) => invoke("fs:rename", request),
     remove: (request) => invoke("fs:delete", request),
@@ -71,6 +72,13 @@ const api: PandaApi = {
   },
   app: {
     getInfo: () => invoke("app:getInfo", undefined),
+  },
+  export: {
+    pdf: (request) => invoke("export:pdf", request),
+  },
+  latex: {
+    detect: () => invoke("latex:detect", undefined),
+    compile: (request) => invoke("latex:compile", request),
   },
   onMenuCommand: (listener) => {
     const handler = (_event: IpcRendererEvent, payload: unknown): void => {

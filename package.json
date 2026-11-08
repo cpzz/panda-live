@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Panda Live — 本地优先的桌面文档编辑器",
+  "author": "Panda Live",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist-electron/main.js",
