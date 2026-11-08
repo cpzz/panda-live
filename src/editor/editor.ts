@@ -1,5 +1,16 @@
-import { EditorState } from "prosemirror-state";
+import { EditorState, type Command } from "prosemirror-state";
 import { EditorView } from "prosemirror-view";
+import {
+  addColumnAfter,
+  addColumnBefore,
+  addRowAfter,
+  addRowBefore,
+  cellAround,
+  deleteColumn,
+  deleteRow,
+  deleteTable,
+  TableMap,
+} from "prosemirror-tables";
 import { MathNodeView } from "./nodeviews/math";
 import { MathmlNodeView } from "./nodeviews/mathml";
 import { DiagramNodeView } from "./nodeviews/diagram";
@@ -24,9 +35,34 @@ export interface PandaEditorOptions {
   onChange(docJson: PMJson): void;
 }
 
+/** 与光标同列的整列对齐；序列化时以表头对齐为准，因此需要同时更新表头单元格。 */
+function setColumnAlign(align: "left" | "center" | "right"): Command {
+  return (state, dispatch) => {
+    const $cell = cellAround(state.selection.$from);
+    if (!$cell) return false;
+    if (!dispatch) return true;
+
+    const table = $cell.node(-1);
+    const tableStart = $cell.start(-1);
+    const map = TableMap.get(table);
+    const column = map.findCell($cell.pos - tableStart).left;
+    const tr = state.tr;
+    for (let row = 0; row < map.height; row += 1) {
+      const offset = map.map[row * map.width + column];
+      if (offset === undefined) continue;
+      const node = tr.doc.nodeAt(tableStart + offset);
+      if (!node) continue;
+      tr.setNodeMarkup(tableStart + offset, undefined, { ...node.attrs, align });
+    }
+    dispatch(tr);
+    return true;
+  };
+}
+
 /** ProseMirror 编辑器封装；不依赖 React，也不直接读写文件。见 doc/design.md §11. */
 export class PandaEditor {
   private readonly view: EditorView;
+  private readonly tableToolbar: HTMLDivElement;
   private readOnly: boolean;
 
   constructor(private readonly options: PandaEditorOptions) {
@@ -47,26 +83,112 @@ export class PandaEditor {
       dispatchTransaction: (transaction) => {
         const state = this.view.state.apply(transaction);
         this.view.updateState(state);
+        this.updateTableToolbar();
         if (transaction.docChanged) {
           this.options.onChange(state.doc.toJSON() as PMJson);
         }
       },
     });
+
+    this.tableToolbar = this.buildTableToolbar();
+    options.parent.append(this.tableToolbar);
+    window.addEventListener("scroll", this.handleViewportChange, true);
+    window.addEventListener("resize", this.handleViewportChange);
+    this.view.dom.addEventListener("blur", this.handleEditorBlur);
   }
 
   get state(): EditorState {
     return this.view.state;
   }
 
+  private readonly handleViewportChange = (): void => {
+    this.updateTableToolbar();
+  };
+
+  private readonly handleEditorBlur = (): void => {
+    this.tableToolbar.hidden = true;
+  };
+
+  private buildTableToolbar(): HTMLDivElement {
+    const toolbar = document.createElement("div");
+    toolbar.className = "table-toolbar";
+    toolbar.setAttribute("role", "toolbar");
+    toolbar.setAttribute("aria-label", "表格操作");
+    toolbar.hidden = true;
+
+    const actions: Array<{ label: string; title: string; command: Command }> = [
+      { label: "↑行", title: "在上方插入行", command: addRowBefore },
+      { label: "↓行", title: "在下方插入行", command: addRowAfter },
+      { label: "←列", title: "在左侧插入列", command: addColumnBefore },
+      { label: "→列", title: "在右侧插入列", command: addColumnAfter },
+      { label: "删行", title: "删除行", command: deleteRow },
+      { label: "删列", title: "删除列", command: deleteColumn },
+      { label: "左", title: "左对齐", command: setColumnAlign("left") },
+      { label: "中", title: "居中", command: setColumnAlign("center") },
+      { label: "右", title: "右对齐", command: setColumnAlign("right") },
+      { label: "删表", title: "删除表格", command: deleteTable },
+    ];
+
+    for (const action of actions) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "table-toolbar-button";
+      button.textContent = action.label;
+      button.title = action.title;
+      button.setAttribute("aria-label", action.title);
+      // 保持编辑器焦点，避免失焦时工具条消失。
+      button.addEventListener("mousedown", (event) => event.preventDefault());
+      button.addEventListener("click", () => {
+        action.command(this.view.state, this.view.dispatch, this.view);
+        this.view.focus();
+      });
+      toolbar.append(button);
+    }
+    return toolbar;
+  }
+
+  /** 找到包含当前选区的表格节点位置。 */
+  private findTablePos(): number | null {
+    const { $from } = this.view.state.selection;
+    for (let depth = $from.depth; depth > 0; depth -= 1) {
+      if ($from.node(depth).type.name === "table") return $from.before(depth);
+    }
+    return null;
+  }
+
+  /** 选区在表格内且编辑器聚焦时，在表格上方显示行列工具条。见 doc/design.md §15.1。 */
+  private updateTableToolbar(): void {
+    if (!this.readOnly && this.view.hasFocus()) {
+      const tablePos = this.findTablePos();
+      const tableDom = tablePos === null ? null : this.view.nodeDOM(tablePos);
+      if (tableDom instanceof HTMLElement) {
+        this.tableToolbar.hidden = false;
+        const rect = tableDom.getBoundingClientRect();
+        const toolbarRect = this.tableToolbar.getBoundingClientRect();
+        const height = toolbarRect.height || 30;
+        const width = toolbarRect.width || 360;
+        let top = rect.top - height - 6;
+        if (top < 8) top = rect.bottom + 6;
+        const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
+        this.tableToolbar.style.left = `${Math.round(left)}px`;
+        this.tableToolbar.style.top = `${Math.round(top)}px`;
+        return;
+      }
+    }
+    this.tableToolbar.hidden = true;
+  }
+
   /** 恢复标签页维度的编辑器状态（保留撤销历史）。 */
   setState(state: EditorState): void {
     this.view.updateState(state);
+    this.updateTableToolbar();
   }
 
   /** 用新内容重建状态并建立新的撤销基线（模式切换、外部重载）。 */
   reset(docJson: PMJson, readOnly: boolean): void {
     this.readOnly = readOnly;
     this.view.updateState(createWysiwygState(docJson));
+    this.updateTableToolbar();
   }
 
   focus(): void {
@@ -121,6 +243,10 @@ export class PandaEditor {
   }
 
   destroy(): void {
+    window.removeEventListener("scroll", this.handleViewportChange, true);
+    window.removeEventListener("resize", this.handleViewportChange);
+    this.view.dom.removeEventListener("blur", this.handleEditorBlur);
+    this.tableToolbar.remove();
     this.view.destroy();
   }
 }
