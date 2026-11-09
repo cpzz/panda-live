@@ -291,7 +291,14 @@ export class DocumentManager {
     const doc = this.findDocument(id);
     if (!doc) return;
     if (doc.dirty) {
-      // 三选一：保存 / 不保存 / 取消；取消必须真正中止关闭。
+      // 弹窗前取消自动保存：否则对话框停留超过 10 s 时会把修改写盘，
+      // 用户选择“取消”后脏标记已经被清掉。
+      const pendingAutosave = this.autosaveTimers.get(id);
+      if (pendingAutosave) {
+        clearTimeout(pendingAutosave);
+        this.autosaveTimers.delete(id);
+      }
+      // 三选一：保存 / 不保存 / 取消；取消必须真正中止关闭且保留脏标记。
       const choice = await window.panda.dialog.confirmClose({ name: doc.name });
       if (choice === "cancel") return;
       if (choice === "save") {
