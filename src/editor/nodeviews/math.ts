@@ -1,8 +1,9 @@
 import DOMPurify from "dompurify";
 import type { Node as PMNode } from "prosemirror-model";
 import type { EditorView, NodeView } from "prosemirror-view";
-import { renderKatex } from "../../render/math/katex";
+import { extractMathml, renderKatex } from "../../render/math/katex";
 import { problemStore } from "../../services/problem-store";
+import { copyText } from "../../utils/clipboard";
 
 const KATEX_PROFILE = { USE_PROFILES: { html: true, mathMl: true, svg: true } } as const;
 
@@ -96,7 +97,25 @@ export class MathNodeView implements NodeView {
       field.value = String(this.node.attrs.source ?? "");
       field.mathVirtualKeyboardPolicy = "manual";
       field.className = "math-editor-field";
-      this.dom.replaceChildren(field);
+
+      // 编辑态提供「复制 MathML」，便于粘贴到不支持 KaTeX 的文档。见 §9.4。
+      const copyButton = document.createElement("button");
+      copyButton.type = "button";
+      copyButton.className = "button small ghost math-copy-mathml";
+      copyButton.textContent = "复制 MathML";
+      copyButton.addEventListener("mousedown", (event) => event.preventDefault());
+      copyButton.addEventListener("click", () => {
+        const mathml = extractMathml(field.value, this.displayMode);
+        if (!mathml) {
+          this.dom.title = "公式无法生成 MathML";
+          return;
+        }
+        void copyText(mathml).then((copied) => {
+          this.dom.title = copied ? "已复制 MathML" : "复制失败";
+        });
+      });
+
+      this.dom.append(field, copyButton);
       field.focus();
 
       let finished = false;

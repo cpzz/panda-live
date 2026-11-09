@@ -45,3 +45,13 @@ export function renderKatex(source: string, displayMode: boolean): MathRenderRes
     }
   });
 }
+
+/** 从 KaTeX 输出中提取 MathML 分支，用于「复制 MathML」。见 doc/design.md §9.4。 */
+export function extractMathml(source: string, displayMode: boolean): string | null {
+  const result = renderKatex(source, displayMode);
+  if (!result.ok) return null;
+  const template = document.createElement("template");
+  template.innerHTML = result.html;
+  const math = template.content.querySelector("math");
+  return math ? new XMLSerializer().serializeToString(math) : null;
+}

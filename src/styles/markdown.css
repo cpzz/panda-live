@@ -244,9 +244,18 @@
 
 /* 数学公式（KaTeX + MathLive） */
 .prose-editor .math-node {
+  position: relative;
   cursor: pointer;
   border-radius: 4px;
   padding: 0 2px;
+}
+
+.prose-editor .math-copy-mathml {
+  position: absolute;
+  top: -26px;
+  right: 0;
+  z-index: 6;
+  white-space: nowrap;
 }
 
 .prose-editor .math-node:hover {
