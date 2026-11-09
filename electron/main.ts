@@ -69,42 +69,15 @@ function sendCommand(command: MenuCommand): void {
   mainWindow?.webContents.send(MENU_COMMAND_CHANNEL, { command });
 }
 
+/**
+ * 保留不可见的应用菜单：导出等命令仍由主进程驱动，
+ * 但窗口菜单栏隐藏，也不提供“查找”菜单项。快捷键由渲染进程处理。
+ */
 function buildMenu(): void {
   const template: MenuItemConstructorOptions[] = [
     {
       label: "文件",
       submenu: [
-        {
-          label: "新建",
-          accelerator: "CmdOrCtrl+N",
-          click: () => sendCommand("file.new"),
-        },
-        {
-          label: "打开…",
-          accelerator: "CmdOrCtrl+O",
-          click: () => sendCommand("file.open"),
-        },
-        {
-          label: "打开文件夹…",
-          accelerator: "CmdOrCtrl+Shift+O",
-          click: () => sendCommand("workspace.open"),
-        },
-        {
-          label: "保存",
-          accelerator: "CmdOrCtrl+S",
-          click: () => sendCommand("file.save"),
-        },
-        {
-          label: "另存为…",
-          accelerator: "CmdOrCtrl+Shift+S",
-          click: () => sendCommand("file.saveAs"),
-        },
-        {
-          label: "关闭标签",
-          accelerator: "CmdOrCtrl+W",
-          click: () => sendCommand("file.close"),
-        },
-        { type: "separator" },
         {
           id: "export-html",
           label: "导出 HTML…",
@@ -117,7 +90,7 @@ function buildMenu(): void {
         },
         {
           id: "export-svg",
-          label: "导出 SVG…",
+          label: "导出图表 SVG…",
           click: () => sendCommand("file.exportSvg"),
         },
         { type: "separator" },
@@ -134,23 +107,6 @@ function buildMenu(): void {
         { role: "copy", label: "复制" },
         { role: "paste", label: "粘贴" },
         { role: "selectAll", label: "全选" },
-        { type: "separator" },
-        {
-          label: "查找替换",
-          accelerator: "CmdOrCtrl+F",
-          click: () => sendCommand("view.find"),
-        },
-      ],
-    },
-    {
-      label: "工具",
-      submenu: [
-        {
-          id: "latex-compile",
-          label: "编译 LaTeX",
-          accelerator: "CmdOrCtrl+B",
-          click: () => sendCommand("latex.compile"),
-        },
       ],
     },
     {
@@ -162,39 +118,6 @@ function buildMenu(): void {
         { role: "resetZoom", label: "实际大小" },
         { role: "zoomIn", label: "放大" },
         { role: "zoomOut", label: "缩小" },
-        {
-          label: "命令面板…",
-          click: () => sendCommand("view.commandPalette"),
-        },
-        ...(DEV_SERVER_URL
-          ? [
-              {
-                label: "性能浮层",
-                accelerator: "CmdOrCtrl+Alt+P",
-                click: () => sendCommand("view.performance"),
-              } satisfies MenuItemConstructorOptions,
-            ]
-          : []),
-        { type: "separator" as const },
-        {
-          label: "设置…",
-          accelerator: "CmdOrCtrl+,",
-          click: () => sendCommand("view.settings"),
-        },
-      ],
-    },
-    {
-      label: "帮助",
-      submenu: [
-        {
-          id: "check-update",
-          label: "检查更新…",
-          click: () => sendCommand("update.check"),
-        },
-        {
-          label: "关于 Panda Live",
-          enabled: false,
-        },
       ],
     },
   ];
@@ -211,6 +134,7 @@ function createWindow(bounds?: SessionState["window"]): void {
     minHeight: 640,
     show: false,
     title: "Panda Live",
+    autoHideMenuBar: false,
     backgroundColor: nativeTheme.shouldUseDarkColors ? "#17181a" : "#f6f7f8",
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
@@ -226,6 +150,7 @@ function createWindow(bounds?: SessionState["window"]): void {
   });
 
   mainWindow = window;
+  window.setMenuBarVisibility(false);
   if (bounds?.maximized) window.maximize();
   window.once("ready-to-show", () => window.show());
 

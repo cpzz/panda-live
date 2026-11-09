@@ -254,8 +254,39 @@ button {
 
 .toolbar-actions {
   display: flex;
-  gap: 2px;
+  align-items: center;
+  gap: 1px;
   flex: 0 0 auto;
+}
+
+.toolbar-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 26px;
+  padding: 0;
+  color: var(--fg);
+}
+
+.toolbar-icon:disabled {
+  color: var(--muted);
+}
+
+.toolbar-divider {
+  width: 1px;
+  height: 16px;
+  margin: 0 4px;
+  background: var(--border);
+}
+
+.sidebar-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 26px;
+  padding: 0;
 }
 
 .mode-switch {
@@ -268,14 +299,17 @@ button {
 }
 
 .mode-button {
-  padding: 3px 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 24px;
+  padding: 0;
   border: 0;
   border-radius: 2px;
   background: transparent;
   color: var(--muted);
-  font-size: 11.5px;
   cursor: pointer;
-  white-space: nowrap;
 }
 
 .mode-button:hover:not(:disabled) {
@@ -1013,6 +1047,53 @@ button {
   min-height: 0;
 }
 
+/* 右侧编辑区：文档标签、横幅、编辑器与问题面板 */
+.editor-area {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg);
+}
+
+/* 可拖拽分隔条 */
+.resizer {
+  flex: 0 0 4px;
+  position: relative;
+  z-index: 6;
+  background: var(--bg);
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.resizer::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 1px;
+  width: 1px;
+  background: var(--border);
+  content: "";
+}
+
+.resizer:hover::after,
+body.resizing .resizer::after {
+  left: 0;
+  width: 2px;
+  background: var(--accent);
+}
+
+body.resizing,
+body.resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+.workspace.mode-split .source-pane {
+  border-right: 0;
+}
+
 .icon-button {
   padding: 3px 7px;
   border: 1px solid transparent;
@@ -1043,6 +1124,108 @@ button {
   min-height: 0;
   background: var(--sidebar-bg);
   border-right: 1px solid var(--border);
+}
+
+.sidebar-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* 侧栏标签：文件 / 大纲 */
+.sidebar-tabs {
+  flex: 0 0 auto;
+  display: flex;
+  height: 35px;
+  border-bottom: 1px solid var(--border);
+  background: var(--sidebar-bg);
+}
+
+.sidebar-tab {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.sidebar-tab:hover {
+  background: var(--surface-hover);
+  color: var(--fg);
+}
+
+.sidebar-tab.active {
+  background: var(--surface);
+  border-bottom-color: var(--accent);
+  color: var(--fg);
+}
+
+.sidebar-section-title {
+  padding: 8px 10px 4px;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* 打开的文件列表 */
+.open-files {
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--border);
+}
+
+.open-files ul {
+  max-height: 132px;
+  margin: 0;
+  padding: 0 0 4px;
+  overflow: auto;
+  list-style: none;
+}
+
+.open-file-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 22px;
+  padding: 2px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--fg);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.open-file-item:hover {
+  background: var(--surface-hover);
+}
+
+.open-file-item.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.open-file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-panel > .outline-panel {
+  flex: 1 1 auto;
+  max-height: none;
+  border-top: 0;
 }
 
 .sidebar-header {
@@ -1122,6 +1305,17 @@ button {
 
 .tree-toggle:hover {
   color: var(--fg);
+}
+
+.tree-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  color: var(--muted);
+}
+
+.tree-row.dir .tree-icon {
+  color: var(--accent);
 }
 
 .tree-toggle.placeholder {
@@ -1220,46 +1414,109 @@ button {
 /* WYSIWYG 面板与查找 */
 .wysiwyg-wrap {
   flex: 1;
+  position: relative;
   display: flex;
   flex-direction: column;
   min-height: 0;
 }
 
+/* 查找替换浮层：参考 VS Code 的 Find Widget */
 .search-panel {
-  flex: 0 0 auto;
+  position: absolute;
+  top: 8px;
+  right: 16px;
+  z-index: 12;
   display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 5px 10px;
-  background: var(--surface-muted);
-  border-bottom: 1px solid var(--border);
-}
-
-.search-input {
-  width: 180px;
-  height: 24px;
-  padding: 0 8px;
+  flex-direction: column;
+  gap: 4px;
+  width: min(440px, calc(100% - 32px));
+  padding: 6px 8px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   background: var(--surface);
-  color: var(--fg);
-  font-size: 12px;
+  box-shadow: var(--shadow);
 }
 
-.search-option {
+.search-row {
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+.search-input {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+  background: var(--editor-bg);
+  color: var(--editor-fg);
+  font-size: 12px;
+}
+
+.search-input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.find-toggle {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: transparent;
   color: var(--muted);
-  font-size: 11.5px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.find-toggle:hover {
+  background: var(--surface-hover);
+  color: var(--fg);
+}
+
+.find-toggle.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.find-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.find-icon:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+.find-icon:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .search-count {
-  min-width: 56px;
+  flex: 0 0 auto;
+  min-width: 44px;
   color: var(--muted);
-  font-size: 11.5px;
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 .search-match {
@@ -1269,6 +1526,210 @@ button {
 
 .search-match-active {
   background: var(--search-match-active);
+}
+
+/* CodeMirror 源码查找面板：同样浮动在编辑器右上角 */
+.editor-host {
+  position: relative;
+}
+
+.editor-host .cm-panels-top {
+  position: absolute;
+  top: 8px;
+  right: 16px;
+  left: auto;
+  z-index: 12;
+  width: min(560px, calc(100% - 32px));
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.editor-host .cm-panels-top .cm-search {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) repeat(6, auto);
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  background: var(--surface);
+  color: var(--fg);
+  font-family: var(--font-ui);
+  font-size: 11.5px;
+}
+
+.editor-host .cm-panels-top .cm-search br {
+  display: none;
+}
+
+.editor-host .cm-panels-top .cm-search .cm-textfield[name="search"] {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.editor-host .cm-panels-top .cm-search .cm-textfield[name="replace"] {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.editor-host .cm-panels-top .cm-search button[name="next"] {
+  grid-column: 3;
+  grid-row: 1;
+}
+
+.editor-host .cm-panels-top .cm-search button[name="prev"] {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.editor-host .cm-panels-top .cm-search label:nth-of-type(1) {
+  grid-column: 4;
+  grid-row: 1;
+}
+
+.editor-host .cm-panels-top .cm-search label:nth-of-type(2) {
+  grid-column: 5;
+  grid-row: 1;
+}
+
+.editor-host .cm-panels-top .cm-search label:nth-of-type(3) {
+  grid-column: 6;
+  grid-row: 1;
+}
+
+.editor-host .cm-panels-top .cm-search button[name="close"] {
+  grid-column: 7;
+  grid-row: 1;
+}
+
+.editor-host .cm-panels-top .cm-search button[name="replace"] {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.editor-host .cm-panels-top .cm-search button[name="replaceAll"] {
+  grid-column: 3;
+  grid-row: 2;
+}
+
+.editor-host .cm-panels-top .cm-textfield {
+  min-width: 120px;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+  background: var(--editor-bg);
+  color: var(--editor-fg);
+  font-family: var(--font-ui);
+  font-size: 12px;
+}
+
+.editor-host .cm-panels-top .cm-textfield:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.editor-host .cm-panels-top .cm-button {
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--fg);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.editor-host .cm-panels-top .cm-button:hover {
+  background: var(--surface-hover);
+}
+
+.editor-host .cm-panels-top .cm-search button[name="next"],
+.editor-host .cm-panels-top .cm-search button[name="prev"],
+.editor-host .cm-panels-top .cm-search button[name="replace"],
+.editor-host .cm-panels-top .cm-search button[name="replaceAll"],
+.editor-host .cm-panels-top .cm-search button[name="close"] {
+  width: 22px;
+  padding: 0;
+  font-size: 0;
+}
+
+.editor-host .cm-panels-top .cm-search button[name="next"]::after,
+.editor-host .cm-panels-top .cm-search button[name="prev"]::after,
+.editor-host .cm-panels-top .cm-search button[name="replace"]::after,
+.editor-host .cm-panels-top .cm-search button[name="replaceAll"]::after,
+.editor-host .cm-panels-top .cm-search button[name="close"]::after {
+  font-size: 13px;
+  line-height: 22px;
+}
+
+.editor-host .cm-panels-top .cm-search button[name="next"]::after {
+  content: "↓";
+}
+
+.editor-host .cm-panels-top .cm-search button[name="prev"]::after {
+  content: "↑";
+}
+
+.editor-host .cm-panels-top .cm-search button[name="select"] {
+  display: none;
+}
+
+.editor-host .cm-panels-top .cm-search button[name="replace"]::after {
+  content: "⇄";
+}
+
+.editor-host .cm-panels-top .cm-search button[name="replaceAll"]::after {
+  content: "⇉";
+}
+
+.editor-host .cm-panels-top .cm-search button[name="close"]::after {
+  content: "×";
+}
+
+.editor-host .cm-panels-top .cm-search label {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 22px;
+  padding: 0 5px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  color: var(--muted);
+  font-size: 0;
+  cursor: pointer;
+}
+
+.editor-host .cm-panels-top .cm-search label:hover {
+  background: var(--surface-hover);
+}
+
+.editor-host .cm-panels-top .cm-search label:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.editor-host .cm-panels-top .cm-search label input {
+  display: none;
+}
+
+.editor-host .cm-panels-top .cm-search label::after {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  content: "";
+}
+
+.editor-host .cm-panels-top .cm-search label:nth-of-type(1)::after {
+  content: "Aa";
+}
+
+.editor-host .cm-panels-top .cm-search label:nth-of-type(2)::after {
+  content: ".*";
+}
+
+.editor-host .cm-panels-top .cm-search label:nth-of-type(3)::after {
+  content: "ab";
 }
 
 /* 对话框 */

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { OutlineItem } from "../formats/outline";
+import { Icon } from "./icons";
 
 /** 侧栏大纲面板：标题层级、点击跳转、可折叠。见 doc/design.md §15.1。 */
 export function OutlinePanel({
@@ -15,15 +16,16 @@ export function OutlinePanel({
   return (
     <section className="outline-panel" aria-label="文档大纲">
       <div className="outline-panel-header">
-        <span className="sidebar-title">大纲</span>
+        <span className="sidebar-title">文档大纲</span>
         <button
           type="button"
           className="icon-button"
           aria-expanded={!collapsed}
           aria-label={collapsed ? "展开大纲" : "折叠大纲"}
+          title={collapsed ? "展开大纲" : "折叠大纲"}
           onClick={() => setCollapsed((value) => !value)}
         >
-          {collapsed ? "展开" : "折叠"}
+          <Icon name={collapsed ? "chevron-down" : "chevron-up"} />
         </button>
       </div>
       {!collapsed &&

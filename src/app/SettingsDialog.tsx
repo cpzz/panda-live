@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Settings } from "../shared/settings";
 import { ExtensionSettings } from "./ExtensionSettings";
+import { Icon } from "./icons";
 
 interface SettingsDialogProps {
   open: boolean;
@@ -53,8 +54,8 @@ export function SettingsDialog({
       >
         <header className="modal-header">
           <h2>设置</h2>
-          <button type="button" className="icon-button" onClick={onClose} aria-label="关闭">
-            关闭
+          <button type="button" className="icon-button" onClick={onClose} aria-label="关闭" title="关闭">
+            <Icon name="close" />
           </button>
         </header>
 

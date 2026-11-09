@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { buildSearchRegex, type SearchOptions } from "../services/search";
 import { DEFAULT_SEARCH_OPTIONS } from "../editor/search";
 import type { PandaEditor } from "../editor/editor";
+import { Icon } from "./icons";
 
 interface SearchPanelProps {
   editor: PandaEditor | null;
@@ -60,91 +61,109 @@ export function SearchPanel({ editor, openSignal, onClose }: SearchPanelProps) {
 
   return (
     <div className="search-panel" role="search" onKeyDown={onKeyDown}>
-      <input
-        ref={inputRef}
-        className="search-input"
-        placeholder="查找"
-        value={term}
-        aria-label="查找内容"
-        onChange={(event) => setTerm(event.target.value)}
-      />
-      <input
-        className="search-input"
-        placeholder="替换为"
-        value={replacement}
-        aria-label="替换内容"
-        onChange={(event) => setReplacement(event.target.value)}
-      />
-      <label className="search-option">
+      <div className="search-row">
         <input
-          type="checkbox"
-          checked={options.caseSensitive}
-          onChange={(event) => setOptions({ ...options, caseSensitive: event.target.checked })}
+          ref={inputRef}
+          className="search-input"
+          placeholder="查找"
+          value={term}
+          aria-label="查找内容"
+          onChange={(event) => setTerm(event.target.value)}
         />
-        区分大小写
-      </label>
-      <label className="search-option">
+        <button
+          type="button"
+          className={options.caseSensitive ? "find-toggle active" : "find-toggle"}
+          aria-label="区分大小写"
+          aria-pressed={options.caseSensitive}
+          title="区分大小写"
+          onClick={() => setOptions({ ...options, caseSensitive: !options.caseSensitive })}
+        >
+          Aa
+        </button>
+        <button
+          type="button"
+          className={options.regex ? "find-toggle active" : "find-toggle"}
+          aria-label="正则"
+          aria-pressed={options.regex}
+          title="使用正则表达式"
+          onClick={() => setOptions({ ...options, regex: !options.regex })}
+        >
+          .*
+        </button>
+        <button
+          type="button"
+          className={options.wholeWord ? "find-toggle active" : "find-toggle"}
+          aria-label="全词"
+          aria-pressed={options.wholeWord}
+          title="全词匹配"
+          onClick={() => setOptions({ ...options, wholeWord: !options.wholeWord })}
+        >
+          ab
+        </button>
+        <span className="search-count" aria-live="polite">
+          {regexInvalid ? "正则无效" : `${info.active} / ${info.total}`}
+        </span>
+        <button
+          type="button"
+          className="find-icon"
+          aria-label="上一个"
+          title="上一个（Shift+Enter）"
+          disabled={info.total === 0}
+          onClick={() => editor && setInfo(editor.findNext(-1))}
+        >
+          <Icon name="arrow-up" size={14} />
+        </button>
+        <button
+          type="button"
+          className="find-icon"
+          aria-label="下一个"
+          title="下一个（Enter）"
+          disabled={info.total === 0}
+          onClick={() => editor && setInfo(editor.findNext(1))}
+        >
+          <Icon name="arrow-down" size={14} />
+        </button>
+        <button type="button" className="find-icon" aria-label="关闭查找" title="关闭" onClick={close}>
+          <Icon name="close" size={14} />
+        </button>
+      </div>
+      <div className="search-row">
         <input
-          type="checkbox"
-          checked={options.regex}
-          onChange={(event) => setOptions({ ...options, regex: event.target.checked })}
+          className="search-input"
+          placeholder="替换为"
+          value={replacement}
+          aria-label="替换内容"
+          onChange={(event) => setReplacement(event.target.value)}
         />
-        正则
-      </label>
-      <label className="search-option">
-        <input
-          type="checkbox"
-          checked={options.wholeWord}
-          onChange={(event) => setOptions({ ...options, wholeWord: event.target.checked })}
-        />
-        全词
-      </label>
-      <span className="search-count" aria-live="polite">
-        {regexInvalid ? "正则无效" : `${info.active} / ${info.total}`}
-      </span>
-      <button
-        type="button"
-        className="button small"
-        disabled={info.total === 0}
-        onClick={() => editor && setInfo(editor.findNext(-1))}
-      >
-        上一个
-      </button>
-      <button
-        type="button"
-        className="button small"
-        disabled={info.total === 0}
-        onClick={() => editor && setInfo(editor.findNext(1))}
-      >
-        下一个
-      </button>
-      <button
-        type="button"
-        className="button small"
-        disabled={info.total === 0}
-        onClick={() => {
-          if (!editor) return;
-          editor.replaceCurrent(replacement);
-          setInfo(editor.search(term, options));
-        }}
-      >
-        替换
-      </button>
-      <button
-        type="button"
-        className="button small"
-        disabled={info.total === 0}
-        onClick={() => {
-          if (!editor) return;
-          editor.replaceAll(replacement);
-          setInfo(editor.search(term, options));
-        }}
-      >
-        全部替换
-      </button>
-      <button type="button" className="button small ghost" onClick={close}>
-        关闭
-      </button>
+        <button
+          type="button"
+          className="find-icon"
+          aria-label="替换"
+          title="替换"
+          disabled={info.total === 0}
+          onClick={() => {
+            if (!editor) return;
+            editor.replaceCurrent(replacement);
+            setInfo(editor.search(term, options));
+          }}
+        >
+          <Icon name="replace" size={14} />
+        </button>
+        <button
+          type="button"
+          className="find-icon"
+          aria-label="全部替换"
+          title="全部替换"
+          disabled={info.total === 0}
+          onClick={() => {
+            if (!editor) return;
+            editor.replaceAll(replacement);
+            setInfo(editor.search(term, options));
+          }}
+        >
+          <Icon name="replace-all" size={14} />
+        </button>
+      </div>
     </div>
   );
 }

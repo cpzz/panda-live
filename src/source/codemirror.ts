@@ -43,6 +43,22 @@ const pandaHighlight = HighlightStyle.define([
   { tag: tags.punctuation, color: "var(--cm-punct)" },
 ]);
 
+const pandaPhrases = EditorState.phrases.of({
+  Find: "查找",
+  Replace: "替换",
+  next: "下一个",
+  previous: "上一个",
+  all: "全部",
+  "match case": "区分大小写",
+  regexp: "正则",
+  "by word": "全词",
+  replace: "替换",
+  "replace all": "全部替换",
+  close: "关闭",
+  "Go to line": "跳转到行",
+  go: "跳转",
+});
+
 const pandaTheme = EditorView.theme(
   {
     "&": {
@@ -99,6 +115,7 @@ function createState(
     doc,
     extensions: [
       basicSetup,
+      pandaPhrases,
       language === "xml" ? xml() : language === "markdown" ? markdown() : [],
       // 源码模式的查找替换复用 CodeMirror 搜索面板与匹配装饰（§11.5）。
       search({ top: true }),

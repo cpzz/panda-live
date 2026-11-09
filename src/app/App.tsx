@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from "react";
 import type { EditorState } from "@codemirror/state";
 import { renderMarkdownToHtml } from "../formats/markdown/preview";
 import { parseMarkdown } from "../formats/markdown/parse";
@@ -30,6 +30,7 @@ import type { Settings } from "../shared/settings";
 import { describeError, getErrorCode } from "../shared/errors";
 import { RecoveryDialog } from "./RecoveryDialog";
 import { CommandPalette, type CommandItem } from "./CommandPalette";
+import { Icon, type IconName } from "./icons";
 import { OutlinePanel } from "./OutlinePanel";
 import { PdfPreview } from "./PdfPreview";
 import { PerformanceOverlay } from "./PerformanceOverlay";
@@ -43,6 +44,13 @@ const MODE_LABELS: Record<EditorMode, string> = {
   source: "源码",
   split: "分栏",
   preview: "预览",
+};
+
+const MODE_ICONS: Record<EditorMode, IconName> = {
+  wysiwyg: "pencil",
+  source: "code",
+  split: "split",
+  preview: "eye",
 };
 
 const ENCODING_LABELS: Record<string, string> = {
@@ -696,6 +704,13 @@ export function App() {
   const [extensionCommands, setExtensionCommands] = useState<CommandItem[]>([]);
   const [tabsOverflow, setTabsOverflow] = useState(false);
   const [tabMenu, setTabMenu] = useState<{ top: number; right: number } | null>(null);
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const stored = Number(localStorage.getItem("panda.sidebarWidth"));
+    return Number.isFinite(stored) && stored >= 180 ? Math.min(480, stored) : 260;
+  });
+  const [splitRatio, setSplitRatio] = useState(50);
+  const sidebarWidthRef = useRef(sidebarWidth);
+  sidebarWidthRef.current = sidebarWidth;
   const tabstripRef = useRef<HTMLDivElement>(null);
   const tabItemsRef = useRef<HTMLDivElement>(null);
   const tabMenuButtonRef = useRef<HTMLButtonElement>(null);
@@ -1043,6 +1058,39 @@ export function App() {
     });
   }, [manager, workspaces]);
 
+  // 原生窗口菜单已关闭，常用快捷键改由渲染层统一处理。
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      const key = event.key.toLowerCase();
+      if (key === "p" && event.shiftKey) return;
+      if (key === "n" && !event.shiftKey) {
+        event.preventDefault();
+        void manager.runMenuCommand("file.new");
+      } else if (key === "o") {
+        event.preventDefault();
+        void manager.runMenuCommand(event.shiftKey ? "workspace.open" : "file.open");
+      } else if (key === "s") {
+        event.preventDefault();
+        void manager.runMenuCommand(event.shiftKey ? "file.saveAs" : "file.save");
+      } else if (key === "w") {
+        event.preventDefault();
+        void manager.runMenuCommand("file.close");
+      } else if (key === "f") {
+        event.preventDefault();
+        setSearchSignal((value) => value + 1);
+      } else if (key === "b") {
+        event.preventDefault();
+        setCompileSignal((value) => value + 1);
+      } else if (key === ",") {
+        event.preventDefault();
+        setSettingsOpen(true);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [manager, workspaces]);
+
   useEffect(() => {
     setCursor({ line: 1, column: 1 });
   }, [state.activeId]);
@@ -1103,6 +1151,53 @@ export function App() {
     ...extensionCommands,
   ];
 
+  /** 拖拽侧栏分隔条调整宽度，并记住用户选择。 */
+  const beginSidebarResize = (event: ReactPointerEvent<HTMLDivElement>): void => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = sidebarWidthRef.current;
+    const move = (moveEvent: PointerEvent): void => {
+      const next = Math.max(180, Math.min(480, startWidth + moveEvent.clientX - startX));
+      setSidebarWidth(next);
+      sidebarWidthRef.current = next;
+    };
+    const end = (): void => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", end);
+      document.body.classList.remove("resizing");
+      try {
+        localStorage.setItem("panda.sidebarWidth", String(sidebarWidthRef.current));
+      } catch {
+        // 忽略无痕模式下的存储失败。
+      }
+    };
+    document.body.classList.add("resizing");
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", end);
+  };
+
+  /** 分栏模式下拖拽中间分隔条调整源码/预览比例。 */
+  const beginSplitResize = (event: ReactPointerEvent<HTMLDivElement>): void => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const container = event.currentTarget.parentElement;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    const move = (moveEvent: PointerEvent): void => {
+      const ratio = ((moveEvent.clientX - rect.left) / rect.width) * 100;
+      setSplitRatio(Math.max(25, Math.min(75, ratio)));
+    };
+    const end = (): void => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", end);
+      document.body.classList.remove("resizing");
+    };
+    document.body.classList.add("resizing");
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", end);
+  };
+
   return (
     <div className="app">
       <header className="toolbar">
@@ -1114,10 +1209,11 @@ export function App() {
           type="button"
           className={workspace.visible ? "icon-button sidebar-toggle active" : "icon-button sidebar-toggle"}
           aria-pressed={workspace.visible}
+          aria-label={workspace.visible ? "折叠工作区" : "展开工作区"}
           title={workspace.visible ? "折叠工作区" : "展开工作区"}
           onClick={() => workspaces.setVisible(!workspace.visible)}
         >
-          侧栏
+          <Icon name={workspace.visible ? "sidebar-close" : "sidebar-open"} />
         </button>
         <button
           type="button"
@@ -1132,23 +1228,63 @@ export function App() {
           </span>
         </button>
         <div className="toolbar-actions">
-          <button type="button" className="button" onClick={() => manager.newDocument()}>
-            新建
+          <button
+            type="button"
+            className="icon-button toolbar-icon"
+            aria-label="新建"
+            title="新建（Ctrl+N）"
+            onClick={() => manager.newDocument()}
+          >
+            <Icon name="file-plus" />
           </button>
-          <button type="button" className="button" onClick={() => void manager.openFiles()}>
-            打开
+          <button
+            type="button"
+            className="icon-button toolbar-icon"
+            aria-label="打开"
+            title="打开（Ctrl+O）"
+            onClick={() => void manager.openFiles()}
+          >
+            <Icon name="folder-open" />
           </button>
-          <button type="button" className="button" onClick={() => void manager.saveDocument(state.activeId ?? "")} disabled={!active}>
-            保存
+          <button
+            type="button"
+            className="icon-button toolbar-icon"
+            aria-label="保存"
+            title="保存（Ctrl+S）"
+            onClick={() => void manager.saveDocument(state.activeId ?? "")}
+            disabled={!active}
+          >
+            <Icon name="save" />
           </button>
-          <button type="button" className="button" onClick={() => active && void manager.saveDocumentAs(active.id)} disabled={!active}>
-            另存为
+          <button
+            type="button"
+            className="icon-button toolbar-icon"
+            aria-label="另存为"
+            title="另存为（Ctrl+Shift+S）"
+            onClick={() => active && void manager.saveDocumentAs(active.id)}
+            disabled={!active}
+          >
+            <Icon name="save-as" />
           </button>
-          <button type="button" className="button" onClick={() => setSearchSignal((value) => value + 1)} disabled={!active}>
-            查找
+          <span className="toolbar-divider" aria-hidden="true" />
+          <button
+            type="button"
+            className="icon-button toolbar-icon"
+            aria-label="查找"
+            title="查找（Ctrl+F）"
+            onClick={() => setSearchSignal((value) => value + 1)}
+            disabled={!active}
+          >
+            <Icon name="search" />
           </button>
-          <button type="button" className="button" onClick={() => setSettingsOpen(true)}>
-            设置
+          <button
+            type="button"
+            className="icon-button toolbar-icon"
+            aria-label="设置"
+            title="设置（Ctrl+,）"
+            onClick={() => setSettingsOpen(true)}
+          >
+            <Icon name="settings" />
           </button>
         </div>
         <div className="mode-switch" role="group" aria-label="视图模式">
@@ -1158,16 +1294,45 @@ export function App() {
               type="button"
               className={state.mode === mode ? "mode-button active" : "mode-button"}
               aria-pressed={state.mode === mode}
+              aria-label={MODE_LABELS[mode]}
+              title={MODE_LABELS[mode]}
               onClick={() => manager.setMode(mode)}
               disabled={!active || (mode === "wysiwyg" && active.format !== "markdown")}
             >
-              {MODE_LABELS[mode]}
+              <Icon name={MODE_ICONS[mode]} />
             </button>
           ))}
         </div>
       </header>
 
-      <div className="tabstrip" ref={tabstripRef}>
+      <div className="main-row">
+        {workspace.visible && (
+          <>
+            <WorkspacePanel
+              store={workspaces}
+              width={sidebarWidth}
+              documents={state.documents}
+              activeId={state.activeId}
+              onSelectDocument={(id) => manager.setActive(id)}
+              onOpenFile={(node) => void manager.openWorkspaceFile(node.path, workspace.root?.rootId ?? null)}
+              onRenamed={(oldPath, ref) => void manager.repathDocument(oldPath, ref)}
+              onDeleted={(filePath) => {
+                void manager.removeDocumentByPath(filePath);
+              }}
+              outline={<OutlinePanel items={outline} onSelect={jumpToOutline} />}
+            />
+            <div
+              className="resizer sidebar-resizer"
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="调整侧栏宽度"
+              onPointerDown={beginSidebarResize}
+            />
+          </>
+        )}
+
+        <div className="editor-area">
+          <div className="tabstrip" ref={tabstripRef}>
         <div className="tabstrip-items" role="tablist" aria-label="打开的文档" ref={tabItemsRef}>
           {state.documents.map((doc) => (
             <button
@@ -1220,6 +1385,7 @@ export function App() {
             type="button"
             className="tab-overflow-button"
             aria-label="全部标签"
+            title="全部标签"
             aria-expanded={tabMenu !== null}
             onClick={(event) => {
               if (tabMenu) {
@@ -1230,7 +1396,7 @@ export function App() {
               setTabMenu({ top: rect.bottom + 2, right: window.innerWidth - rect.right });
             }}
           >
-            全部
+            <Icon name="list" size={14} />
           </button>
         )}
       </div>
@@ -1307,19 +1473,6 @@ export function App() {
         </div>
       )}
 
-      <div className="main-row">
-        {workspace.visible && (
-          <WorkspacePanel
-            store={workspaces}
-            onOpenFile={(node) => void manager.openWorkspaceFile(node.path, workspace.root?.rootId ?? null)}
-            onRenamed={(oldPath, ref) => void manager.repathDocument(oldPath, ref)}
-            onDeleted={(filePath) => {
-              void manager.removeDocumentByPath(filePath);
-            }}
-            outline={<OutlinePanel items={outline} onSelect={jumpToOutline} />}
-          />
-        )}
-
         {active ? (
           <main className={`workspace mode-${state.mode}`}>
             <section
@@ -1339,6 +1492,7 @@ export function App() {
               className="pane source-pane"
               hidden={state.mode === "preview" || state.mode === "wysiwyg"}
               aria-label="源码编辑"
+              style={state.mode === "split" ? { flex: `0 0 ${splitRatio}%` } : undefined}
             >
               <SourcePane
                 document={active}
@@ -1354,10 +1508,20 @@ export function App() {
                 }}
               />
             </section>
+            {state.mode === "split" && (
+              <div
+                className="resizer split-resizer"
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="调整分栏宽度"
+                onPointerDown={beginSplitResize}
+              />
+            )}
             <section
               className="pane"
               hidden={state.mode === "source" || state.mode === "wysiwyg"}
               aria-label="渲染预览"
+              style={state.mode === "split" ? { flex: "1 1 0" } : undefined}
             >
               <PreviewPane
                 document={active}
@@ -1418,15 +1582,16 @@ export function App() {
             )}
           </main>
         )}
-      </div>
 
-      {problemsOpen && (
-        <ProblemPanel
-          problems={problems}
-          onSelect={jumpToProblem}
-          onClose={() => setProblemsOpen(false)}
-        />
-      )}
+        {problemsOpen && (
+          <ProblemPanel
+            problems={problems}
+            onSelect={jumpToProblem}
+            onClose={() => setProblemsOpen(false)}
+          />
+        )}
+        </div>
+      </div>
 
       <footer className="statusbar">
         <span className="statusbar-name">{active?.path ?? "就绪"}</span>

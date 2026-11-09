@@ -1,13 +1,27 @@
-import { useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import type { FileRef } from "../shared/ipc";
 import type { WorkspaceNode, WorkspaceStore } from "../services/workspace-store";
+import { Icon } from "./icons";
+
+export interface SidebarDocument {
+  id: string;
+  name: string;
+  path: string | null;
+  dirty: boolean;
+}
 
 interface WorkspacePanelProps {
   store: WorkspaceStore;
   onOpenFile(node: WorkspaceNode): void;
   onRenamed(oldPath: string, ref: FileRef): void;
   onDeleted(filePath: string, isDir: boolean): void;
-  /** 目录树下方的大纲等附加面板。 */
+  /** 侧栏宽度（像素），由拖拽调整。 */
+  width: number;
+  /** 当前打开的全部文档，用于“打开的文件”列表。 */
+  documents: readonly SidebarDocument[];
+  activeId: string | null;
+  onSelectDocument(id: string): void;
+  /** 大纲标签页的内容。 */
   outline?: ReactNode;
 }
 
@@ -71,6 +85,9 @@ function NodeRow({
         ) : (
           <span className="tree-toggle placeholder" aria-hidden="true" />
         )}
+        <span className="tree-icon" aria-hidden="true">
+          <Icon name={node.kind === "dir" ? "folder" : "file"} size={13} />
+        </span>
         <button
           type="button"
           className="tree-name"
@@ -80,19 +97,32 @@ function NodeRow({
           {node.name}
         </button>
         <span className="tree-actions">
-          <button type="button" className="tree-action" title="重命名" onClick={rename}>
-            改名
+          <button
+            type="button"
+            className="tree-action"
+            title="重命名"
+            aria-label={`重命名 ${node.name}`}
+            onClick={rename}
+          >
+            <Icon name="pencil" size={13} />
           </button>
-          <button type="button" className="tree-action" title="删除" onClick={remove}>
-            删除
+          <button
+            type="button"
+            className="tree-action"
+            title="删除"
+            aria-label={`删除 ${node.name}`}
+            onClick={remove}
+          >
+            <Icon name="trash" size={13} />
           </button>
           <button
             type="button"
             className="tree-action"
             title="在文件管理器中显示"
+            aria-label={`显示 ${node.name}`}
             onClick={() => void store.reveal(node.path)}
           >
-            显示
+            <Icon name="reveal" size={13} />
           </button>
         </span>
       </div>
@@ -116,11 +146,32 @@ function NodeRow({
   );
 }
 
-/** 左侧工作区目录树。见 doc/design.md §12.5、§15.1。 */
-export function WorkspacePanel({ store, onOpenFile, onRenamed, onDeleted, outline }: WorkspacePanelProps) {
+/** 左侧工作区侧栏：文件与大纲以标签页切换。见 doc/design.md §12.5、§15.1。 */
+export function WorkspacePanel({
+  store,
+  onOpenFile,
+  onRenamed,
+  onDeleted,
+  width,
+  documents,
+  activeId,
+  onSelectDocument,
+  outline,
+}: WorkspacePanelProps) {
   const state = useSyncExternalStore(store.subscribe, store.getState);
   const [prompt, setPrompt] = useState<PromptState | null>(null);
   const [promptValue, setPromptValue] = useState("");
+  const [tab, setTab] = useState<"files" | "outline">(() =>
+    store.getState().root ? "files" : "outline",
+  );
+  const previousRoot = useRef(state.root?.path ?? null);
+
+  // 打开文件夹后自动切回文件视图；未打开工作区时默认显示大纲。
+  useEffect(() => {
+    const root = state.root?.path ?? null;
+    if (root && root !== previousRoot.current) setTab("files");
+    previousRoot.current = root;
+  }, [state.root?.path]);
 
   const askName = (title: string, initial: string, submit: (value: string) => void): void => {
     setPromptValue(initial);
@@ -137,7 +188,7 @@ export function WorkspacePanel({ store, onOpenFile, onRenamed, onDeleted, outlin
 
   return (
     <>
-      <aside className="sidebar" aria-label="工作区">
+      <aside className="sidebar" aria-label="工作区" style={{ flexBasis: width }}>
         <div className="sidebar-header">
           <span className="sidebar-title" title={state.root?.path ?? ""}>
             {state.root?.name ?? "工作区"}
@@ -149,7 +200,7 @@ export function WorkspacePanel({ store, onOpenFile, onRenamed, onDeleted, outlin
             aria-label="打开文件夹"
             onClick={() => void store.openPicker()}
           >
-            打开
+            <Icon name="folder-open" />
           </button>
           {state.root && (
             <button
@@ -159,49 +210,112 @@ export function WorkspacePanel({ store, onOpenFile, onRenamed, onDeleted, outlin
               aria-label="刷新工作区"
               onClick={() => void store.refresh()}
             >
-              刷新
+              <Icon name="refresh" />
             </button>
           )}
         </div>
 
-        {state.error && <div className="sidebar-error">{state.error}</div>}
+        <div className="sidebar-tabs" role="tablist" aria-label="侧栏视图">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "files"}
+            className={tab === "files" ? "sidebar-tab active" : "sidebar-tab"}
+            onClick={() => setTab("files")}
+          >
+            <Icon name="folder-open" size={14} />
+            文件
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "outline"}
+            className={tab === "outline" ? "sidebar-tab active" : "sidebar-tab"}
+            onClick={() => setTab("outline")}
+          >
+            <Icon name="list" size={14} />
+            大纲
+          </button>
+        </div>
 
-        {state.root ? (
-          <>
-            <div className="sidebar-actions">
-              <button type="button" className="icon-button" onClick={() => create("file")}>
-                新建文件
-              </button>
-              <button type="button" className="icon-button" onClick={() => create("dir")}>
-                新建文件夹
-              </button>
-            </div>
-            <div className="tree" role="tree" aria-label="目录树">
-              {state.nodes.map((node) => (
-                <NodeRow
-                  key={node.path}
-                  node={node}
-                  depth={0}
-                  store={store}
-                  onOpenFile={onOpenFile}
-                  onRenamed={onRenamed}
-                  onDeleted={onDeleted}
-                  askName={askName}
-                />
-              ))}
-              {state.nodes.length === 0 && <p className="sidebar-empty">目录为空</p>}
-            </div>
-          </>
-        ) : (
-          <div className="sidebar-empty">
-            <p>未打开文件夹</p>
-            <button type="button" className="button" onClick={() => void store.openPicker()}>
-              打开文件夹
-            </button>
+        {tab === "files" ? (
+          <div className="sidebar-panel">
+            {state.error && <div className="sidebar-error">{state.error}</div>}
+
+            {documents.length > 0 && (
+              <section className="open-files" aria-label="打开的文件">
+                <div className="sidebar-section-title">打开的文件</div>
+                <ul>
+                  {documents.map((document) => (
+                    <li key={document.id}>
+                      <button
+                        type="button"
+                        className={
+                          document.id === activeId ? "open-file-item active" : "open-file-item"
+                        }
+                        title={document.path ?? document.name}
+                        onClick={() => onSelectDocument(document.id)}
+                      >
+                        <Icon name="file" size={13} />
+                        <span className="open-file-name">{document.name}</span>
+                        {document.dirty && <span className="tab-dot" aria-label="未保存" />}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
+            {state.root ? (
+              <>
+                <div className="sidebar-actions">
+                  <button
+                    type="button"
+                    className="icon-button"
+                    title="新建文件"
+                    aria-label="新建文件"
+                    onClick={() => create("file")}
+                  >
+                    <Icon name="file-plus" />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-button"
+                    title="新建文件夹"
+                    aria-label="新建文件夹"
+                    onClick={() => create("dir")}
+                  >
+                    <Icon name="folder-plus" />
+                  </button>
+                </div>
+                <div className="tree" role="tree" aria-label="目录树">
+                  {state.nodes.map((node) => (
+                    <NodeRow
+                      key={node.path}
+                      node={node}
+                      depth={0}
+                      store={store}
+                      onOpenFile={onOpenFile}
+                      onRenamed={onRenamed}
+                      onDeleted={onDeleted}
+                      askName={askName}
+                    />
+                  ))}
+                  {state.nodes.length === 0 && <p className="sidebar-empty">目录为空</p>}
+                </div>
+              </>
+            ) : (
+              <div className="sidebar-empty">
+                <p>未打开文件夹</p>
+                <button type="button" className="button" onClick={() => void store.openPicker()}>
+                  打开文件夹
+                </button>
+              </div>
+            )}
           </div>
+        ) : (
+          <div className="sidebar-panel">{outline}</div>
         )}
-
-        {outline}
       </aside>
 
       {prompt && (
@@ -222,6 +336,9 @@ export function WorkspacePanel({ store, onOpenFile, onRenamed, onDeleted, outlin
           >
             <header className="modal-header">
               <h2>{prompt.title}</h2>
+              <button type="button" className="icon-button" aria-label="关闭" onClick={() => setPrompt(null)}>
+                <Icon name="close" />
+              </button>
             </header>
             <div className="modal-body">
               <input

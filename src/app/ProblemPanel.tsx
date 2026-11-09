@@ -1,4 +1,5 @@
 import type { Problem, ProblemSource } from "../services/problem-store";
+import { Icon } from "./icons";
 
 const SOURCE_LABELS: Record<ProblemSource, string> = {
   markdown: "解析",
@@ -41,8 +42,14 @@ export function ProblemPanel({
       <div className="problem-panel-header">
         <span className="problem-panel-title">问题</span>
         <span className="problem-panel-count">共 {items.length} 条</span>
-        <button type="button" className="button small ghost" onClick={onClose}>
-          关闭
+        <button
+          type="button"
+          className="icon-button"
+          aria-label="关闭问题面板"
+          title="关闭"
+          onClick={onClose}
+        >
+          <Icon name="close" />
         </button>
       </div>
       {items.length > 0 ? (
