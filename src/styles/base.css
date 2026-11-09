@@ -283,6 +283,91 @@ button {
   font-size: 12px;
 }
 
+.tabstrip-items {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+
+/* 标签溢出时的下拉入口与标签列表 */
+.tab-overflow-button {
+  position: sticky;
+  right: 0;
+  align-self: stretch;
+  margin-left: auto;
+  padding: 0 10px;
+  border: 0;
+  border-left: 1px solid var(--border);
+  background: var(--surface-muted);
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tab-overflow-button:hover,
+.tab-overflow-button[aria-expanded="true"] {
+  background: var(--surface);
+  color: var(--fg);
+}
+
+.tab-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+}
+
+.tab-menu {
+  position: fixed;
+  z-index: 46;
+  min-width: 220px;
+  max-width: 360px;
+  max-height: 60vh;
+  overflow: auto;
+  padding: 4px 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.tab-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--fg);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tab-menu-item:hover {
+  background: var(--surface-muted);
+}
+
+.tab-menu-item.active {
+  background: var(--accent-soft);
+}
+
+.tab-menu-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-menu-mark {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 11px;
+}
+
 /* 横幅 */
 .banner {
   flex: 0 0 auto;

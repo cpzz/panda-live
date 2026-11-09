@@ -658,6 +658,11 @@ export function App() {
   const [problemsOpen, setProblemsOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [extensionCommands, setExtensionCommands] = useState<CommandItem[]>([]);
+  const [tabsOverflow, setTabsOverflow] = useState(false);
+  const [tabMenu, setTabMenu] = useState<{ top: number; right: number } | null>(null);
+  const tabstripRef = useRef<HTMLDivElement>(null);
+  const tabItemsRef = useRef<HTMLDivElement>(null);
+  const tabMenuButtonRef = useRef<HTMLButtonElement>(null);
   const problemsState = useSyncExternalStore(problemStore.subscribe, problemStore.getState);
   const [outline, setOutline] = useState<OutlineItem[]>([]);
   const [sourceJump, setSourceJump] = useState<{ line: number; column: number; token: number } | null>(
@@ -946,6 +951,22 @@ export function App() {
     };
   }, [paletteOpen, manager]);
 
+  // 标签超出可用宽度时显示「全部标签」下拉。见 doc/design.md §15.1。
+  useEffect(() => {
+    const host = tabstripRef.current;
+    const items = tabItemsRef.current;
+    if (!host || !items) return;
+    const update = (): void => {
+      const buttonSpace = tabMenuButtonRef.current?.offsetWidth ?? 76;
+      setTabsOverflow(items.scrollWidth > host.clientWidth - buttonSpace);
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(host);
+    observer.observe(items);
+    return () => observer.disconnect();
+  }, [state.documents.length]);
+
   useEffect(() => {
     return window.panda.onMenuCommand((command) => {
       switch (command) {
@@ -1097,52 +1118,98 @@ export function App() {
         </div>
       </header>
 
-      <div className="tabstrip" role="tablist" aria-label="打开的文档">
-        {state.documents.map((doc) => (
+      <div className="tabstrip" ref={tabstripRef}>
+        <div className="tabstrip-items" role="tablist" aria-label="打开的文档" ref={tabItemsRef}>
+          {state.documents.map((doc) => (
+            <button
+              key={doc.id}
+              type="button"
+              role="tab"
+              draggable
+              aria-selected={doc.id === state.activeId}
+              className={doc.id === state.activeId ? "tab active" : "tab"}
+              onClick={() => manager.setActive(doc.id)}
+              onMouseDown={(event) => {
+                // 阻止中键在按钮上触发自动滚动。
+                if (event.button === 1) event.preventDefault();
+              }}
+              onAuxClick={(event) => {
+                if (event.button !== 1) return;
+                event.preventDefault();
+                void manager.closeDocument(doc.id);
+              }}
+              onDragStart={(event) => {
+                dragTabRef.current = doc.id;
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData("text/plain", doc.id);
+              }}
+              onDragOver={(event) => {
+                if (!dragTabRef.current || dragTabRef.current === doc.id) return;
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "move";
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                const fromId = dragTabRef.current ?? event.dataTransfer.getData("text/plain");
+                dragTabRef.current = null;
+                if (fromId) manager.moveDocument(fromId, doc.id);
+              }}
+              onDragEnd={() => {
+                dragTabRef.current = null;
+              }}
+              title={`${doc.path ?? doc.name}（拖拽排序，中键关闭）`}
+            >
+              {doc.dirty && <span className="tab-dot" aria-label="未保存" />}
+              <span className="tab-name">{doc.name}</span>
+            </button>
+          ))}
+          {state.documents.length === 0 && <span className="tabstrip-empty">未打开文档</span>}
+        </div>
+        {tabsOverflow && (
           <button
-            key={doc.id}
+            ref={tabMenuButtonRef}
             type="button"
-            role="tab"
-            draggable
-            aria-selected={doc.id === state.activeId}
-            className={doc.id === state.activeId ? "tab active" : "tab"}
-            onClick={() => manager.setActive(doc.id)}
-            onMouseDown={(event) => {
-              // 阻止中键在按钮上触发自动滚动。
-              if (event.button === 1) event.preventDefault();
+            className="tab-overflow-button"
+            aria-label="全部标签"
+            aria-expanded={tabMenu !== null}
+            onClick={(event) => {
+              if (tabMenu) {
+                setTabMenu(null);
+                return;
+              }
+              const rect = event.currentTarget.getBoundingClientRect();
+              setTabMenu({ top: rect.bottom + 2, right: window.innerWidth - rect.right });
             }}
-            onAuxClick={(event) => {
-              if (event.button !== 1) return;
-              event.preventDefault();
-              void manager.closeDocument(doc.id);
-            }}
-            onDragStart={(event) => {
-              dragTabRef.current = doc.id;
-              event.dataTransfer.effectAllowed = "move";
-              event.dataTransfer.setData("text/plain", doc.id);
-            }}
-            onDragOver={(event) => {
-              if (!dragTabRef.current || dragTabRef.current === doc.id) return;
-              event.preventDefault();
-              event.dataTransfer.dropEffect = "move";
-            }}
-            onDrop={(event) => {
-              event.preventDefault();
-              const fromId = dragTabRef.current ?? event.dataTransfer.getData("text/plain");
-              dragTabRef.current = null;
-              if (fromId) manager.moveDocument(fromId, doc.id);
-            }}
-            onDragEnd={() => {
-              dragTabRef.current = null;
-            }}
-            title={`${doc.path ?? doc.name}（拖拽排序，中键关闭）`}
           >
-            {doc.dirty && <span className="tab-dot" aria-label="未保存" />}
-            <span className="tab-name">{doc.name}</span>
+            全部
           </button>
-        ))}
-        {state.documents.length === 0 && <span className="tabstrip-empty">未打开文档</span>}
+        )}
       </div>
+
+      {tabMenu && (
+        <>
+          <div className="tab-menu-backdrop" onClick={() => setTabMenu(null)} />
+          <div className="tab-menu" role="menu" aria-label="全部标签" style={{ top: tabMenu.top, right: tabMenu.right }}>
+            {state.documents.map((doc) => (
+              <button
+                key={doc.id}
+                type="button"
+                role="menuitem"
+                className={doc.id === state.activeId ? "tab-menu-item active" : "tab-menu-item"}
+                title={doc.path ?? doc.name}
+                onClick={() => {
+                  manager.setActive(doc.id);
+                  setTabMenu(null);
+                }}
+              >
+                {doc.dirty && <span className="tab-dot" aria-label="未保存" />}
+                <span className="tab-menu-name">{doc.name}</span>
+                {doc.id === state.activeId && <span className="tab-menu-mark">当前</span>}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
 
       {conflict && (
         <div className="banner banner-warning" role="alert">
