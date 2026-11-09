@@ -20,6 +20,7 @@ import { UpdateService } from "./services/update-service";
 import { WorkspaceService } from "./services/workspace-service";
 import { TexCompiler } from "./tex/compiler";
 import { detectEngines } from "./tex/engine";
+import { cleanupCompileDirs } from "./tex/pdf-cache";
 import { APP_OPEN_PATH_CHANNEL, FS_CHANGED_CHANNEL } from "../src/shared/events";
 import type { SessionState } from "../src/shared/ipc";
 import { MENU_COMMAND_CHANNEL, type MenuCommand } from "../src/shared/menu";
@@ -263,6 +264,8 @@ function createWindow(bounds?: SessionState["window"]): void {
 
 async function bootstrap(): Promise<void> {
   const userDataDir = app.getPath("userData");
+  // 清理异常退出遗留的编译临时目录；PDF 缓存在编译成功后按 LRU 上限淘汰。
+  void cleanupCompileDirs(path.join(userDataDir, "compile"));
   settings = new SettingsService(userDataDir);
   session = new SessionService(userDataDir);
   drafts = new DraftService(userDataDir);

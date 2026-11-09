@@ -6,6 +6,7 @@ import type { CompileRequest, CompileResult, EngineInfo } from "../../src/shared
 import type { FileService } from "../services/file-service";
 import { sha256Hex } from "../services/text-codec";
 import { parseLatexLog } from "./log-parser";
+import { prunePdfCache } from "./pdf-cache";
 
 const COMPILE_TIMEOUT_MS = 60_000;
 
@@ -52,7 +53,10 @@ export class TexCompiler {
     }
 
     const diagnostics = parseLatexLog(run.output, root);
-    if (run.cancelled) throw new PandaError("E_CANCELLED", "编译已取消");
+    if (run.cancelled) {
+      await this.cleanup(jobDir);
+      throw new PandaError("E_CANCELLED", "编译已取消");
+    }
     if (run.timedOut) {
       await this.cleanup(jobDir);
       return {
@@ -87,6 +91,7 @@ export class TexCompiler {
     await fs.mkdir(cacheDir, { recursive: true });
     await fs.copyFile(outputPdf, path.join(cacheDir, `${pdfKey}.pdf`));
     await this.cleanup(jobDir);
+    await prunePdfCache(cacheDir).catch(() => undefined);
     return { ok: true, pdfKey, diagnostics };
   }
 
