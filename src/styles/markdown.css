@@ -83,6 +83,36 @@
   font-size: 0.92em;
 }
 
+/* 预览中的图表围栏与语法高亮代码块 */
+.markdown-body .preview-diagram {
+  margin: 0.9em 0;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-muted);
+  color: var(--muted);
+  font-size: 12.5px;
+  text-align: center;
+}
+
+.markdown-body .preview-diagram svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.markdown-body .preview-diagram-error {
+  color: var(--danger, #cf222e);
+}
+
+.markdown-body pre.shiki {
+  margin: 0.9em 0;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: auto;
+  line-height: 1.6;
+}
+
 .markdown-body blockquote {
   padding: 0.2em 0 0.2em 1em;
   border-left: 3px solid var(--accent);

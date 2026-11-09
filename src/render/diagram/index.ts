@@ -2,6 +2,7 @@ import { DiagramCache, IndexedDbDiagramStorage } from "./cache";
 import { IframeSandboxPool } from "./pool";
 import { DiagramRenderService } from "./service";
 import type { DiagramTheme } from "./types";
+import { onThemeChange, resolveTheme } from "../../services/theme";
 
 let service: DiagramRenderService | null = null;
 let pool: IframeSandboxPool | null = null;
@@ -30,15 +31,12 @@ export function getDiagramService(): DiagramRenderService {
 }
 
 export function currentDiagramTheme(): DiagramTheme {
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  return resolveTheme();
 }
 
-/** 主题切换时通知调用方重渲染（主题参与缓存键）。 */
+/** 主题切换时通知调用方重渲染（主题参与缓存键）。显式主题与系统主题都生效。 */
 export function onDiagramThemeChange(listener: (theme: DiagramTheme) => void): () => void {
-  const query = window.matchMedia("(prefers-color-scheme: dark)");
-  const handler = (): void => listener(query.matches ? "dark" : "light");
-  query.addEventListener("change", handler);
-  return () => query.removeEventListener("change", handler);
+  return onThemeChange(listener);
 }
 
 /** 开发模式性能浮层读取缓存统计；服务尚未创建时返回 null，避免提前初始化沙箱。 */

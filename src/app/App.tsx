@@ -6,6 +6,9 @@ import { buildOutline, type OutlineItem } from "../formats/outline";
 import { EMPTY_PROBLEMS, problemStore, type Problem } from "../services/problem-store";
 import { getFormatEntry, refreshExtensionFormats } from "../extensions/registry";
 import { sanitizeHtml } from "../render/html";
+import { highlightCodeBlocks } from "../render/code-highlight";
+import { renderPreviewDiagrams } from "../render/markdown/diagram-preview";
+import { onThemeChange, resolveTheme, type AppTheme } from "../services/theme";
 import { resolveRelativePath } from "../utils/paths";
 import {
   DocumentManager,
@@ -541,6 +544,9 @@ function TexPreviewPane({
 
 function MarkdownPreview({ html, doc }: { html: string; doc: DocumentState }) {
   const hostRef = useRef<HTMLElement>(null);
+  const [theme, setTheme] = useState<AppTheme>(resolveTheme);
+
+  useEffect(() => onThemeChange(setTheme), []);
 
   // 超过 1 MB 的图片改为占位 + 手动加载。见 doc/design.md §14.3。
   useEffect(() => {
@@ -579,6 +585,21 @@ function MarkdownPreview({ html, doc }: { html: string; doc: DocumentState }) {
       cancelled = true;
     };
   }, [html, doc.path]);
+
+  // 预览增强：图表围栏替换为 SVG，其余代码块按语言高亮。见 §10.3、§14.2。
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    let cancelled = false;
+    void (async () => {
+      await renderPreviewDiagrams(host, `md-preview:${doc.id}`, () => cancelled);
+      if (cancelled) return;
+      await highlightCodeBlocks(host, theme);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [html, doc.id, theme]);
 
   return (
     <article className="markdown-body" ref={hostRef} dangerouslySetInnerHTML={{ __html: html }} />
