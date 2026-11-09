@@ -1,20 +1,32 @@
 /*
  * 显式主题覆盖。系统主题由 base.css 的 prefers-color-scheme 提供；
- * 用户在选择“浅色/深色”时通过 :root[data-theme] 覆盖。见 doc/design.md §15.2。
+ * 用户选择“浅色/深色”时通过 :root[data-theme] 覆盖。见 doc/design.md §15.2。
+ * 变量需与 base.css 保持同步。
  */
 :root[data-theme="light"] {
   color-scheme: light;
 
-  --bg: #f6f7f8;
+  --bg: #f3f3f3;
+  --chrome-bg: #f8f8f8;
+  --toolbar-bg: #f8f8f8;
+  --sidebar-bg: #f8f8f8;
+  --tab-bg: #f3f3f3;
   --surface: #ffffff;
-  --surface-muted: #eef0f2;
-  --fg: #1f2328;
-  --muted: #6b7280;
-  --border: #e3e6ea;
-  --border-strong: #d3d8de;
-  --accent: #2f7d5e;
-  --accent-strong: #256349;
-  --accent-soft: #e6f2ec;
+  --surface-muted: #f3f3f3;
+  --surface-hover: #e8e8e8;
+  --fg: #24292f;
+  --muted: #6e7781;
+  --border: #e1e4e8;
+  --border-strong: #c9ced6;
+  --accent: #0b6b4f;
+  --accent-strong: #08533d;
+  --accent-soft: #e3f1eb;
+  --accent-fg: #ffffff;
+  --danger: #cf222e;
+
+  --statusbar-bg: #0b6b4f;
+  --statusbar-fg: #ffffff;
+  --statusbar-muted: rgba(255, 255, 255, 0.82);
 
   --warning-bg: #fff7e6;
   --warning-border: #f0c36d;
@@ -23,20 +35,21 @@
   --info-bg: #eaf3ff;
   --info-border: #a9c8ea;
 
-  --code-bg: #f2f4f6;
-  --shadow: 0 6px 20px rgba(20, 25, 30, 0.08);
+  --code-bg: #f6f8fa;
+  --shadow: 0 10px 28px rgba(15, 23, 42, 0.16);
+  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.1);
 
   --editor-bg: #ffffff;
   --editor-fg: #24292f;
-  --editor-gutter-bg: #f7f8f9;
+  --editor-gutter-bg: #ffffff;
   --editor-gutter-fg: #9aa3ad;
-  --editor-active-line: rgba(47, 125, 94, 0.06);
-  --editor-selection: rgba(47, 125, 94, 0.16);
+  --editor-active-line: rgba(11, 107, 79, 0.055);
+  --editor-selection: rgba(11, 107, 79, 0.16);
   --search-match: rgba(240, 195, 109, 0.35);
   --search-match-active: rgba(240, 195, 109, 0.65);
 
   --cm-heading: #1f4d3d;
-  --cm-strong: #1f2328;
+  --cm-strong: #24292f;
   --cm-link: #1d6fa5;
   --cm-code: #8a4b1f;
   --cm-keyword: #7a3e9d;
@@ -47,16 +60,27 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  --bg: #141618;
-  --surface: #1b1e21;
-  --surface-muted: #23272b;
-  --fg: #e4e7ea;
-  --muted: #98a1aa;
-  --border: #2c3137;
-  --border-strong: #3a4047;
-  --accent: #7cc7a6;
-  --accent-strong: #9ad9bd;
-  --accent-soft: #1d2f28;
+  --bg: #1e1e1e;
+  --chrome-bg: #252526;
+  --toolbar-bg: #2d2d2d;
+  --sidebar-bg: #252526;
+  --tab-bg: #252526;
+  --surface: #1e1e1e;
+  --surface-muted: #252526;
+  --surface-hover: #2a2d2e;
+  --fg: #d4d4d4;
+  --muted: #9d9d9d;
+  --border: #333333;
+  --border-strong: #454545;
+  --accent: #41bf95;
+  --accent-strong: #67d6b0;
+  --accent-soft: #133a2f;
+  --accent-fg: #07261d;
+  --danger: #f48771;
+
+  --statusbar-bg: #0b5f45;
+  --statusbar-fg: #ffffff;
+  --statusbar-muted: rgba(255, 255, 255, 0.8);
 
   --warning-bg: #2b2317;
   --warning-border: #6b5730;
@@ -66,22 +90,23 @@
   --info-border: #35506a;
 
   --code-bg: #22262a;
-  --shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.45);
 
-  --editor-bg: #1b1e21;
-  --editor-fg: #dfe4e8;
-  --editor-gutter-bg: #181b1e;
-  --editor-gutter-fg: #6d7781;
-  --editor-active-line: rgba(124, 199, 166, 0.07);
-  --editor-selection: rgba(124, 199, 166, 0.22);
+  --editor-bg: #1e1e1e;
+  --editor-fg: #d4d4d4;
+  --editor-gutter-bg: #1e1e1e;
+  --editor-gutter-fg: #858585;
+  --editor-active-line: rgba(255, 255, 255, 0.045);
+  --editor-selection: rgba(38, 79, 120, 0.9);
   --search-match: rgba(214, 168, 79, 0.3);
   --search-match-active: rgba(214, 168, 79, 0.55);
 
-  --cm-heading: #8fd3b4;
-  --cm-strong: #f0f3f5;
-  --cm-link: #7fb8ef;
-  --cm-code: #e7b27a;
-  --cm-keyword: #c9a2f0;
-  --cm-muted: #77818b;
-  --cm-punct: #98a1aa;
+  --cm-heading: #9cdcfe;
+  --cm-strong: #e8e8e8;
+  --cm-link: #4fc1ff;
+  --cm-code: #ce9178;
+  --cm-keyword: #c586c0;
+  --cm-muted: #6a9955;
+  --cm-punct: #9d9d9d;
 }

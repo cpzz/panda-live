@@ -1112,12 +1112,24 @@ export function App() {
         </div>
         <button
           type="button"
-          className="icon-button"
+          className={workspace.visible ? "icon-button sidebar-toggle active" : "icon-button sidebar-toggle"}
           aria-pressed={workspace.visible}
           title={workspace.visible ? "折叠工作区" : "展开工作区"}
           onClick={() => workspaces.setVisible(!workspace.visible)}
         >
           侧栏
+        </button>
+        <button
+          type="button"
+          className="toolbar-command"
+          title="命令面板（Ctrl+Shift+P）"
+          onClick={() => setPaletteOpen(true)}
+        >
+          <span className="toolbar-command-glyph" aria-hidden="true">&gt;</span>
+          <span className="toolbar-command-text">搜索命令</span>
+          <span className="toolbar-command-key" aria-hidden="true">
+            Ctrl+Shift+P
+          </span>
         </button>
         <div className="toolbar-actions">
           <button type="button" className="button" onClick={() => manager.newDocument()}>
@@ -1366,6 +1378,24 @@ export function App() {
               <button type="button" className="button" onClick={() => void manager.openFiles()}>
                 打开文件
               </button>
+            </div>
+            <div className="welcome-shortcuts">
+              <div className="welcome-shortcut">
+                <kbd>Ctrl+Shift+P</kbd>
+                <span>命令面板</span>
+              </div>
+              <div className="welcome-shortcut">
+                <kbd>Ctrl+O</kbd>
+                <span>打开文件</span>
+              </div>
+              <div className="welcome-shortcut">
+                <kbd>Ctrl+S</kbd>
+                <span>保存</span>
+              </div>
+              <div className="welcome-shortcut">
+                <kbd>Ctrl+F</kbd>
+                <span>查找</span>
+              </div>
             </div>
             {recent.length > 0 && (
               <div className="recent">
