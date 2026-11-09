@@ -738,6 +738,11 @@ button {
   background: var(--accent-soft);
 }
 
+/* 设置关闭行号时隐藏 CodeMirror 行号栏 */
+.cm-editor.hide-line-numbers .cm-lineNumbers {
+  display: none;
+}
+
 /* 滚动条 */
 ::-webkit-scrollbar {
   width: 10px;

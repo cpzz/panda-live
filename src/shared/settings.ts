@@ -2,6 +2,9 @@
  * 用户设置。见 doc/design.md §15.3。
  * 本版本覆盖外观、编辑、图表与隐私分组；未知分组在读取时保留，避免升级后丢数据。
  */
+/** 保存时的换行符策略；`preserve` 沿用文件已有换行。 */
+export type SaveEol = "preserve" | "lf" | "crlf";
+
 export interface Settings {
   schemaVersion: number;
   appearance: {
@@ -16,6 +19,8 @@ export interface Settings {
     autoSave: boolean;
     tabSize: number;
     showLineNumbers: boolean;
+    /** 保存时的换行符；`preserve` 沿用文件已有换行。 */
+    eol: SaveEol;
   };
   diagram: {
     theme: "system" | "light" | "dark";
@@ -31,7 +36,7 @@ export const SETTINGS_SCHEMA_VERSION = 1;
 export const DEFAULT_SETTINGS: Settings = {
   schemaVersion: SETTINGS_SCHEMA_VERSION,
   appearance: { theme: "system", fontSize: 15, lineWidth: 860 },
-  editor: { autoSave: true, tabSize: 2, showLineNumbers: true },
+  editor: { autoSave: true, tabSize: 2, showLineNumbers: true, eol: "preserve" },
   diagram: { theme: "system" },
   privacy: { logLevel: "info" },
 };
@@ -80,6 +85,7 @@ export function mergeSettings(raw: unknown): Settings {
         typeof editor.showLineNumbers === "boolean"
           ? editor.showLineNumbers
           : DEFAULT_SETTINGS.editor.showLineNumbers,
+      eol: pickEnum(editor.eol, ["preserve", "lf", "crlf"] as const, "preserve"),
     },
     diagram: {
       ...diagram,

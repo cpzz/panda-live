@@ -115,6 +115,25 @@ export function SettingsDialog({
                 onChange={(event) => patch("editor", { tabSize: Number(event.target.value) })}
               />
             </label>
+            <label className="settings-row">
+              <span>显示行号</span>
+              <input
+                type="checkbox"
+                checked={draft.editor.showLineNumbers}
+                onChange={(event) => patch("editor", { showLineNumbers: event.target.checked })}
+              />
+            </label>
+            <label className="settings-row">
+              <span>保存换行符</span>
+              <select
+                value={draft.editor.eol}
+                onChange={(event) => patch("editor", { eol: event.target.value })}
+              >
+                <option value="preserve">沿用文件</option>
+                <option value="lf">LF</option>
+                <option value="crlf">CRLF</option>
+              </select>
+            </label>
           </section>
 
           <section className="settings-group">

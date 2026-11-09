@@ -71,6 +71,8 @@ function SourcePane({
   mode,
   searchSignal,
   jump,
+  tabSize,
+  showLineNumbers,
   onChange,
   onSelection,
 }: {
@@ -78,6 +80,8 @@ function SourcePane({
   mode: EditorMode;
   searchSignal: number;
   jump: { line: number; column: number; token: number } | null;
+  tabSize: number;
+  showLineNumbers: boolean;
   onChange(content: string): void;
   onSelection(info: SelectionInfo): void;
 }) {
@@ -121,6 +125,15 @@ function SourcePane({
     editorRef.current?.setCursor({ line: jump.line, column: jump.column });
   }, [jump]);
 
+  // 设置变更即时应用到现有编辑器。
+  useEffect(() => {
+    editorRef.current?.setTabSize(tabSize);
+  }, [tabSize]);
+
+  useEffect(() => {
+    editorRef.current?.setShowLineNumbers(showLineNumbers);
+  }, [showLineNumbers]);
+
   // Ctrl/Cmd+G 跳转行；不依赖 window.prompt（Electron 不支持）。见 §11.5。
   useEffect(() => {
     const host = hostRef.current;
@@ -148,6 +161,8 @@ function SourcePane({
         doc: document.content,
         readOnly: document.readOnly,
         language,
+        tabSize,
+        showLineNumbers,
         onChange: (content) => callbacksRef.current.onChange(content),
         onSelection: (info) => callbacksRef.current.onSelection(info),
       });
@@ -868,6 +883,7 @@ export function App() {
     const bootstrap = async (): Promise<void> => {
       const loaded = await settingsStore.load();
       manager.setAutoSave(loaded.editor.autoSave);
+      manager.setSaveEol(loaded.editor.eol);
       manager.ensureSessionTimer();
       await refreshExtensionFormats();
       const session = await window.panda.session.load();
@@ -1296,6 +1312,8 @@ export function App() {
                 mode={state.mode}
                 searchSignal={searchSignal}
                 jump={sourceJump}
+                tabSize={settings.editor.tabSize}
+                showLineNumbers={settings.editor.showLineNumbers}
                 onChange={(content) => manager.updateContent(active.id, content)}
                 onSelection={(info) => {
                   setCursor(info);
@@ -1415,6 +1433,7 @@ export function App() {
         onSave={(patch) => {
           const next = patch as Settings;
           manager.setAutoSave(next.editor.autoSave);
+          manager.setSaveEol(next.editor.eol);
           void settingsStore.update(next);
         }}
         onExtensionsChanged={() => {

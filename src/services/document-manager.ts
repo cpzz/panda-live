@@ -11,6 +11,7 @@ import type {
 } from "../shared/ipc";
 import { detectFormatEntry } from "../extensions/registry";
 import { parseMarkdown } from "../formats/markdown/parse";
+import type { SaveEol } from "../shared/settings";
 import { decideOpenPolicy, preferSourceByBlocks } from "./open-policy";
 
 export type { EditorMode };
@@ -101,6 +102,7 @@ export class DocumentManager {
   private readonly autosaveTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly draftTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private autoSaveEnabled = true;
+  private saveEol: SaveEol = "preserve";
   private modeSwitchNoticeShown = false;
 
   readonly getState = (): AppState => this.state;
@@ -119,6 +121,15 @@ export class DocumentManager {
       for (const timer of this.autosaveTimers.values()) clearTimeout(timer);
       this.autosaveTimers.clear();
     }
+  }
+
+  /** 设置中的换行符策略：`preserve` 沿用文件已有换行。 */
+  setSaveEol(eol: SaveEol): void {
+    this.saveEol = eol;
+  }
+
+  private eolRequest(): { eol?: "lf" | "crlf" } {
+    return this.saveEol === "preserve" ? {} : { eol: this.saveEol };
   }
 
   async openFiles(): Promise<void> {
@@ -308,6 +319,7 @@ export class DocumentManager {
         path: doc.path,
         content,
         baseHash: doc.hash,
+        ...this.eolRequest(),
       });
       const current = this.findDocument(id);
       this.patchDocument(id, () => ({
@@ -316,6 +328,7 @@ export class DocumentManager {
         hash: result.hash,
         mtimeMs: result.mtimeMs,
         size: byteLength(content),
+        eol: this.saveEol === "preserve" ? doc.eol : this.saveEol,
       }));
       await this.dropDraft(id);
       if (!silent) this.notify("info", "已保存");
@@ -338,7 +351,12 @@ export class DocumentManager {
       if (!ref) return;
 
       const content = doc.content;
-      await window.panda.fs.writeText({ path: ref.path, content, baseHash: "" });
+      await window.panda.fs.writeText({
+        path: ref.path,
+        content,
+        baseHash: "",
+        ...this.eolRequest(),
+      });
       // 回读以同步目标文件真实的编码、换行与哈希（另存为可能重建了元数据）。
       const data = await window.panda.fs.readText({ path: ref.path });
       await this.releaseWatcher(doc);
@@ -402,6 +420,7 @@ export class DocumentManager {
         path: doc.path,
         content,
         baseHash: data.hash,
+        ...this.eolRequest(),
       });
       this.patchDocument(id, (current) => ({
         savedContent: content,

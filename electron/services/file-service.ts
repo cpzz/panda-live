@@ -252,7 +252,7 @@ export class FileService {
 
     const bytes = encodeText(
       request.content,
-      decodedExisting?.eol ?? "lf",
+      request.eol ?? decodedExisting?.eol ?? "lf",
       decodedExisting?.bom ?? false,
     );
 

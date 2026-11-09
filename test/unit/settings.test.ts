@@ -11,7 +11,7 @@ describe("设置合并", () => {
   it("非法值被校正到默认值与范围内", () => {
     const merged = mergeSettings({
       appearance: { theme: "purple", fontSize: 100, lineWidth: 100 },
-      editor: { autoSave: "yes", tabSize: 0 },
+      editor: { autoSave: "yes", tabSize: 0, eol: "crlf-ish" },
       diagram: { theme: "dark" },
       privacy: { logLevel: "verbose" },
     });
@@ -20,6 +20,7 @@ describe("设置合并", () => {
     expect(merged.appearance.lineWidth).toBe(480);
     expect(merged.editor.autoSave).toBe(true);
     expect(merged.editor.tabSize).toBe(1);
+    expect(merged.editor.eol).toBe("preserve");
     expect(merged.diagram.theme).toBe("dark");
     expect(merged.privacy.logLevel).toBe("info");
     expect(merged.schemaVersion).toBe(SETTINGS_SCHEMA_VERSION);

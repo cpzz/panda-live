@@ -3,7 +3,7 @@ import { markdown } from "@codemirror/lang-markdown";
 import { xml } from "@codemirror/lang-xml";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { closeSearchPanel, openSearchPanel, search } from "@codemirror/search";
-import { EditorState } from "@codemirror/state";
+import { EditorState, Compartment } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 
@@ -20,6 +20,10 @@ export interface SourceEditorOptions {
   readOnly: boolean;
   /** 语法高亮语言；`.mathml`/`.mml` 使用 XML。 */
   language?: SourceLanguage;
+  /** Tab 宽度（空格数），默认 2。 */
+  tabSize?: number;
+  /** 是否显示行号，默认 true。 */
+  showLineNumbers?: boolean;
   onChange(content: string): void;
   onSelection(info: SelectionInfo): void;
 }
@@ -54,6 +58,7 @@ const pandaTheme = EditorView.theme(
     ".cm-content": {
       padding: "16px 0",
       caretColor: "var(--accent)",
+      tabSize: "var(--cm-tab-size)",
     },
     ".cm-gutters": {
       backgroundColor: "var(--editor-gutter-bg)",
@@ -87,6 +92,8 @@ function createState(
   readOnly: boolean,
   language: SourceLanguage,
   updateListener: ReturnType<typeof EditorView.updateListener.of>,
+  tabSizeCompartment: Compartment,
+  tabSize: number,
 ): EditorState {
   return EditorState.create({
     doc,
@@ -96,7 +103,7 @@ function createState(
       // 源码模式的查找替换复用 CodeMirror 搜索面板与匹配装饰（§11.5）。
       search({ top: true }),
       EditorView.lineWrapping,
-      EditorState.tabSize.of(2),
+      tabSizeCompartment.of(EditorState.tabSize.of(tabSize)),
       syntaxHighlighting(pandaHighlight),
       pandaTheme,
       EditorState.readOnly.of(readOnly),
@@ -110,9 +117,14 @@ function createState(
 export class SourceEditor {
   private readonly view: EditorView;
   private readonly updateListener: ReturnType<typeof EditorView.updateListener.of>;
+  private readonly tabSizeCompartment = new Compartment();
+  private tabSize: number;
+  private showLineNumbers: boolean;
   private suppressChange = false;
 
   constructor(private readonly options: SourceEditorOptions) {
+    this.tabSize = options.tabSize ?? 2;
+    this.showLineNumbers = options.showLineNumbers ?? true;
     this.updateListener = EditorView.updateListener.of((update) => {
       if (update.docChanged && !this.suppressChange) {
         options.onChange(update.state.doc.toString());
@@ -130,9 +142,32 @@ export class SourceEditor {
         options.readOnly,
         options.language ?? "markdown",
         this.updateListener,
+        this.tabSizeCompartment,
+        this.tabSize,
       ),
       parent: options.parent,
     });
+    this.applyShowLineNumbers();
+  }
+
+  /** 设置变更后更新 Tab 宽度，无需重建编辑器。 */
+  setTabSize(size: number): void {
+    if (size === this.tabSize) return;
+    this.tabSize = size;
+    this.view.dispatch({
+      effects: this.tabSizeCompartment.reconfigure(EditorState.tabSize.of(size)),
+    });
+  }
+
+  /** 行号通过 CSS 隐藏，避免重建编辑器丢失撤销历史。 */
+  setShowLineNumbers(enabled: boolean): void {
+    if (enabled === this.showLineNumbers) return;
+    this.showLineNumbers = enabled;
+    this.applyShowLineNumbers();
+  }
+
+  private applyShowLineNumbers(): void {
+    this.view.dom.classList.toggle("hide-line-numbers", !this.showLineNumbers);
   }
 
   get state(): EditorState {
@@ -153,7 +188,14 @@ export class SourceEditor {
   /** 用新内容重建状态（用于外部重新加载或切换标签）。 */
   reset(content: string, readOnly: boolean, language?: SourceLanguage): void {
     this.setState(
-      createState(content, readOnly, language ?? this.options.language ?? "markdown", this.updateListener),
+      createState(
+        content,
+        readOnly,
+        language ?? this.options.language ?? "markdown",
+        this.updateListener,
+        this.tabSizeCompartment,
+        this.tabSize,
+      ),
     );
   }
 

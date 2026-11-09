@@ -65,6 +65,8 @@ export interface WriteTextRequest {
   path: string;
   content: string;
   baseHash: string;
+  /** 覆盖保存时的换行符；省略时沿用文件已有换行。 */
+  eol?: "lf" | "crlf";
 }
 
 export interface WriteTextResult {
@@ -328,6 +330,7 @@ export const ipcRequestSchemas = {
     path: z.string().min(1),
     content: z.string(),
     baseHash: z.string(),
+    eol: z.enum(["lf", "crlf"]).optional(),
   }),
   "fs:readBase64": z.object({ path: z.string().min(1) }),
   "fs:readDir": z.object({ path: z.string().min(1) }),
