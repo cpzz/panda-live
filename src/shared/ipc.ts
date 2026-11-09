@@ -389,6 +389,7 @@ export const ipcRequestSchemas = {
   }),
   "ext:command": z.object({ id: z.string().min(1), args: z.unknown().optional() }),
   "fs:stat": z.object({ path: z.string().min(1) }),
+  "fs:inspectDrop": z.object({ path: z.string().min(1) }),
   "export:pdf": z.object({ html: z.string(), suggestedName: z.string().min(1) }),
   "latex:detect": z.undefined(),
   "latex:compile": z.object({ jobId: z.string().min(1), rootPath: z.string().min(1) }),
@@ -440,6 +441,7 @@ export interface IpcResponseMap {
   "ext:serialize": { source: string };
   "ext:command": unknown;
   "fs:stat": StatResult;
+  "fs:inspectDrop": { ref: FileRef; isFile: boolean };
   "export:pdf": PdfExportResult;
   "latex:detect": EngineStatus;
   "latex:compile": CompileResult;
@@ -461,6 +463,8 @@ export interface PandaApi {
     readBase64(request: ReadBase64Request): Promise<ReadBase64Result>;
     readDir(request: ReadDirRequest): Promise<ReadDirResult>;
     stat(request: StatRequest): Promise<StatResult>;
+    /** 登记系统拖入的路径并返回是否文件。 */
+    inspectDrop(request: StatRequest): Promise<{ ref: FileRef; isFile: boolean }>;
     create(request: CreateRequest): Promise<FileRef>;
     rename(request: RenameRequest): Promise<FileRef>;
     remove(request: DeleteRequest): Promise<void>;

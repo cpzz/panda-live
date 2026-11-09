@@ -27,6 +27,7 @@ const api: PandaApi = {
     readBase64: (request) => invoke("fs:readBase64", request),
     readDir: (request) => invoke("fs:readDir", request),
     stat: (request) => invoke("fs:stat", request),
+    inspectDrop: (request) => invoke("fs:inspectDrop", request),
     create: (request) => invoke("fs:create", request),
     rename: (request) => invoke("fs:rename", request),
     remove: (request) => invoke("fs:delete", request),

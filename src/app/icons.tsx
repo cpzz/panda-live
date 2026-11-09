@@ -121,6 +121,13 @@ const ICONS = {
       <path d="M3 19h18" />
     </>
   ),
+  "more-vertical": (
+    <>
+      <path d="M12 5h.01" />
+      <path d="M12 12h.01" />
+      <path d="M12 19h.01" />
+    </>
+  ),
   "arrow-up": (
     <>
       <path d="m5 12 7-7 7 7" />

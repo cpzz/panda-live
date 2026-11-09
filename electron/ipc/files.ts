@@ -49,4 +49,6 @@ export function registerFileHandlers({ files, getWindow }: FileHandlerOptions): 
   handle("fs:readBase64", async (request) => files.readBase64(request.path));
 
   handle("fs:stat", async (request) => files.stat(request.path));
+
+  handle("fs:inspectDrop", async (request) => files.inspectDrop(request.path));
 }

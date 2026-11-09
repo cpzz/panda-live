@@ -3,24 +3,15 @@ import type { FileRef } from "../shared/ipc";
 import type { WorkspaceNode, WorkspaceStore } from "../services/workspace-store";
 import { Icon } from "./icons";
 
-export interface SidebarDocument {
-  id: string;
-  name: string;
-  path: string | null;
-  dirty: boolean;
-}
-
 interface WorkspacePanelProps {
   store: WorkspaceStore;
   onOpenFile(node: WorkspaceNode, rootId: string): void;
   /** 拖入的普通文件按路径打开为文档。 */
-  onOpenPath(filePath: string): void;
+  onOpenPath(filePath: string, rootId: string | null): void;
   onRenamed(oldPath: string, ref: FileRef): void;
   onDeleted(filePath: string, isDir: boolean): void;
-  /** 当前打开的全部文档，用于“打开的文件”列表。 */
-  documents: readonly SidebarDocument[];
-  activeId: string | null;
-  onSelectDocument(id: string): void;
+  /** 当前活动的文档路径，用于在目录树中高亮。 */
+  activePath: string | null;
   /** 大纲标签页的内容。 */
   outline?: ReactNode;
 }
@@ -36,6 +27,7 @@ function NodeRow({
   depth,
   rootId,
   store,
+  activePath,
   onOpenFile,
   onRenamed,
   onDeleted,
@@ -45,6 +37,7 @@ function NodeRow({
   depth: number;
   rootId: string;
   store: WorkspaceStore;
+  activePath: string | null;
   onOpenFile(node: WorkspaceNode, rootId: string): void;
   onRenamed(oldPath: string, ref: FileRef): void;
   onDeleted(filePath: string, isDir: boolean): void;
@@ -67,13 +60,22 @@ function NodeRow({
     });
   };
 
+  const active = node.kind === "file" && activePath !== null && node.path === activePath;
+
   return (
     <>
       <div
-        className={node.kind === "dir" ? "tree-row dir" : "tree-row file"}
+        className={[
+          "tree-row",
+          node.kind === "dir" ? "dir" : "file",
+          active ? "active" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
         style={{ paddingLeft: `${8 + depth * 14}px` }}
         role="treeitem"
         aria-expanded={node.kind === "dir" ? node.expanded : undefined}
+        aria-current={active ? "page" : undefined}
       >
         {node.kind === "dir" ? (
           <button
@@ -137,6 +139,7 @@ function NodeRow({
               depth={depth + 1}
               rootId={rootId}
               store={store}
+              activePath={activePath}
               onOpenFile={onOpenFile}
               onRenamed={onRenamed}
               onDeleted={onDeleted}
@@ -156,9 +159,7 @@ export function WorkspacePanel({
   onOpenPath,
   onRenamed,
   onDeleted,
-  documents,
-  activeId,
-  onSelectDocument,
+  activePath,
   outline,
 }: WorkspacePanelProps) {
   const state = useSyncExternalStore(store.subscribe, store.getState);
@@ -166,6 +167,7 @@ export function WorkspacePanel({
   const [promptValue, setPromptValue] = useState("");
   const [dragging, setDragging] = useState(false);
   const dragDepth = useRef(0);
+  const [collapsedRoots, setCollapsedRoots] = useState<Set<string>>(() => new Set());
   const [tab, setTab] = useState<"files" | "outline">(() =>
     store.getState().roots.length > 0 ? "files" : "outline",
   );
@@ -187,6 +189,15 @@ export function WorkspacePanel({
     askName(kind === "dir" ? "新文件夹名称" : "新文件名", "", (name) => {
       if (!name) return;
       void store.createNode(rootPath, kind, name);
+    });
+  };
+
+  const toggleRoot = (rootPath: string): void => {
+    setCollapsedRoots((current) => {
+      const next = new Set(current);
+      if (next.has(rootPath)) next.delete(rootPath);
+      else next.add(rootPath);
+      return next;
     });
   };
 
@@ -224,12 +235,12 @@ export function WorkspacePanel({
       .filter((filePath) => filePath.length > 0);
     for (const filePath of paths) {
       void window.panda.fs
-        .stat({ path: filePath })
+        .inspectDrop({ path: filePath })
         .then((info) => {
           if (info.isFile) {
-            onOpenPath(filePath);
+            onOpenPath(info.ref.path, info.ref.rootId);
           } else {
-            void store.openPath(filePath, []);
+            void store.openPath(info.ref.path, []);
           }
         })
         .catch(() => undefined);
@@ -309,95 +320,90 @@ export function WorkspacePanel({
           <div className="sidebar-panel">
             {state.error && <div className="sidebar-error">{state.error}</div>}
 
-            {documents.length > 0 && (
-              <section className="open-files" aria-label="打开的文件">
-                <div className="sidebar-section-title">打开的文件</div>
-                <ul>
-                  {documents.map((document) => (
-                    <li key={document.id}>
-                      <button
-                        type="button"
-                        className={
-                          document.id === activeId ? "open-file-item active" : "open-file-item"
-                        }
-                        title={document.path ?? document.name}
-                        onClick={() => onSelectDocument(document.id)}
-                      >
-                        <Icon name="file" size={13} />
-                        <span className="open-file-name">{document.name}</span>
-                        {document.dirty && <span className="tab-dot" aria-label="未保存" />}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
-
             {state.roots.length > 0 ? (
               <div className="workspace-roots">
-                {state.roots.map((entry) => (
-                  <section className="workspace-root" key={entry.root.path}>
-                    <div className="workspace-root-header">
-                      <span className="workspace-root-name" title={entry.root.path}>
-                        {entry.root.name}
-                      </span>
-                      <span className="workspace-root-actions">
+                {state.roots.map((entry) => {
+                  const collapsed = collapsedRoots.has(entry.root.path);
+                  return (
+                    <section
+                      className={collapsed ? "workspace-root collapsed" : "workspace-root"}
+                      key={entry.root.path}
+                    >
+                      <div className="workspace-root-header">
                         <button
                           type="button"
-                          className="tree-action"
-                          title="新建文件"
-                          aria-label={`在 ${entry.root.name} 新建文件`}
-                          onClick={() => create(entry.root.path, "file")}
+                          className="tree-toggle workspace-root-toggle"
+                          aria-label={`${collapsed ? "展开" : "折叠"} ${entry.root.name}`}
+                          aria-expanded={!collapsed}
+                          title={collapsed ? "展开文件夹" : "折叠文件夹"}
+                          onClick={() => toggleRoot(entry.root.path)}
                         >
-                          <Icon name="file-plus" size={13} />
+                          <Icon name={collapsed ? "chevron-right" : "chevron-down"} size={13} />
                         </button>
-                        <button
-                          type="button"
-                          className="tree-action"
-                          title="新建文件夹"
-                          aria-label={`在 ${entry.root.name} 新建文件夹`}
-                          onClick={() => create(entry.root.path, "dir")}
-                        >
-                          <Icon name="folder-plus" size={13} />
-                        </button>
-                        <button
-                          type="button"
-                          className="tree-action"
-                          title="刷新"
-                          aria-label={`刷新 ${entry.root.name}`}
-                          onClick={() => void store.refresh(entry.root.path)}
-                        >
-                          <Icon name="refresh" size={13} />
-                        </button>
-                        <button
-                          type="button"
-                          className="tree-action"
-                          title="移除文件夹"
-                          aria-label={`移除文件夹 ${entry.root.name}`}
-                          onClick={() => void store.closeRoot(entry.root.path)}
-                        >
-                          <Icon name="close" size={13} />
-                        </button>
-                      </span>
-                    </div>
-                    <div className="tree" role="tree" aria-label={`目录树：${entry.root.name}`}>
-                      {entry.nodes.map((node) => (
-                        <NodeRow
-                          key={node.path}
-                          node={node}
-                          depth={0}
-                          rootId={entry.root.rootId}
-                          store={store}
-                          onOpenFile={onOpenFile}
-                          onRenamed={onRenamed}
-                          onDeleted={onDeleted}
-                          askName={askName}
-                        />
-                      ))}
-                      {entry.nodes.length === 0 && <p className="sidebar-empty">目录为空</p>}
-                    </div>
-                  </section>
-                ))}
+                        <span className="workspace-root-name" title={entry.root.path}>
+                          {entry.root.name}
+                        </span>
+                        <span className="workspace-root-actions">
+                          <button
+                            type="button"
+                            className="tree-action"
+                            title="新建文件"
+                            aria-label={`在 ${entry.root.name} 新建文件`}
+                            onClick={() => create(entry.root.path, "file")}
+                          >
+                            <Icon name="file-plus" size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            className="tree-action"
+                            title="新建文件夹"
+                            aria-label={`在 ${entry.root.name} 新建文件夹`}
+                            onClick={() => create(entry.root.path, "dir")}
+                          >
+                            <Icon name="folder-plus" size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            className="tree-action"
+                            title="刷新"
+                            aria-label={`刷新 ${entry.root.name}`}
+                            onClick={() => void store.refresh(entry.root.path)}
+                          >
+                            <Icon name="refresh" size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            className="tree-action"
+                            title="移除文件夹"
+                            aria-label={`移除文件夹 ${entry.root.name}`}
+                            onClick={() => void store.closeRoot(entry.root.path)}
+                          >
+                            <Icon name="close" size={13} />
+                          </button>
+                        </span>
+                      </div>
+                      {!collapsed && (
+                        <div className="tree" role="tree" aria-label={`目录树：${entry.root.name}`}>
+                          {entry.nodes.map((node) => (
+                            <NodeRow
+                              key={node.path}
+                              node={node}
+                              depth={0}
+                              rootId={entry.root.rootId}
+                              store={store}
+                              activePath={activePath}
+                              onOpenFile={onOpenFile}
+                              onRenamed={onRenamed}
+                              onDeleted={onDeleted}
+                              askName={askName}
+                            />
+                          ))}
+                          {entry.nodes.length === 0 && <p className="sidebar-empty">目录为空</p>}
+                        </div>
+                      )}
+                    </section>
+                  );
+                })}
               </div>
             ) : (
               <div className="sidebar-empty">

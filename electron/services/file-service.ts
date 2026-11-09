@@ -166,6 +166,19 @@ export class FileService {
     return { path: target, name: path.basename(target), rootId };
   }
 
+  /** 登记系统拖入的路径：文件登记其所在目录，目录直接登记为工作区根。 */
+  async inspectDrop(target: string): Promise<{ ref: FileRef; isFile: boolean }> {
+    const absolute = path.resolve(target);
+    let stats: Awaited<ReturnType<typeof fs.stat>>;
+    try {
+      stats = await fs.stat(absolute);
+    } catch (error) {
+      throw mapIoError(error, absolute);
+    }
+    const ref = stats.isFile() ? await this.registerPath(absolute) : await this.registerRoot(absolute);
+    return { ref, isFile: stats.isFile() };
+  }
+
   /** 读取文件大小与时间戳，用于打开前的大小阈值判断。见 §12.1、§14.3。 */
   async stat(filePath: string): Promise<{ size: number; mtimeMs: number; isFile: boolean }> {
     const target = await this.resolveAllowed(filePath);

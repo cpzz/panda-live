@@ -1242,15 +1242,12 @@ export function App() {
         </button>
         <button
           type="button"
-          className="toolbar-command"
+          className="icon-button toolbar-icon"
+          aria-label="命令面板"
           title="命令面板（Ctrl+Shift+P）"
           onClick={() => setPaletteOpen(true)}
         >
-          <span className="toolbar-command-glyph" aria-hidden="true">&gt;</span>
-          <span className="toolbar-command-text">搜索命令</span>
-          <span className="toolbar-command-key" aria-hidden="true">
-            Ctrl+Shift+P
-          </span>
+          <Icon name="more-vertical" />
         </button>
         <div className="toolbar-actions">
           <button
@@ -1325,11 +1322,11 @@ export function App() {
           <>
             <WorkspacePanel
               store={workspaces}
-              documents={state.documents}
-              activeId={state.activeId}
-              onSelectDocument={(id) => manager.setActive(id)}
+              activePath={
+                state.documents.find((doc) => doc.id === state.activeId)?.path ?? null
+              }
               onOpenFile={(node, rootId) => void manager.openWorkspaceFile(node.path, rootId)}
-              onOpenPath={(filePath) => void manager.openPath(filePath)}
+              onOpenPath={(filePath, rootId) => void manager.openPath(filePath, rootId)}
               onRenamed={(oldPath, ref) => void manager.repathDocument(oldPath, ref)}
               onDeleted={(filePath) => {
                 void manager.removeDocumentByPath(filePath);
@@ -1350,16 +1347,13 @@ export function App() {
           <div className="tabstrip" ref={tabstripRef}>
         <div className="tabstrip-items" role="tablist" aria-label="打开的文档" ref={tabItemsRef}>
           {state.documents.map((doc) => (
-            <button
+            <div
               key={doc.id}
-              type="button"
-              role="tab"
+              className={doc.id === state.activeId ? "tab-item active" : "tab-item"}
               draggable
-              aria-selected={doc.id === state.activeId}
-              className={doc.id === state.activeId ? "tab active" : "tab"}
-              onClick={() => manager.setActive(doc.id)}
+              title={`${doc.path ?? doc.name}（拖拽排序，中键关闭）`}
               onMouseDown={(event) => {
-                // 阻止中键在按钮上触发自动滚动。
+                // 阻止中键在标签上触发自动滚动。
                 if (event.button === 1) event.preventDefault();
               }}
               onAuxClick={(event) => {
@@ -1386,11 +1380,30 @@ export function App() {
               onDragEnd={() => {
                 dragTabRef.current = null;
               }}
-              title={`${doc.path ?? doc.name}（拖拽排序，中键关闭）`}
             >
-              {doc.dirty && <span className="tab-dot" aria-label="未保存" />}
-              <span className="tab-name">{doc.name}</span>
-            </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={doc.id === state.activeId}
+                className="tab"
+                onClick={() => manager.setActive(doc.id)}
+              >
+                {doc.dirty && <span className="tab-dot" aria-label="未保存" />}
+                <span className="tab-name">{doc.name}</span>
+              </button>
+              <button
+                type="button"
+                className="tab-close"
+                aria-label={`关闭 ${doc.name}`}
+                title={`关闭 ${doc.name}`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void manager.closeDocument(doc.id);
+                }}
+              >
+                <Icon name="close" size={12} />
+              </button>
+            </div>
           ))}
           {state.documents.length === 0 && <span className="tabstrip-empty">未打开文档</span>}
         </div>
