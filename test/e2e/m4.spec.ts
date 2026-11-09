@@ -89,9 +89,9 @@ test("M4：工作区树、查找面板与设置持久化", async () => {
     await tree.locator(".tree-name", { hasText: "alpha.md" }).click();
     await expect(page.locator(".tab-name")).toHaveText("alpha.md");
 
-    // WYSIWYG 查找面板
+    // WYSIWYG 查找面板（工具栏不提供查找按钮，使用 Ctrl+F）
     await page.getByRole("button", { name: "所见即所得", exact: true }).click();
-    await page.getByRole("button", { name: "查找", exact: true }).click();
+    await page.keyboard.press("Control+f");
     const panel = page.locator(".search-panel");
     await expect(panel).toBeVisible();
     await panel.getByLabel("查找内容").fill("Alpha");

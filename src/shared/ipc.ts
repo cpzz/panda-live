@@ -155,10 +155,12 @@ export interface SessionDocumentState {
   scrollTop?: number;
 }
 
-/** 工作区状态：根路径与展开的目录。见 doc/design.md §12.5。 */
+/** 工作区状态：可同时打开多个根目录。见 doc/design.md §12.5。 */
 export interface WorkspaceSessionState {
-  rootPath: string;
-  expanded: string[];
+  /** 兼容单根目录的旧会话。 */
+  rootPath?: string;
+  expanded?: string[];
+  roots?: { rootPath: string; expanded: string[] }[];
 }
 
 export interface WindowBoundsState {
@@ -290,8 +292,16 @@ const SessionSchema = z.object({
   recent: z.array(z.string()),
   workspace: z
     .object({
-      rootPath: z.string().min(1),
-      expanded: z.array(z.string()),
+      rootPath: z.string().min(1).optional(),
+      expanded: z.array(z.string()).optional(),
+      roots: z
+        .array(
+          z.object({
+            rootPath: z.string().min(1),
+            expanded: z.array(z.string()),
+          }),
+        )
+        .optional(),
     })
     .optional(),
   window: z
@@ -529,4 +539,6 @@ export interface PandaApi {
   onFsChanged(listener: (event: FsChangedEvent) => void): () => void;
   /** 第二实例或文件关联传入的待打开文件。 */
   onOpenPath(listener: (path: string) => void): () => void;
+  /** 系统拖入文件的真实路径；无路径时返回空字符串。 */
+  getPathForFile(file: File): string;
 }

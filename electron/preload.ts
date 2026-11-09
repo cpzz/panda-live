@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
+import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from "electron";
 import { APP_OPEN_PATH_CHANNEL, FS_CHANGED_CHANNEL } from "../src/shared/events";
 import { isMenuCommand, MENU_COMMAND_CHANNEL } from "../src/shared/menu";
 import type { FsChangedEvent, IpcEnvelope, PandaApi } from "../src/shared/ipc";
@@ -118,6 +118,8 @@ const api: PandaApi = {
       ipcRenderer.off(APP_OPEN_PATH_CHANNEL, handler);
     };
   },
+  /** 从系统拖入的文件/目录获取真实路径（Electron 32+ 已移除 File.path）。 */
+  getPathForFile: (file) => webUtils.getPathForFile(file),
 };
 
 contextBridge.exposeInMainWorld("panda", api);

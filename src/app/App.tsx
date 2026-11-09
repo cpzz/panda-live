@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from "react";
 import type { EditorState } from "@codemirror/state";
 import { renderMarkdownToHtml } from "../formats/markdown/preview";
 import { parseMarkdown } from "../formats/markdown/parse";
@@ -706,11 +706,15 @@ export function App() {
   const [tabMenu, setTabMenu] = useState<{ top: number; right: number } | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const stored = Number(localStorage.getItem("panda.sidebarWidth"));
-    return Number.isFinite(stored) && stored >= 180 ? Math.min(480, stored) : 260;
+    return Number.isFinite(stored) && stored >= 120 ? Math.min(480, stored) : 260;
   });
   const [splitRatio, setSplitRatio] = useState(50);
+  const appRef = useRef<HTMLDivElement>(null);
+  const workspacePaneRef = useRef<HTMLElement>(null);
   const sidebarWidthRef = useRef(sidebarWidth);
   sidebarWidthRef.current = sidebarWidth;
+  const splitRatioRef = useRef(splitRatio);
+  splitRatioRef.current = splitRatio;
   const tabstripRef = useRef<HTMLDivElement>(null);
   const tabItemsRef = useRef<HTMLDivElement>(null);
   const tabMenuButtonRef = useRef<HTMLButtonElement>(null);
@@ -809,12 +813,10 @@ export function App() {
       mode: stateRef.current.mode,
       sidebarVisible: workspaceStateRef.current.visible,
       recent: recentRef.current,
-      workspace: workspaceStateRef.current.root
-        ? {
-            rootPath: workspaceStateRef.current.root.path,
-            expanded: workspaces.collectExpanded(),
-          }
-        : undefined,
+      workspace:
+        workspaceStateRef.current.roots.length > 0
+          ? { roots: workspaces.collectRoots() }
+          : undefined,
     });
     await manager.saveSession(snapshot);
   };
@@ -926,7 +928,14 @@ export function App() {
       if (session && !disposed) {
         if (!session.sidebarVisible) workspaces.setVisible(false);
         if (session.workspace) {
-          await workspaces.openPath(session.workspace.rootPath, session.workspace.expanded);
+          const roots =
+            session.workspace.roots ??
+            (session.workspace.rootPath
+              ? [{ rootPath: session.workspace.rootPath, expanded: session.workspace.expanded ?? [] }]
+              : []);
+          for (const root of roots) {
+            await workspaces.openPath(root.rootPath, root.expanded);
+          }
         }
         await manager.restoreSession(session);
       }
@@ -1095,6 +1104,17 @@ export function App() {
     setCursor({ line: 1, column: 1 });
   }, [state.activeId]);
 
+  // 把拖拽结果写入 CSS 变量；不在 inline style 中重复声明，避免其他重渲染把拖拽中的宽度覆盖。
+  useLayoutEffect(() => {
+    appRef.current?.style.setProperty("--sidebar-width", `${sidebarWidth}px`);
+  }, [sidebarWidth]);
+
+  useLayoutEffect(() => {
+    const element = workspacePaneRef.current;
+    if (!element || state.mode !== "split") return;
+    element.style.setProperty("--split-ratio", `${splitRatio}%`);
+  }, [splitRatio, state.mode, state.activeId]);
+
   const paletteCommands: CommandItem[] = [
     { id: "file.new", title: "新建文档", shortcut: "Ctrl+N", run: () => manager.newDocument() },
     { id: "file.open", title: "打开文件…", shortcut: "Ctrl+O", run: () => void manager.openFiles() },
@@ -1157,15 +1177,18 @@ export function App() {
     event.preventDefault();
     const startX = event.clientX;
     const startWidth = sidebarWidthRef.current;
+    const app = appRef.current;
     const move = (moveEvent: PointerEvent): void => {
-      const next = Math.max(180, Math.min(480, startWidth + moveEvent.clientX - startX));
-      setSidebarWidth(next);
+      const next = Math.max(120, Math.min(480, startWidth + moveEvent.clientX - startX));
       sidebarWidthRef.current = next;
+      // 拖拽期间直接写 CSS 变量，避免 React 每帧重渲染导致闪烁。
+      app?.style.setProperty("--sidebar-width", `${next}px`);
     };
     const end = (): void => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", end);
       document.body.classList.remove("resizing");
+      setSidebarWidth(sidebarWidthRef.current);
       try {
         localStorage.setItem("panda.sidebarWidth", String(sidebarWidthRef.current));
       } catch {
@@ -1185,13 +1208,15 @@ export function App() {
     if (!container) return;
     const rect = container.getBoundingClientRect();
     const move = (moveEvent: PointerEvent): void => {
-      const ratio = ((moveEvent.clientX - rect.left) / rect.width) * 100;
-      setSplitRatio(Math.max(25, Math.min(75, ratio)));
+      const ratio = Math.max(25, Math.min(75, ((moveEvent.clientX - rect.left) / rect.width) * 100));
+      splitRatioRef.current = ratio;
+      container.style.setProperty("--split-ratio", `${ratio}%`);
     };
     const end = (): void => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", end);
       document.body.classList.remove("resizing");
+      setSplitRatio(splitRatioRef.current);
     };
     document.body.classList.add("resizing");
     window.addEventListener("pointermove", move);
@@ -1199,7 +1224,7 @@ export function App() {
   };
 
   return (
-    <div className="app">
+    <div className="app" ref={appRef}>
       <header className="toolbar">
         <div className="brand">
           <span className="brand-mark" aria-hidden="true" />
@@ -1270,16 +1295,6 @@ export function App() {
           <button
             type="button"
             className="icon-button toolbar-icon"
-            aria-label="查找"
-            title="查找（Ctrl+F）"
-            onClick={() => setSearchSignal((value) => value + 1)}
-            disabled={!active}
-          >
-            <Icon name="search" />
-          </button>
-          <button
-            type="button"
-            className="icon-button toolbar-icon"
             aria-label="设置"
             title="设置（Ctrl+,）"
             onClick={() => setSettingsOpen(true)}
@@ -1310,11 +1325,11 @@ export function App() {
           <>
             <WorkspacePanel
               store={workspaces}
-              width={sidebarWidth}
               documents={state.documents}
               activeId={state.activeId}
               onSelectDocument={(id) => manager.setActive(id)}
-              onOpenFile={(node) => void manager.openWorkspaceFile(node.path, workspace.root?.rootId ?? null)}
+              onOpenFile={(node, rootId) => void manager.openWorkspaceFile(node.path, rootId)}
+              onOpenPath={(filePath) => void manager.openPath(filePath)}
               onRenamed={(oldPath, ref) => void manager.repathDocument(oldPath, ref)}
               onDeleted={(filePath) => {
                 void manager.removeDocumentByPath(filePath);
@@ -1474,7 +1489,7 @@ export function App() {
       )}
 
         {active ? (
-          <main className={`workspace mode-${state.mode}`}>
+          <main ref={workspacePaneRef} className={`workspace mode-${state.mode}`}>
             <section
               className="pane wysiwyg-pane"
               hidden={state.mode !== "wysiwyg"}
@@ -1492,7 +1507,6 @@ export function App() {
               className="pane source-pane"
               hidden={state.mode === "preview" || state.mode === "wysiwyg"}
               aria-label="源码编辑"
-              style={state.mode === "split" ? { flex: `0 0 ${splitRatio}%` } : undefined}
             >
               <SourcePane
                 document={active}
@@ -1521,7 +1535,6 @@ export function App() {
               className="pane"
               hidden={state.mode === "source" || state.mode === "wysiwyg"}
               aria-label="渲染预览"
-              style={state.mode === "split" ? { flex: "1 1 0" } : undefined}
             >
               <PreviewPane
                 document={active}
@@ -1615,7 +1628,13 @@ export function App() {
             {active.dirty ? " · 未保存" : " · 已保存"}
           </span>
         )}
-        <span className="statusbar-meta">{workspace.root ? workspace.root.name : "无工作区"}</span>
+        <span className="statusbar-meta">
+          {workspace.roots.length === 0
+            ? "无工作区"
+            : workspace.roots.length === 1
+              ? (workspace.roots[0]?.root.name ?? "无工作区")
+              : `${workspace.roots.length} 个工作区`}
+        </span>
         {(problems.length > 0 || problemsOpen) && (
           <button
             type="button"

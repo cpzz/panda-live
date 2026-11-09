@@ -8,6 +8,7 @@ import type {
   RecentEntry,
   SessionState,
   TextEncoding,
+  WorkspaceSessionState,
 } from "../shared/ipc";
 import { detectFormatEntry } from "../extensions/registry";
 import { parseMarkdown } from "../formats/markdown/parse";
@@ -564,7 +565,7 @@ export class DocumentManager {
     mode: EditorMode;
     sidebarVisible: boolean;
     recent: RecentEntry[];
-    workspace?: { rootPath: string; expanded: string[] };
+    workspace?: WorkspaceSessionState;
   }): SessionState {
     return {
       documents: this.state.documents.map((doc) => ({
