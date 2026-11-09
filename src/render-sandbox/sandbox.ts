@@ -66,6 +66,11 @@ async function renderMermaidSvg(source: string, theme: DiagramTheme): Promise<st
     htmlLabels: false,
     flowchart: { htmlLabels: false },
     theme: theme === "dark" ? "dark" : "default",
+    // Mermaid 的 default 主题会给 subgraph 固定浅黄底（#ffffde），改为跟随应用配色。
+    themeVariables:
+      theme === "dark"
+        ? { clusterBkg: "#252526", clusterBorder: "#454545" }
+        : { clusterBkg: "#f3f3f3", clusterBorder: "#c9ced6" },
   });
   const id = `panda-diagram-${Math.random().toString(36).slice(2, 10)}`;
   const { svg } = await mermaid.render(id, source);

@@ -364,6 +364,8 @@ export const ipcRequestSchemas = {
   "session:save": z.object({ state: SessionSchema }),
   "recent:list": z.undefined(),
   "recent:add": z.object({ path: z.string().min(1) }),
+  "recent:remove": z.object({ path: z.string().min(1) }),
+  "recent:clear": z.undefined(),
   "draft:list": z.undefined(),
   "draft:save": z.object({ key: z.string().min(1).optional(), draft: DraftSchema }),
   "draft:remove": z.object({ key: z.string().min(1) }),
@@ -431,6 +433,8 @@ export interface IpcResponseMap {
   "session:save": void;
   "recent:list": RecentEntry[];
   "recent:add": RecentEntry[];
+  "recent:remove": RecentEntry[];
+  "recent:clear": RecentEntry[];
   "draft:list": DraftEntry[];
   "draft:save": SaveDraftResult;
   "draft:remove": void;
@@ -496,6 +500,8 @@ export interface PandaApi {
   recent: {
     list(): Promise<RecentEntry[]>;
     add(request: { path: string }): Promise<RecentEntry[]>;
+    remove(request: { path: string }): Promise<RecentEntry[]>;
+    clear(): Promise<RecentEntry[]>;
   };
   drafts: {
     list(): Promise<DraftEntry[]>;

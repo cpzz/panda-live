@@ -578,16 +578,8 @@ function TexPreviewPane({
         </ul>
       )}
       {!result && engines?.available && !busy && (
-        <p className="placeholder">保存后自动编译，或点击下方按钮手动编译。</p>
+        <p className="placeholder">保存后自动编译。</p>
       )}
-      <div className="tex-actions">
-        <button type="button" className="button small" disabled={busy} onClick={() => void compile()}>
-          {busy ? "编译中…" : "编译"}
-        </button>
-        <span className="settings-note">
-          {engines?.engines.length ? `引擎：${engines.engines[0]?.id}` : "正在检测引擎…"}
-        </span>
-      </div>
     </div>
   );
 }
@@ -1008,6 +1000,21 @@ export function App() {
     };
   }, [manager, workspaces]);
 
+  // 关闭最后一个文档回到欢迎页时刷新最近文件，避免展示打开前的旧列表。
+  useEffect(() => {
+    if (state.documents.length > 0) return;
+    let disposed = false;
+    void window.panda.recent
+      .list()
+      .then((list) => {
+        if (!disposed) setRecent(list);
+      })
+      .catch(() => undefined);
+    return () => {
+      disposed = true;
+    };
+  }, [state.documents.length]);
+
   useEffect(() => {
     return window.panda.onOpenPath((filePath) => {
       void manager.openPath(filePath);
@@ -1321,6 +1328,15 @@ export function App() {
         >
           <Icon name="save-as" />
         </button>
+        <button
+          type="button"
+          className="icon-button toolbar-icon"
+          aria-label="命令面板"
+          title="命令面板（Ctrl+Shift+P）"
+          onClick={() => setPaletteOpen(true)}
+        >
+          <Icon name="terminal" />
+        </button>
         <span className="toolbar-divider" aria-hidden="true" />
         <div className="mode-switch" role="group" aria-label="视图模式">
           {(Object.keys(MODE_LABELS) as EditorMode[]).map((mode) => (
@@ -1627,7 +1643,19 @@ export function App() {
             </div>
             {recent.length > 0 && (
               <div className="recent">
-                <h2>最近文件</h2>
+                <div className="recent-header">
+                  <h2>最近文件</h2>
+                  <button
+                    type="button"
+                    className="button small ghost"
+                    aria-label="删除所有最近文件"
+                    onClick={() => {
+                      void window.panda.recent.clear().then(setRecent);
+                    }}
+                  >
+                    删除所有
+                  </button>
+                </div>
                 <ul>
                   {recent.map((entry) => (
                     <li key={entry.path}>
@@ -1638,6 +1666,17 @@ export function App() {
                         onClick={() => void manager.openPath(entry.path)}
                       >
                         {entry.name}
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-button recent-remove"
+                        aria-label={`从最近文件移除 ${entry.name}`}
+                        title="从最近文件移除"
+                        onClick={() => {
+                          void window.panda.recent.remove({ path: entry.path }).then(setRecent);
+                        }}
+                      >
+                        <Icon name="trash" size={13} />
                       </button>
                     </li>
                   ))}

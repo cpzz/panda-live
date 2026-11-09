@@ -49,6 +49,8 @@ const api: PandaApi = {
   recent: {
     list: () => invoke("recent:list", undefined),
     add: (request) => invoke("recent:add", request),
+    remove: (request) => invoke("recent:remove", request),
+    clear: () => invoke("recent:clear", undefined),
   },
   drafts: {
     list: () => invoke("draft:list", undefined),

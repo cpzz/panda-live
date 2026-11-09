@@ -29,7 +29,7 @@ export const MAX_DIAGRAM_SOURCE_LENGTH = 1024 * 1024;
 export const DIAGRAM_RENDER_TIMEOUT_MS = 15000;
 
 /** 引擎版本参与缓存键计算；升级引擎时需同步更新。 */
-export const DIAGRAM_ENGINE_VERSION = "mermaid@11+plantuml@1.2026.9";
+export const DIAGRAM_ENGINE_VERSION = "mermaid@11+plantuml@1.2026.9+theme1";
 
 export function isBuiltinDiagramKind(value: string): value is BuiltinDiagramKind {
   return value === "plantuml" || value === "mermaid";

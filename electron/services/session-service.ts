@@ -92,4 +92,17 @@ export class SessionService {
     await writeFileAtomic(this.recentPath, `${JSON.stringify(this.recent, null, 2)}\n`);
     return this.recent;
   }
+
+  async removeRecent(filePath: string): Promise<RecentEntry[]> {
+    const entries = await this.listRecent();
+    this.recent = entries.filter((entry) => entry.path !== filePath);
+    await writeFileAtomic(this.recentPath, `${JSON.stringify(this.recent, null, 2)}\n`);
+    return this.recent;
+  }
+
+  async clearRecent(): Promise<RecentEntry[]> {
+    this.recent = [];
+    await writeFileAtomic(this.recentPath, "[]\n");
+    return this.recent;
+  }
 }

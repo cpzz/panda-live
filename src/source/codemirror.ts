@@ -16,7 +16,6 @@ import { csharp, dart, kotlin, objectiveC, scala } from "@codemirror/legacy-mode
 import { go } from "@codemirror/legacy-modes/mode/go";
 import { lua } from "@codemirror/legacy-modes/mode/lua";
 import { perl } from "@codemirror/legacy-modes/mode/perl";
-import { properties } from "@codemirror/legacy-modes/mode/properties";
 import { r } from "@codemirror/legacy-modes/mode/r";
 import { ruby } from "@codemirror/legacy-modes/mode/ruby";
 import { shell } from "@codemirror/legacy-modes/mode/shell";
@@ -28,6 +27,7 @@ import { closeSearchPanel, openSearchPanel, search } from "@codemirror/search";
 import { EditorState, Compartment, type Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
+import { iniStreamParser } from "./ini-mode";
 
 export interface SelectionInfo {
   line: number;
@@ -122,7 +122,7 @@ function languageExtension(language: SourceLanguage): Extension {
     case "stex":
       return StreamLanguage.define(stex);
     case "ini":
-      return StreamLanguage.define(properties);
+      return StreamLanguage.define(iniStreamParser);
     case "toml":
       return StreamLanguage.define(toml);
     default:
@@ -159,6 +159,7 @@ const pandaHighlight = HighlightStyle.define([
   { tag: [tags.number, tags.bool, tags.null, tags.atom], color: "var(--cm-number)" },
   { tag: [tags.typeName, tags.className, tags.namespace], color: "var(--cm-type)" },
   { tag: tags.tagName, color: "var(--cm-tag)" },
+  { tag: tags.definition(tags.tagName), color: "var(--cm-ini-section)" },
   { tag: [tags.attributeName, tags.propertyName], color: "var(--cm-attr)" },
   { tag: [tags.function(tags.variableName), tags.function(tags.propertyName)], color: "var(--cm-link)" },
   { tag: tags.variableName, color: "var(--cm-strong)" },

@@ -68,6 +68,14 @@ const ICONS = {
       <path d="m21 21-4.3-4.3" />
     </>
   ),
+  /** 命令面板：终端提示符 >_ */
+  terminal: (
+    <>
+      <rect width="18" height="18" x="3" y="3" rx="2" />
+      <path d="m7 11 2-2-2-2" />
+      <path d="M11 13h4" />
+    </>
+  ),
   settings: (
     <>
       <circle cx="12" cy="12" r="3" />

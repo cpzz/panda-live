@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
+import path from "node:path";
 import type { EngineId, EngineInfo } from "../../src/shared/ipc";
 
 interface Candidate {
@@ -24,6 +25,21 @@ function bundledTectonicPath(): string | null {
   }
 }
 
+/**
+ * 打包版由 electron-builder 的 extraResources 携带到 `resources/tectonic/`，
+ * 位于 asar 之外，可直接 spawn。
+ */
+function packagedTectonicPath(): string | null {
+  const resources = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
+  if (!resources) return null;
+  const binary = path.join(
+    resources,
+    "tectonic",
+    process.platform === "win32" ? "tectonic.exe" : "tectonic",
+  );
+  return existsSync(binary) ? binary : null;
+}
+
 /** 探测可用 TeX 引擎；优先级 Tectonic → latexmk → xelatex → 内置 Tectonic。见 doc/design.md §9.5。 */
 export function detectEngines(): EngineInfo[] {
   const candidates: Candidate[] = [
@@ -31,6 +47,10 @@ export function detectEngines(): EngineInfo[] {
     { id: "latexmk", command: "latexmk", versionArgs: ["-v"] },
     { id: "xelatex", command: "xelatex", versionArgs: ["--version"] },
   ];
+  const packaged = packagedTectonicPath();
+  if (packaged) {
+    candidates.push({ id: "tectonic", command: packaged, versionArgs: ["--version"] });
+  }
   const bundled = bundledTectonicPath();
   if (bundled) {
     candidates.push({ id: "tectonic", command: bundled, versionArgs: ["--version"] });

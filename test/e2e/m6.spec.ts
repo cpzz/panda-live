@@ -170,7 +170,8 @@ test("M6：.tex 打开后给出引擎状态", async () => {
         timeout: 15_000,
       });
     } else {
-      await expect(page.locator(".tex-actions")).toBeVisible({ timeout: 15_000 });
+      await expect(page.locator(".tex-preview")).toBeVisible({ timeout: 15_000 });
+      await expect(page.locator(".tex-preview")).not.toContainText("引擎：");
     }
   } finally {
     await app.close();

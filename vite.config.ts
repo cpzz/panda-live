@@ -91,7 +91,8 @@ function inlineBinaryAssets(): Plugin {
 }
 
 /**
- * PDF.js 渲染 CID 字体（如中文）时需要 Adobe CMap 文件，统一复制到 dist 供自定义协议读取。
+ * PDF.js 渲染 CID 字体（如中文）时需要 Adobe CMap 文件，统一复制到 dist 供自定义协议读取；
+ * 同时把应用图标复制到 dist，供主进程设置窗口图标。
  */
 function copyPdfjsCMaps(): Plugin {
   return {
@@ -100,6 +101,7 @@ function copyPdfjsCMaps(): Plugin {
       cpSync(resolve(rootDir, "node_modules/pdfjs-dist/cmaps"), resolve(rootDir, "dist/pdfjs/cmaps"), {
         recursive: true,
       });
+      copyFileSync(resolve(rootDir, "build/icon.png"), resolve(rootDir, "dist/icon.png"));
     },
   };
 }

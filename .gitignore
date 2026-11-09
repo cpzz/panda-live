@@ -5,6 +5,7 @@ node_modules/
 dist/
 dist-electron/
 release/
+build/tectonic/
 out/
 .vite/
 
@@ -19,6 +20,7 @@ playwright-report/
 .tmp-*
 .screenshots/
 .dev-user-data/
+.trae-html-share-packages/
 
 # 编辑器与系统
 .idea/

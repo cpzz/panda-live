@@ -125,6 +125,7 @@ function buildMenu(): void {
 }
 
 function createWindow(bounds?: SessionState["window"]): void {
+  const iconPath = path.join(__dirname, "../dist/icon.png");
   const window = new BrowserWindow({
     x: bounds?.x,
     y: bounds?.y,
@@ -134,6 +135,7 @@ function createWindow(bounds?: SessionState["window"]): void {
     minHeight: 640,
     show: false,
     title: "Panda Live",
+    ...(existsSync(iconPath) ? { icon: iconPath } : {}),
     autoHideMenuBar: false,
     backgroundColor: nativeTheme.shouldUseDarkColors ? "#17181a" : "#f6f7f8",
     webPreferences: {

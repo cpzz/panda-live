@@ -69,6 +69,7 @@
   --cm-type: #267f99;
   --cm-tag: #800000;
   --cm-attr: #0451a5;
+  --cm-ini-section: #000000;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -127,6 +128,7 @@
     --cm-type: #4ec9b0;
     --cm-tag: #569cd6;
     --cm-attr: #9cdcfe;
+    --cm-ini-section: #ffffff;
   }
 }
 
@@ -678,8 +680,16 @@ button {
   text-align: left;
 }
 
+.recent-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
 .recent h2 {
-  margin: 0 0 8px;
+  margin: 0;
   color: var(--muted);
   font-size: 11px;
   font-weight: 600;
@@ -697,11 +707,19 @@ button {
   list-style: none;
 }
 
+.recent li {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-right: 6px;
+}
+
 .recent li + li {
   border-top: 1px solid var(--border);
 }
 
 .recent-item {
+  flex: 1 1 auto;
   width: 100%;
   padding: 6px 12px;
   border: 0;
@@ -715,6 +733,18 @@ button {
 .recent-item:hover {
   background: var(--surface-hover);
   color: var(--accent);
+}
+
+.recent-remove {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  color: var(--muted);
+}
+
+.recent-remove:hover {
+  color: var(--danger);
+  background: var(--surface-hover);
 }
 
 /* 状态栏 */
@@ -2113,12 +2143,6 @@ body.resizing * {
 
 .tex-diagnostic.warning {
   color: var(--muted);
-}
-
-.tex-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
 }
 
 /* 源码面板与跳转行 */

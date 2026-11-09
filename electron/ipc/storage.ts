@@ -23,6 +23,10 @@ export function registerStorageHandlers({ settings, session, drafts }: StorageHa
 
   handle("recent:add", (request) => session.addRecent(request.path));
 
+  handle("recent:remove", (request) => session.removeRecent(request.path));
+
+  handle("recent:clear", () => session.clearRecent());
+
   handle("draft:list", () => drafts.list());
 
   handle("draft:save", async (request) => ({ key: await drafts.save(request.draft, request.key) }));

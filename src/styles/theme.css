@@ -60,6 +60,7 @@
   --cm-type: #267f99;
   --cm-tag: #800000;
   --cm-attr: #0451a5;
+  --cm-ini-section: #000000;
 }
 
 :root[data-theme="dark"] {
@@ -119,4 +120,5 @@
   --cm-type: #4ec9b0;
   --cm-tag: #569cd6;
   --cm-attr: #9cdcfe;
+  --cm-ini-section: #ffffff;
 }
