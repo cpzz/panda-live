@@ -1,0 +1,28 @@
+{
+  "name": "panda-live",
+  "version": "0.1.0",
+  "enabled": true,
+  "maxTabs": 12,
+  "theme": "dark",
+  "formats": [
+    {
+      "id": "markdown",
+      "extensions": [".md", ".markdown"],
+      "preview": true
+    },
+    {
+      "id": "javascript",
+      "extensions": [".js", ".ts"],
+      "preview": false
+    }
+  ],
+  "workspace": {
+    "roots": ["D:\\workspace\\panda"],
+    "settings": {
+      "tabSize": 2,
+      "showLineNumbers": true,
+      "autoSave": false
+    }
+  },
+  "notes": null
+}

@@ -1,9 +1,31 @@
 import { basicSetup } from "codemirror";
+import { css } from "@codemirror/lang-css";
+import { cpp } from "@codemirror/lang-cpp";
+import { html } from "@codemirror/lang-html";
+import { java } from "@codemirror/lang-java";
+import { javascript } from "@codemirror/lang-javascript";
+import { json } from "@codemirror/lang-json";
 import { markdown } from "@codemirror/lang-markdown";
+import { php } from "@codemirror/lang-php";
+import { python } from "@codemirror/lang-python";
+import { rust } from "@codemirror/lang-rust";
+import { sql } from "@codemirror/lang-sql";
 import { xml } from "@codemirror/lang-xml";
-import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
+import { yaml } from "@codemirror/lang-yaml";
+import { csharp, dart, kotlin, objectiveC, scala } from "@codemirror/legacy-modes/mode/clike";
+import { go } from "@codemirror/legacy-modes/mode/go";
+import { lua } from "@codemirror/legacy-modes/mode/lua";
+import { perl } from "@codemirror/legacy-modes/mode/perl";
+import { properties } from "@codemirror/legacy-modes/mode/properties";
+import { r } from "@codemirror/legacy-modes/mode/r";
+import { ruby } from "@codemirror/legacy-modes/mode/ruby";
+import { shell } from "@codemirror/legacy-modes/mode/shell";
+import { stex } from "@codemirror/legacy-modes/mode/stex";
+import { swift } from "@codemirror/legacy-modes/mode/swift";
+import { toml } from "@codemirror/legacy-modes/mode/toml";
+import { HighlightStyle, StreamLanguage, indentUnit, syntaxHighlighting } from "@codemirror/language";
 import { closeSearchPanel, openSearchPanel, search } from "@codemirror/search";
-import { EditorState, Compartment } from "@codemirror/state";
+import { EditorState, Compartment, type Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 
@@ -12,7 +34,101 @@ export interface SelectionInfo {
   column: number;
 }
 
-export type SourceLanguage = "markdown" | "xml" | "plain";
+export type SourceLanguage =
+  | "markdown"
+  | "xml"
+  | "cpp"
+  | "java"
+  | "javascript"
+  | "json"
+  | "yaml"
+  | "html"
+  | "css"
+  | "python"
+  | "sql"
+  | "php"
+  | "rust"
+  | "csharp"
+  | "go"
+  | "ruby"
+  | "kotlin"
+  | "swift"
+  | "r"
+  | "scala"
+  | "shell"
+  | "dart"
+  | "lua"
+  | "perl"
+  | "objectivec"
+  | "stex"
+  | "ini"
+  | "toml"
+  | "plain";
+
+/** 语言标识 → CodeMirror 语言扩展；未知语言退化为纯文本。 */
+function languageExtension(language: SourceLanguage): Extension {
+  switch (language) {
+    case "markdown":
+      return markdown();
+    case "xml":
+      return xml();
+    case "html":
+      return html();
+    case "css":
+      return css();
+    case "cpp":
+      return cpp();
+    case "java":
+      return java();
+    case "javascript":
+      return javascript({ jsx: true, typescript: true });
+    case "json":
+      return json();
+    case "yaml":
+      return yaml();
+    case "python":
+      return python();
+    case "sql":
+      return sql();
+    case "php":
+      return php();
+    case "rust":
+      return rust();
+    // 其余主流语言复用 CodeMirror 5 的流式解析模式。
+    case "csharp":
+      return StreamLanguage.define(csharp);
+    case "go":
+      return StreamLanguage.define(go);
+    case "ruby":
+      return StreamLanguage.define(ruby);
+    case "kotlin":
+      return StreamLanguage.define(kotlin);
+    case "swift":
+      return StreamLanguage.define(swift);
+    case "r":
+      return StreamLanguage.define(r);
+    case "scala":
+      return StreamLanguage.define(scala);
+    case "shell":
+      return StreamLanguage.define(shell);
+    case "dart":
+      return StreamLanguage.define(dart);
+    case "lua":
+      return StreamLanguage.define(lua);
+    case "perl":
+      return StreamLanguage.define(perl);
+    case "objectivec":
+      return StreamLanguage.define(objectiveC);
+    case "stex":
+      return StreamLanguage.define(stex);
+    case "ini":
+      return StreamLanguage.define(properties);
+    case "toml":
+      return StreamLanguage.define(toml);
+    default:
+      return [];
+  }
+}
 
 export interface SourceEditorOptions {
   parent: HTMLElement;
@@ -38,9 +154,19 @@ const pandaHighlight = HighlightStyle.define([
   { tag: [tags.link, tags.url], color: "var(--cm-link)" },
   { tag: tags.monospace, color: "var(--cm-code)" },
   { tag: tags.keyword, color: "var(--cm-keyword)" },
+  { tag: [tags.controlKeyword, tags.moduleKeyword, tags.operatorKeyword, tags.self], color: "var(--cm-keyword)" },
+  { tag: [tags.string, tags.special(tags.string), tags.regexp, tags.character], color: "var(--cm-string)" },
+  { tag: [tags.number, tags.bool, tags.null, tags.atom], color: "var(--cm-number)" },
+  { tag: [tags.typeName, tags.className, tags.namespace], color: "var(--cm-type)" },
+  { tag: tags.tagName, color: "var(--cm-tag)" },
+  { tag: [tags.attributeName, tags.propertyName], color: "var(--cm-attr)" },
+  { tag: [tags.function(tags.variableName), tags.function(tags.propertyName)], color: "var(--cm-link)" },
+  { tag: tags.variableName, color: "var(--cm-strong)" },
+  { tag: [tags.operator, tags.bracket], color: "var(--cm-punct)" },
   { tag: tags.meta, color: "var(--cm-muted)" },
   { tag: tags.comment, color: "var(--cm-muted)", fontStyle: "italic" },
   { tag: tags.punctuation, color: "var(--cm-punct)" },
+  { tag: tags.invalid, color: "var(--danger)" },
 ]);
 
 const pandaPhrases = EditorState.phrases.of({
@@ -116,11 +242,15 @@ function createState(
     extensions: [
       basicSetup,
       pandaPhrases,
-      language === "xml" ? xml() : language === "markdown" ? markdown() : [],
+      languageExtension(language),
       // 源码模式的查找替换复用 CodeMirror 搜索面板与匹配装饰（§11.5）。
       search({ top: true }),
       EditorView.lineWrapping,
-      tabSizeCompartment.of(EditorState.tabSize.of(tabSize)),
+      // 自动缩进使用与 Tab 宽度一致的空格数。
+      tabSizeCompartment.of([
+        EditorState.tabSize.of(tabSize),
+        indentUnit.of(" ".repeat(tabSize)),
+      ]),
       syntaxHighlighting(pandaHighlight),
       pandaTheme,
       EditorState.readOnly.of(readOnly),
@@ -172,7 +302,10 @@ export class SourceEditor {
     if (size === this.tabSize) return;
     this.tabSize = size;
     this.view.dispatch({
-      effects: this.tabSizeCompartment.reconfigure(EditorState.tabSize.of(size)),
+      effects: this.tabSizeCompartment.reconfigure([
+        EditorState.tabSize.of(size),
+        indentUnit.of(" ".repeat(size)),
+      ]),
     });
   }
 

@@ -217,6 +217,10 @@ async function bootstrap(): Promise<void> {
     path.join(__dirname, "../dist"),
     (extensionId) => extensionService.resolveProtocolRoot(extensionId),
     path.join(userDataDir, "cache", "pdf"),
+    [
+      path.join(__dirname, "../dist/pdfjs/cmaps"),
+      path.join(__dirname, "../node_modules/pdfjs-dist/cmaps"),
+    ],
   );
   registerAppHandlers();
   registerFileHandlers({ files, getWindow: () => mainWindow });

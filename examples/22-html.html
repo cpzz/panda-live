@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Panda Live 示例</title>
+    <style>
+      .page {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 24px;
+      }
+      .list li + li {
+        margin-top: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <h1 id="title">支持的格式</h1>
+      <ul class="list">
+        <li data-kind="code">代码</li>
+        <li data-kind="data">数据</li>
+        <li data-kind="doc">文档</li>
+      </ul>
+      <button type="button" id="greet">问候</button>
+    </main>
+    <script>
+      document.getElementById("greet").addEventListener("click", () => {
+        document.getElementById("title").textContent = "你好，Panda!";
+      });
+    </script>
+  </body>
+</html>

@@ -22,7 +22,7 @@ export default defineConfig(({ mode }) =>
               emptyOutDir: false,
               minify: false,
               sourcemap: mode === "development",
-              rollupOptions: { external: ["electron"] },
+              rollupOptions: { external: ["electron", "node-tectonic"] },
             },
           },
         },

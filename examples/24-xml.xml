@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 示例：命名空间、属性与 CDATA。 -->
+<catalog xmlns="https://example.com/panda"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         version="1.0">
+  <book id="b-001" available="true">
+    <title>Markdown 入门</title>
+    <author>Panda</author>
+    <price currency="CNY">59.00</price>
+    <description><![CDATA[包含 <代码> 与 & 等特殊字符的说明。]]></description>
+  </book>
+  <book id="b-002" available="false">
+    <title>编辑器设计</title>
+    <author>Panda</author>
+    <price currency="CNY">89.00</price>
+  </book>
+</catalog>

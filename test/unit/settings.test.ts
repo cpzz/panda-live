@@ -12,7 +12,6 @@ describe("设置合并", () => {
     const merged = mergeSettings({
       appearance: { theme: "purple", fontSize: 100, lineWidth: 100 },
       editor: { autoSave: "yes", tabSize: 0, eol: "crlf-ish" },
-      diagram: { theme: "dark" },
       privacy: { logLevel: "verbose" },
     });
     expect(merged.appearance.theme).toBe("system");
@@ -21,7 +20,6 @@ describe("设置合并", () => {
     expect(merged.editor.autoSave).toBe(true);
     expect(merged.editor.tabSize).toBe(1);
     expect(merged.editor.eol).toBe("preserve");
-    expect(merged.diagram.theme).toBe("dark");
     expect(merged.privacy.logLevel).toBe("info");
     expect(merged.schemaVersion).toBe(SETTINGS_SCHEMA_VERSION);
   });

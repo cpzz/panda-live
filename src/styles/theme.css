@@ -55,6 +55,11 @@
   --cm-keyword: #7a3e9d;
   --cm-muted: #8b949e;
   --cm-punct: #6b7280;
+  --cm-string: #a31515;
+  --cm-number: #098658;
+  --cm-type: #267f99;
+  --cm-tag: #800000;
+  --cm-attr: #0451a5;
 }
 
 :root[data-theme="dark"] {
@@ -109,4 +114,9 @@
   --cm-keyword: #c586c0;
   --cm-muted: #6a9955;
   --cm-punct: #9d9d9d;
+  --cm-string: #ce9178;
+  --cm-number: #b5cea8;
+  --cm-type: #4ec9b0;
+  --cm-tag: #569cd6;
+  --cm-attr: #9cdcfe;
 }

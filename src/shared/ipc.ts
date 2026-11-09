@@ -46,6 +46,13 @@ export interface SaveAsRequest {
   filters?: FileFilter[];
 }
 
+/** 关闭有未保存修改的文档时用户的三种选择。 */
+export type CloseDocumentChoice = "save" | "discard" | "cancel";
+
+export interface ConfirmCloseRequest {
+  name: string;
+}
+
 export interface ReadTextRequest {
   path: string;
 }
@@ -335,6 +342,7 @@ export const ipcRequestSchemas = {
     suggestedName: z.string().min(1),
     filters: z.array(FileFilterSchema).optional(),
   }),
+  "dialog:confirmClose": z.object({ name: z.string().min(1) }),
   "fs:readText": z.object({ path: z.string().min(1) }),
   "fs:writeText": z.object({
     path: z.string().min(1),
@@ -406,6 +414,7 @@ export interface IpcResponseMap {
   "dialog:openFiles": FileRef[];
   "dialog:openDirectory": FileRef | null;
   "dialog:saveAs": FileRef | null;
+  "dialog:confirmClose": CloseDocumentChoice;
   "fs:readText": ReadTextResult;
   "fs:writeText": WriteTextResult;
   "fs:readBase64": ReadBase64Result;
@@ -456,6 +465,8 @@ export interface PandaApi {
     openFiles(request?: OpenFilesRequest): Promise<FileRef[]>;
     openDirectory(): Promise<FileRef | null>;
     saveAs(request: SaveAsRequest): Promise<FileRef | null>;
+    /** 关闭未保存文档时的三选一确认。 */
+    confirmClose(request: ConfirmCloseRequest): Promise<CloseDocumentChoice>;
   };
   fs: {
     readText(request: ReadTextRequest): Promise<ReadTextResult>;

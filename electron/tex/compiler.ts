@@ -9,6 +9,8 @@ import { parseLatexLog } from "./log-parser";
 import { prunePdfCache } from "./pdf-cache";
 
 const COMPILE_TIMEOUT_MS = 60_000;
+/** Tectonic 首次编译需联网下载宏包，放宽超时；后续编译命中缓存。 */
+const TECTONIC_TIMEOUT_MS = 600_000;
 
 interface RunResult {
   code: number | null;
@@ -40,8 +42,21 @@ export class TexCompiler {
       throw new PandaError("E_COMPILE_FAILED", "编译根文件必须是 .tex");
     }
 
+    // 以「源码 + 引擎」作为缓存键；命中时直接复用上次的 PDF，避免每次打开都重新编译。
+    const rootBytes = new Uint8Array(await fs.readFile(root));
+    const keyInput = new Uint8Array(rootBytes.length + engine.id.length);
+    keyInput.set(rootBytes);
+    keyInput.set(new TextEncoder().encode(engine.id), rootBytes.length);
+    const pdfKey = sha256Hex(keyInput);
+    const cacheDir = path.join(this.userDataDir, "cache", "pdf");
+    const cachedPdf = path.join(cacheDir, `${pdfKey}.pdf`);
+    const cached = await fs.stat(cachedPdf).then((stats) => stats.isFile()).catch(() => false);
+    if (cached) return { ok: true, pdfKey, diagnostics: [] };
+
     this.cancel();
-    const jobDir = path.join(this.userDataDir, "compile", request.jobId);
+    // jobId 来自渲染进程，可能含 `:` 等非法路径字符，落盘前做白名单替换。
+    const jobName = request.jobId.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const jobDir = path.join(this.userDataDir, "compile", jobName);
     await fs.rm(jobDir, { recursive: true, force: true });
     await fs.mkdir(jobDir, { recursive: true });
 
@@ -62,7 +77,7 @@ export class TexCompiler {
       return {
         ok: false,
         diagnostics: [
-          { severity: "error", message: "编译超时（60 s）", file: root },
+          { severity: "error", message: "编译超时", file: root },
           ...diagnostics,
         ],
       };
@@ -81,13 +96,6 @@ export class TexCompiler {
       };
     }
 
-    const rootBytes = new Uint8Array(await fs.readFile(root));
-    const keyInput = new Uint8Array(rootBytes.length + engine.id.length);
-    keyInput.set(rootBytes);
-    keyInput.set(new TextEncoder().encode(engine.id), rootBytes.length);
-    const pdfKey = sha256Hex(keyInput);
-
-    const cacheDir = path.join(this.userDataDir, "cache", "pdf");
     await fs.mkdir(cacheDir, { recursive: true });
     await fs.copyFile(outputPdf, path.join(cacheDir, `${pdfKey}.pdf`));
     await this.cleanup(jobDir);
@@ -133,7 +141,7 @@ export class TexCompiler {
       const timer = setTimeout(() => {
         timedOut = true;
         child.kill();
-      }, COMPILE_TIMEOUT_MS);
+      }, engine.id === "tectonic" ? TECTONIC_TIMEOUT_MS : COMPILE_TIMEOUT_MS);
 
       this.current = {
         child,

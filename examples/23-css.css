@@ -1,0 +1,38 @@
+/* 示例：变量、选择器与媒体查询。 */
+:root {
+  --accent: #0b6b4f;
+  --surface: #ffffff;
+  --text: #24292f;
+}
+
+.page {
+  display: grid;
+  gap: 12px;
+  padding: 24px;
+  max-width: 720px;
+  margin: 0 auto;
+  color: var(--text);
+  background: var(--surface);
+}
+
+.page > h1 {
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.list li[data-kind="code"] {
+  border-left: 3px solid var(--accent);
+  padding-left: 8px;
+}
+
+button:hover,
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (max-width: 480px) {
+  .page {
+    padding: 16px;
+  }
+}

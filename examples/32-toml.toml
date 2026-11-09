@@ -1,0 +1,29 @@
+# 示例：表、数组、日期与多行字符串。
+title = "Panda Live 示例"
+version = "0.1.0"
+released = 2025-11-09
+debug = false
+
+[editor]
+tab_size = 2
+show_line_numbers = true
+formats = ["markdown", "python", "json", "toml"]
+
+[editor.theme]
+name = "dark"
+accent = "#41BF95"
+colors = { bg = "#1e1e1e", fg = "#d4d4d4" }
+
+[workspace]
+roots = [
+  "D:/workspace/panda",
+  "D:/workspace/notes",
+]
+
+[build]
+command = """
+npm ci
+npm run build
+"""
+
+timeout = 600

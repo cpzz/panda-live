@@ -53,6 +53,46 @@ const MODE_ICONS: Record<EditorMode, IconName> = {
   preview: "eye",
 };
 
+/** 源码编辑器支持高亮的语言标识，与 SourceLanguage 保持一致。 */
+const SOURCE_LANGUAGES = new Set<string>([
+  "markdown",
+  "xml",
+  "cpp",
+  "java",
+  "javascript",
+  "json",
+  "yaml",
+  "html",
+  "css",
+  "python",
+  "sql",
+  "php",
+  "rust",
+  "csharp",
+  "go",
+  "ruby",
+  "kotlin",
+  "swift",
+  "r",
+  "scala",
+  "shell",
+  "dart",
+  "lua",
+  "perl",
+  "objectivec",
+  "stex",
+  "ini",
+  "toml",
+  "plain",
+]);
+
+/** 具有渲染预览的内置格式；扩展格式由扩展自身提供预览。 */
+const PREVIEW_FORMATS = new Set(["markdown", "latex", "mathml", "plantuml", "mermaid"]);
+
+function formatSupportsPreview(formatId: string): boolean {
+  return PREVIEW_FORMATS.has(formatId) || Boolean(getFormatEntry(formatId)?.extensionId);
+}
+
 const ENCODING_LABELS: Record<string, string> = {
   "utf-8": "UTF-8",
   "utf-8-bom": "UTF-8 (BOM)",
@@ -114,7 +154,7 @@ function SourcePane({
 
   const language: SourceLanguage = (() => {
     const syntax = getFormatEntry(document.format)?.syntax ?? "plain";
-    return syntax === "xml" ? "xml" : syntax === "markdown" ? "markdown" : "plain";
+    return SOURCE_LANGUAGES.has(syntax as SourceLanguage) ? (syntax as SourceLanguage) : "plain";
   })();
 
   useEffect(() => {
@@ -521,7 +561,9 @@ function TexPreviewPane({
     <div className="preview-pane tex-preview">
       {error && <p className="placeholder">{error}</p>}
       {document.dirty && <p className="placeholder">当前有未保存修改，编译仅使用磁盘内容。</p>}
-      {busy && <p className="placeholder">编译中…</p>}
+      {busy && (
+        <p className="placeholder">编译中…（首次编译需下载 TeX 宏包，可能需要几分钟）</p>
+      )}
       {result && result.ok && result.pdfKey ? (
         <PdfPreview pdfKey={result.pdfKey} />
       ) : null}
@@ -1290,7 +1332,12 @@ export function App() {
               aria-label={MODE_LABELS[mode]}
               title={MODE_LABELS[mode]}
               onClick={() => manager.setMode(mode)}
-              disabled={!active || (mode === "wysiwyg" && active.format !== "markdown")}
+              disabled={
+                !active ||
+                (mode === "wysiwyg" && active.format !== "markdown") ||
+                ((mode === "split" || mode === "preview") &&
+                  !formatSupportsPreview(active.format))
+              }
             >
               <Icon name={MODE_ICONS[mode]} />
             </button>

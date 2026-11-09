@@ -10,7 +10,7 @@ import type {
   TextEncoding,
   WorkspaceSessionState,
 } from "../shared/ipc";
-import { detectFormatEntry } from "../extensions/registry";
+import { detectFormatEntry, getFormatEntry } from "../extensions/registry";
 import { parseMarkdown } from "../formats/markdown/parse";
 import type { SaveEol } from "../shared/settings";
 import { decideOpenPolicy, preferSourceByBlocks } from "./open-policy";
@@ -82,6 +82,13 @@ function basename(filePath: string): string {
 
 function formatTime(ms: number): string {
   return new Date(ms).toLocaleString("zh-CN", { hour12: false });
+}
+
+/** 具有渲染预览的内置格式；扩展格式由扩展自身提供预览。 */
+const PREVIEW_FORMATS = new Set(["markdown", "latex", "mathml", "plantuml", "mermaid"]);
+
+function supportsPreview(formatId: string): boolean {
+  return PREVIEW_FORMATS.has(formatId) || Boolean(getFormatEntry(formatId)?.extensionId);
 }
 
 /**
@@ -205,6 +212,10 @@ export class DocumentManager {
       this.notify("error", "该格式不支持所见即所得编辑，请使用源码模式");
       return;
     }
+    if ((mode === "preview" || mode === "split") && active && !supportsPreview(active.format)) {
+      this.notify("error", "该格式没有渲染预览，请使用源码模式");
+      return;
+    }
     const firstSwitch = !this.modeSwitchNoticeShown;
     this.modeSwitchNoticeShown = true;
     this.commit({ mode });
@@ -280,13 +291,13 @@ export class DocumentManager {
     const doc = this.findDocument(id);
     if (!doc) return;
     if (doc.dirty) {
-      const shouldSave = window.confirm(`是否保存对“${doc.name}”的修改？`);
-      if (shouldSave) {
+      // 三选一：保存 / 不保存 / 取消；取消必须真正中止关闭。
+      const choice = await window.panda.dialog.confirmClose({ name: doc.name });
+      if (choice === "cancel") return;
+      if (choice === "save") {
         await this.saveDocument(id);
         const current = this.findDocument(id);
         if (current?.dirty) return;
-      } else if (!window.confirm("放弃未保存的修改并关闭标签？")) {
-        return;
       }
     }
     await this.releaseDocumentResources(doc);
@@ -649,11 +660,13 @@ export class DocumentManager {
       this.commit({
         documents: [...this.state.documents, document],
         activeId: document.id,
-        mode: forceSource
+        mode: !supportsPreview(document.format)
           ? "source"
-          : document.format === "markdown" || this.state.mode !== "wysiwyg"
-            ? this.state.mode
-            : "source",
+          : forceSource
+            ? "source"
+            : document.format === "markdown" || this.state.mode !== "wysiwyg"
+              ? this.state.mode
+              : "source",
       });
       if (blockLimit) {
         this.notify("info", "文档顶层块超过 8000，已默认切换到源码模式");

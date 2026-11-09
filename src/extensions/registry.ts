@@ -11,6 +11,14 @@ export interface FormatEntry {
   syntax: LanguageSyntax;
 }
 
+const CODE_CAPABILITIES: FormatCapabilities = {
+  source: true,
+  wysiwyg: false,
+  preview: "none",
+  outline: false,
+  exportHtml: false,
+};
+
 const BUILTIN_CAPABILITIES: Record<BuiltinDocumentFormat, FormatCapabilities> = {
   markdown: { source: true, wysiwyg: true, preview: "inline", outline: true, exportHtml: true },
   latex: { source: true, wysiwyg: false, preview: "none", outline: true, exportHtml: false },
@@ -18,6 +26,32 @@ const BUILTIN_CAPABILITIES: Record<BuiltinDocumentFormat, FormatCapabilities> = 
   plantuml: { source: true, wysiwyg: false, preview: "inline", outline: false, exportHtml: false },
   mermaid: { source: true, wysiwyg: false, preview: "inline", outline: false, exportHtml: false },
   text: { source: true, wysiwyg: false, preview: "none", outline: false, exportHtml: false },
+  cpp: CODE_CAPABILITIES,
+  java: CODE_CAPABILITIES,
+  javascript: CODE_CAPABILITIES,
+  json: CODE_CAPABILITIES,
+  yaml: CODE_CAPABILITIES,
+  html: CODE_CAPABILITIES,
+  css: CODE_CAPABILITIES,
+  python: CODE_CAPABILITIES,
+  sql: CODE_CAPABILITIES,
+  php: CODE_CAPABILITIES,
+  rust: CODE_CAPABILITIES,
+  xml: CODE_CAPABILITIES,
+  csharp: CODE_CAPABILITIES,
+  go: CODE_CAPABILITIES,
+  ruby: CODE_CAPABILITIES,
+  kotlin: CODE_CAPABILITIES,
+  swift: CODE_CAPABILITIES,
+  r: CODE_CAPABILITIES,
+  scala: CODE_CAPABILITIES,
+  shell: CODE_CAPABILITIES,
+  dart: CODE_CAPABILITIES,
+  lua: CODE_CAPABILITIES,
+  perl: CODE_CAPABILITIES,
+  objectivec: CODE_CAPABILITIES,
+  ini: CODE_CAPABILITIES,
+  toml: CODE_CAPABILITIES,
 };
 
 const BUILTIN_EXTENSIONS: Record<BuiltinDocumentFormat, string[]> = {
@@ -27,6 +61,68 @@ const BUILTIN_EXTENSIONS: Record<BuiltinDocumentFormat, string[]> = {
   plantuml: [".puml", ".plantuml"],
   mermaid: [".mmd", ".mermaid"],
   text: [],
+  cpp: [".c", ".h", ".cc", ".cpp", ".cxx", ".hh", ".hpp", ".hxx", ".ino"],
+  java: [".java"],
+  javascript: [".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts"],
+  json: [".json", ".jsonc", ".json5"],
+  yaml: [".yaml", ".yml"],
+  html: [".html", ".htm", ".xhtml"],
+  css: [".css", ".scss", ".less", ".sass"],
+  python: [".py", ".pyw", ".pyi"],
+  sql: [".sql"],
+  php: [".php", ".phtml"],
+  rust: [".rs"],
+  xml: [".xml", ".svg", ".xsd", ".xsl", ".xslt", ".plist"],
+  csharp: [".cs", ".csx"],
+  go: [".go"],
+  ruby: [".rb", ".rake", ".gemspec"],
+  kotlin: [".kt", ".kts"],
+  swift: [".swift"],
+  r: [".r"],
+  scala: [".scala", ".sc"],
+  shell: [".sh", ".bash", ".zsh", ".ksh"],
+  dart: [".dart"],
+  lua: [".lua"],
+  perl: [".pl", ".pm"],
+  objectivec: [".m", ".mm"],
+  ini: [".ini", ".cfg", ".properties"],
+  toml: [".toml"],
+};
+
+/** 内置格式对应的源码高亮语法。 */
+const BUILTIN_SYNTAX: Record<BuiltinDocumentFormat, LanguageSyntax> = {
+  markdown: "markdown",
+  latex: "stex",
+  mathml: "xml",
+  plantuml: "plain",
+  mermaid: "plain",
+  text: "plain",
+  cpp: "cpp",
+  java: "java",
+  javascript: "javascript",
+  json: "json",
+  yaml: "yaml",
+  html: "html",
+  css: "css",
+  python: "python",
+  sql: "sql",
+  php: "php",
+  rust: "rust",
+  xml: "xml",
+  csharp: "csharp",
+  go: "go",
+  ruby: "ruby",
+  kotlin: "kotlin",
+  swift: "swift",
+  r: "r",
+  scala: "scala",
+  shell: "shell",
+  dart: "dart",
+  lua: "lua",
+  perl: "perl",
+  objectivec: "objectivec",
+  ini: "ini",
+  toml: "toml",
 };
 
 let extensionEntries: ExtensionFormatInfo[] = [];
@@ -38,8 +134,8 @@ function builtinEntry(format: BuiltinDocumentFormat): FormatEntry {
     extensionId: null,
     extensions: BUILTIN_EXTENSIONS[format],
     capabilities: BUILTIN_CAPABILITIES[format],
-    language: format === "mathml" ? "xml" : format === "markdown" ? "markdown" : "plain",
-    syntax: format === "mathml" ? "xml" : format === "markdown" ? "markdown" : "plain",
+    language: BUILTIN_SYNTAX[format],
+    syntax: BUILTIN_SYNTAX[format],
   };
 }
 
@@ -94,7 +190,7 @@ export function detectFormatEntry(fileName: string): FormatEntry | null {
 
 export function getFormatEntry(formatId: string): FormatEntry | null {
   const builtin = (
-    ["markdown", "latex", "mathml", "plantuml", "mermaid", "text"] as BuiltinDocumentFormat[]
+    Object.keys(BUILTIN_CAPABILITIES) as BuiltinDocumentFormat[]
   ).find((item) => item === formatId);
   if (builtin) return builtinEntry(builtin);
   return getExtensionFormatEntries().find((entry) => entry.id === formatId) ?? null;

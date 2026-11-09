@@ -1,0 +1,28 @@
+# 示例：映射、列表、锚点与多行字符串。
+app:
+  name: panda-live
+  version: 0.1.0
+  debug: false
+  ports:
+    - 3000
+    - 5173
+
+editor:
+  tabSize: 2
+  showLineNumbers: true
+  autoSave: false
+  theme: dark
+  formats: &code-formats
+    - markdown
+    - javascript
+    - python
+
+build:
+  formats: *code-formats
+  command: |
+    npm ci
+    npm run build
+  timeout: 600
+  notes: >
+    使用 2 空格缩进，
+    并保留末尾换行。

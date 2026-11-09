@@ -30,11 +30,12 @@ export function getDiagramService(): DiagramRenderService {
   return service;
 }
 
+/** 图表渲染主题与应用主题保持一致，保证源码与渲染同步。 */
 export function currentDiagramTheme(): DiagramTheme {
   return resolveTheme();
 }
 
-/** 主题切换时通知调用方重渲染（主题参与缓存键）。显式主题与系统主题都生效。 */
+/** 主题切换时通知调用方重渲染（主题参与缓存键）。 */
 export function onDiagramThemeChange(listener: (theme: DiagramTheme) => void): () => void {
   return onThemeChange(listener);
 }

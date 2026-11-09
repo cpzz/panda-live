@@ -1,4 +1,6 @@
 import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { createRequire } from "node:module";
 import type { EngineId, EngineInfo } from "../../src/shared/ipc";
 
 interface Candidate {
@@ -7,16 +9,36 @@ interface Candidate {
   versionArgs: string[];
 }
 
-const CANDIDATES: Candidate[] = [
-  { id: "tectonic", command: "tectonic", versionArgs: ["--version"] },
-  { id: "latexmk", command: "latexmk", versionArgs: ["-v"] },
-  { id: "xelatex", command: "xelatex", versionArgs: ["--version"] },
-];
+/**
+ * 通过 npm 依赖 `node-tectonic` 内置的 Tectonic 可执行文件。
+ * 未安装（如 `--omit=optional`）或打包后缺少 node_modules 时返回 null。
+ */
+function bundledTectonicPath(): string | null {
+  try {
+    const requireFromHere = createRequire(import.meta.url);
+    const mod = requireFromHere("node-tectonic") as { binaryPath?: () => string };
+    const binary = mod.binaryPath?.();
+    return binary && existsSync(binary) ? binary : null;
+  } catch {
+    return null;
+  }
+}
 
-/** 探测可用 TeX 引擎；优先级 Tectonic → latexmk → xelatex。见 doc/design.md §9.5。 */
+/** 探测可用 TeX 引擎；优先级 Tectonic → latexmk → xelatex → 内置 Tectonic。见 doc/design.md §9.5。 */
 export function detectEngines(): EngineInfo[] {
+  const candidates: Candidate[] = [
+    { id: "tectonic", command: "tectonic", versionArgs: ["--version"] },
+    { id: "latexmk", command: "latexmk", versionArgs: ["-v"] },
+    { id: "xelatex", command: "xelatex", versionArgs: ["--version"] },
+  ];
+  const bundled = bundledTectonicPath();
+  if (bundled) {
+    candidates.push({ id: "tectonic", command: bundled, versionArgs: ["--version"] });
+  }
+
   const engines: EngineInfo[] = [];
-  for (const candidate of CANDIDATES) {
+  for (const candidate of candidates) {
+    if (engines.some((engine) => engine.id === candidate.id)) continue;
     const result = spawnSync(candidate.command, candidate.versionArgs, {
       encoding: "utf8",
       timeout: 5_000,

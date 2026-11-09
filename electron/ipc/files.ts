@@ -1,11 +1,82 @@
-import { dialog, type BrowserWindow, type OpenDialogOptions, type SaveDialogOptions } from "electron";
+import {
+  dialog,
+  type BrowserWindow,
+  type MessageBoxOptions,
+  type OpenDialogOptions,
+  type SaveDialogOptions,
+} from "electron";
 import type { FileFilter } from "../../src/shared/ipc";
 import type { FileService } from "../services/file-service";
 import { handle } from "./router";
 
+const CODE_EXTENSIONS = [
+  "c",
+  "h",
+  "cc",
+  "cpp",
+  "cxx",
+  "hh",
+  "hpp",
+  "hxx",
+  "ino",
+  "java",
+  "js",
+  "jsx",
+  "mjs",
+  "cjs",
+  "ts",
+  "tsx",
+  "json",
+  "jsonc",
+  "yaml",
+  "yml",
+  "html",
+  "htm",
+  "xhtml",
+  "css",
+  "scss",
+  "less",
+  "py",
+  "sql",
+  "php",
+  "rs",
+  "xml",
+  "svg",
+  "cs",
+  "csx",
+  "go",
+  "rb",
+  "rake",
+  "gemspec",
+  "kt",
+  "kts",
+  "swift",
+  "r",
+  "scala",
+  "sc",
+  "sh",
+  "bash",
+  "zsh",
+  "ksh",
+  "dart",
+  "lua",
+  "pl",
+  "pm",
+  "m",
+  "mm",
+  "ini",
+  "cfg",
+  "properties",
+  "toml",
+];
+
+const MARKDOWN_EXTENSIONS = ["md", "markdown", "mdown", "mkd", "qmd", "rmd", "mdx"];
+
 const MARKDOWN_FILTERS: FileFilter[] = [
-  { name: "Markdown", extensions: ["md", "markdown", "mdown", "mkd", "qmd", "rmd", "mdx"] },
-  { name: "文本文件", extensions: ["txt", "log", "json", "yaml", "yml"] },
+  { name: "所有支持的文件", extensions: [...MARKDOWN_EXTENSIONS, ...CODE_EXTENSIONS, "tex", "latex"] },
+  { name: "代码文件", extensions: CODE_EXTENSIONS },
+  { name: "Markdown", extensions: MARKDOWN_EXTENSIONS },
+  { name: "文本文件", extensions: ["txt", "log", "puml", "mmd"] },
   { name: "所有文件", extensions: ["*"] },
 ];
 
@@ -40,6 +111,26 @@ export function registerFileHandlers({ files, getWindow }: FileHandlerOptions): 
       : await dialog.showSaveDialog(options);
     if (result.canceled || !result.filePath) return null;
     return files.registerPath(result.filePath);
+  });
+
+  // 关闭未保存文档的三选一确认：保存 / 不保存 / 取消。
+  handle("dialog:confirmClose", async (request) => {
+    const options: MessageBoxOptions = {
+      type: "warning",
+      buttons: ["保存", "不保存", "取消"],
+      defaultId: 0,
+      cancelId: 2,
+      noLink: true,
+      message: `是否保存对“${request.name}”的修改？`,
+      detail: "选择“不保存”将丢弃本次修改。",
+    };
+    const window = getWindow();
+    const result = window
+      ? await dialog.showMessageBox(window, options)
+      : await dialog.showMessageBox(options);
+    if (result.response === 0) return "save" as const;
+    if (result.response === 1) return "discard" as const;
+    return "cancel" as const;
   });
 
   handle("fs:readText", async (request) => files.readText(request.path));

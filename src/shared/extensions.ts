@@ -15,7 +15,37 @@ export interface ExtensionFormatContribution {
   language?: string;
 }
 
-export type LanguageSyntax = "markdown" | "stex" | "xml" | "plain" | "regex";
+export type LanguageSyntax =
+  | "markdown"
+  | "stex"
+  | "xml"
+  | "plain"
+  | "regex"
+  | "cpp"
+  | "java"
+  | "javascript"
+  | "json"
+  | "yaml"
+  | "html"
+  | "css"
+  | "python"
+  | "sql"
+  | "php"
+  | "rust"
+  | "csharp"
+  | "go"
+  | "ruby"
+  | "kotlin"
+  | "swift"
+  | "r"
+  | "scala"
+  | "shell"
+  | "dart"
+  | "lua"
+  | "perl"
+  | "objectivec"
+  | "ini"
+  | "toml";
 
 export interface ExtensionLanguageContribution {
   id: string;

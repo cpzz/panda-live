@@ -138,21 +138,6 @@ export function SettingsDialog({
           </section>
 
           <section className="settings-group">
-            <h3>图表</h3>
-            <label className="settings-row">
-              <span>渲染主题</span>
-              <select
-                value={draft.diagram.theme}
-                onChange={(event) => patch("diagram", { theme: event.target.value })}
-              >
-                <option value="system">跟随系统</option>
-                <option value="light">浅色</option>
-                <option value="dark">深色</option>
-              </select>
-            </label>
-          </section>
-
-          <section className="settings-group">
             <h3>隐私</h3>
             <label className="settings-row">
               <span>日志级别</span>

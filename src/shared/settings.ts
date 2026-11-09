@@ -22,9 +22,6 @@ export interface Settings {
     /** 保存时的换行符；`preserve` 沿用文件已有换行。 */
     eol: SaveEol;
   };
-  diagram: {
-    theme: "system" | "light" | "dark";
-  };
   privacy: {
     logLevel: "error" | "warn" | "info" | "debug";
   };
@@ -37,7 +34,6 @@ export const DEFAULT_SETTINGS: Settings = {
   schemaVersion: SETTINGS_SCHEMA_VERSION,
   appearance: { theme: "system", fontSize: 15, lineWidth: 860 },
   editor: { autoSave: true, tabSize: 2, showLineNumbers: true, eol: "preserve" },
-  diagram: { theme: "system" },
   privacy: { logLevel: "info" },
 };
 
@@ -65,7 +61,6 @@ export function mergeSettings(raw: unknown): Settings {
   const source = isRecord(raw) ? raw : {};
   const appearance = isRecord(source.appearance) ? source.appearance : {};
   const editor = isRecord(source.editor) ? source.editor : {};
-  const diagram = isRecord(source.diagram) ? source.diagram : {};
   const privacy = isRecord(source.privacy) ? source.privacy : {};
 
   return {
@@ -86,10 +81,6 @@ export function mergeSettings(raw: unknown): Settings {
           ? editor.showLineNumbers
           : DEFAULT_SETTINGS.editor.showLineNumbers,
       eol: pickEnum(editor.eol, ["preserve", "lf", "crlf"] as const, "preserve"),
-    },
-    diagram: {
-      ...diagram,
-      theme: pickEnum(diagram.theme, ["system", "light", "dark"] as const, "system"),
     },
     privacy: {
       ...privacy,

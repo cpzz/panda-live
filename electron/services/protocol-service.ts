@@ -43,6 +43,11 @@ export function registerPandaSchemes(): void {
       scheme: "panda-pdf",
       privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true, corsEnabled: true },
     },
+    {
+      // PDF.js 的 Adobe CMap：只读取 dist 内的只读资源。见 §9.5。
+      scheme: "panda-cmaps",
+      privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true, corsEnabled: true },
+    },
   ]);
 }
 
@@ -177,6 +182,37 @@ function registerPdfProtocol(pdfCacheRoot: string): void {
 }
 
 /**
+ * PDF.js CMap 资源：`panda-cmaps://local/<name>.bcmap`，只允许 `.bcmap` 文件名，
+ * 依次在构建产物与 node_modules 中查找（开发态回退）。见 doc/design.md §9.5。
+ */
+function registerCmapProtocol(roots: string[]): void {
+  protocol.handle("panda-cmaps", async (request) => {
+    try {
+      const url = new URL(request.url);
+      const name = decodeURIComponent(url.pathname.replace(/^\/+/, ""));
+      if (!/^[A-Za-z0-9._-]+\.bcmap$/.test(name)) return pdfErrorResponse(400, "Invalid cmap name");
+      for (const root of roots) {
+        const target = path.join(root, name);
+        if (!isPathInside(root, target)) continue;
+        const body = await fs.readFile(target).catch(() => null);
+        if (!body) continue;
+        return new Response(body, {
+          status: 200,
+          headers: {
+            "content-type": "application/octet-stream",
+            "content-length": String(body.byteLength),
+            "access-control-allow-origin": "*",
+          },
+        });
+      }
+      return pdfErrorResponse(404, "Not found");
+    } catch {
+      return pdfErrorResponse(404, "Not found");
+    }
+  });
+}
+
+/**
  * 资源协议处理器：只接受 `rootId + 相对路径`，拒绝绝对路径、`..` 与符号链接逃逸。
  * 见 doc/design.md §12.6、§13.5。
  */
@@ -185,10 +221,12 @@ export function handlePandaProtocols(
   distRoot?: string,
   resolveExtensionRoot?: (extensionId: string) => string | null,
   pdfCacheRoot?: string,
+  cmapRoots?: string[],
 ): void {
   if (distRoot) registerSandboxProtocol(distRoot);
   if (resolveExtensionRoot) registerExtensionProtocol(resolveExtensionRoot);
   if (pdfCacheRoot) registerPdfProtocol(pdfCacheRoot);
+  if (cmapRoots && cmapRoots.length > 0) registerCmapProtocol(cmapRoots);
 
   protocol.handle("panda-res", async (request) => {
     try {

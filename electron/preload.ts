@@ -20,6 +20,7 @@ const api: PandaApi = {
     openFiles: (request) => invoke("dialog:openFiles", request),
     openDirectory: () => invoke("dialog:openDirectory", undefined),
     saveAs: (request) => invoke("dialog:saveAs", request),
+    confirmClose: (request) => invoke("dialog:confirmClose", request),
   },
   fs: {
     readText: (request) => invoke("fs:readText", request),

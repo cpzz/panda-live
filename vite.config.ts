@@ -1,6 +1,6 @@
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { copyFileSync, mkdirSync, readFileSync } from "node:fs";
+import { copyFileSync, cpSync, mkdirSync, readFileSync } from "node:fs";
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 
@@ -34,7 +34,7 @@ function contentSecurityPolicy(): Plugin {
         dev
           ? "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'"
           : "script-src 'self' 'wasm-unsafe-eval'",
-        dev ? "connect-src 'self' ws: panda-res: panda-pdf:" : "connect-src 'self' panda-res: panda-pdf:",
+        dev ? "connect-src 'self' ws: panda-res: panda-pdf: panda-cmaps:" : "connect-src 'self' panda-res: panda-pdf: panda-cmaps:",
       ].join("; ");
       return [
         {
@@ -90,9 +90,23 @@ function inlineBinaryAssets(): Plugin {
   };
 }
 
+/**
+ * PDF.js 渲染 CID 字体（如中文）时需要 Adobe CMap 文件，统一复制到 dist 供自定义协议读取。
+ */
+function copyPdfjsCMaps(): Plugin {
+  return {
+    name: "panda-copy-pdfjs-cmaps",
+    writeBundle() {
+      cpSync(resolve(rootDir, "node_modules/pdfjs-dist/cmaps"), resolve(rootDir, "dist/pdfjs/cmaps"), {
+        recursive: true,
+      });
+    },
+  };
+}
+
 export default defineConfig({
   base: "./",
-  plugins: [react(), contentSecurityPolicy(), copyExtensionHost(), inlineBinaryAssets()],
+  plugins: [react(), contentSecurityPolicy(), copyExtensionHost(), inlineBinaryAssets(), copyPdfjsCMaps()],
   build: {
     target: "esnext",
     outDir: "dist",

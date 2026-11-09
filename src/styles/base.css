@@ -64,6 +64,11 @@
   --cm-keyword: #7a3e9d;
   --cm-muted: #8b949e;
   --cm-punct: #6b7280;
+  --cm-string: #a31515;
+  --cm-number: #098658;
+  --cm-type: #267f99;
+  --cm-tag: #800000;
+  --cm-attr: #0451a5;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -117,6 +122,11 @@
     --cm-keyword: #c586c0;
     --cm-muted: #6a9955;
     --cm-punct: #9d9d9d;
+    --cm-string: #ce9178;
+    --cm-number: #b5cea8;
+    --cm-type: #4ec9b0;
+    --cm-tag: #569cd6;
+    --cm-attr: #9cdcfe;
   }
 }
 
@@ -2072,7 +2082,18 @@ body.resizing * {
   background: #ffffff;
   border: 1px solid var(--border);
   border-radius: 2px;
+  box-shadow: var(--shadow-sm);
   overflow: hidden;
+}
+
+/* 深色主题下自动反转 PDF 页面，仅作用于位图内容。 */
+.pdf-viewer.pdf-invert .pdf-page {
+  background: #1b1b1b;
+  border-color: #3a3a3a;
+}
+
+.pdf-viewer.pdf-invert canvas {
+  filter: invert(1) hue-rotate(180deg);
 }
 
 .pdf-page-label {
