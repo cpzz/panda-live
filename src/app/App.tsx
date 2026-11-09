@@ -30,7 +30,7 @@ import type { Settings } from "../shared/settings";
 import { describeError, getErrorCode } from "../shared/errors";
 import { RecoveryDialog } from "./RecoveryDialog";
 import { CommandPalette, type CommandItem } from "./CommandPalette";
-import { Icon, type IconName } from "./icons";
+import { Icon, PandaMark, type IconName } from "./icons";
 import { OutlinePanel } from "./OutlinePanel";
 import { PdfPreview } from "./PdfPreview";
 import { PerformanceOverlay } from "./PerformanceOverlay";
@@ -1226,10 +1226,10 @@ export function App() {
   return (
     <div className="app" ref={appRef}>
       <header className="toolbar">
-        <div className="brand">
-          <span className="brand-mark" aria-hidden="true" />
-          <span className="brand-name">Panda Live</span>
+        <div className="brand" title="Panda Live">
+          <PandaMark size={19} />
         </div>
+        <span className="toolbar-divider" aria-hidden="true" />
         <button
           type="button"
           className={workspace.visible ? "icon-button sidebar-toggle active" : "icon-button sidebar-toggle"}
@@ -1240,65 +1240,46 @@ export function App() {
         >
           <Icon name={workspace.visible ? "sidebar-close" : "sidebar-open"} />
         </button>
+        <div className="toolbar-spacer" />
         <button
           type="button"
           className="icon-button toolbar-icon"
-          aria-label="命令面板"
-          title="命令面板（Ctrl+Shift+P）"
-          onClick={() => setPaletteOpen(true)}
+          aria-label="新建"
+          title="新建（Ctrl+N）"
+          onClick={() => manager.newDocument()}
         >
-          <Icon name="more-vertical" />
+          <Icon name="file-plus" />
         </button>
-        <div className="toolbar-actions">
-          <button
-            type="button"
-            className="icon-button toolbar-icon"
-            aria-label="新建"
-            title="新建（Ctrl+N）"
-            onClick={() => manager.newDocument()}
-          >
-            <Icon name="file-plus" />
-          </button>
-          <button
-            type="button"
-            className="icon-button toolbar-icon"
-            aria-label="打开"
-            title="打开（Ctrl+O）"
-            onClick={() => void manager.openFiles()}
-          >
-            <Icon name="folder-open" />
-          </button>
-          <button
-            type="button"
-            className="icon-button toolbar-icon"
-            aria-label="保存"
-            title="保存（Ctrl+S）"
-            onClick={() => void manager.saveDocument(state.activeId ?? "")}
-            disabled={!active}
-          >
-            <Icon name="save" />
-          </button>
-          <button
-            type="button"
-            className="icon-button toolbar-icon"
-            aria-label="另存为"
-            title="另存为（Ctrl+Shift+S）"
-            onClick={() => active && void manager.saveDocumentAs(active.id)}
-            disabled={!active}
-          >
-            <Icon name="save-as" />
-          </button>
-          <span className="toolbar-divider" aria-hidden="true" />
-          <button
-            type="button"
-            className="icon-button toolbar-icon"
-            aria-label="设置"
-            title="设置（Ctrl+,）"
-            onClick={() => setSettingsOpen(true)}
-          >
-            <Icon name="settings" />
-          </button>
-        </div>
+        <button
+          type="button"
+          className="icon-button toolbar-icon"
+          aria-label="打开"
+          title="打开（Ctrl+O）"
+          onClick={() => void manager.openFiles()}
+        >
+          <Icon name="folder-open" />
+        </button>
+        <button
+          type="button"
+          className="icon-button toolbar-icon"
+          aria-label="保存"
+          title="保存（Ctrl+S）"
+          onClick={() => void manager.saveDocument(state.activeId ?? "")}
+          disabled={!active}
+        >
+          <Icon name="save" />
+        </button>
+        <button
+          type="button"
+          className="icon-button toolbar-icon"
+          aria-label="另存为"
+          title="另存为（Ctrl+Shift+S）"
+          onClick={() => active && void manager.saveDocumentAs(active.id)}
+          disabled={!active}
+        >
+          <Icon name="save-as" />
+        </button>
+        <span className="toolbar-divider" aria-hidden="true" />
         <div className="mode-switch" role="group" aria-label="视图模式">
           {(Object.keys(MODE_LABELS) as EditorMode[]).map((mode) => (
             <button
@@ -1315,6 +1296,16 @@ export function App() {
             </button>
           ))}
         </div>
+        <span className="toolbar-divider" aria-hidden="true" />
+        <button
+          type="button"
+          className="icon-button toolbar-icon"
+          aria-label="设置"
+          title="设置（Ctrl+,）"
+          onClick={() => setSettingsOpen(true)}
+        >
+          <Icon name="settings" />
+        </button>
       </header>
 
       <div className="main-row">
@@ -1558,7 +1549,7 @@ export function App() {
           </main>
         ) : (
           <main className="empty-state">
-            <span className="brand-mark large" aria-hidden="true" />
+            <PandaMark size={64} className="brand-mark-large" />
             <h1>打开一个文档开始编辑</h1>
             <p>源码与渲染结果实时同步，保存时保留原文件编码与换行符。</p>
             <div className="empty-actions">

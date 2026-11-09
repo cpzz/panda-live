@@ -186,6 +186,36 @@ const ICONS = {
 
 export type IconName = keyof typeof ICONS;
 
+/** 熊猫品牌标识：纯 SVG，可随尺寸缩放，浅色/深色下均可见。 */
+export function PandaMark({ size = 16, className }: { size?: number; className?: string }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 32 32"
+      className={className}
+      aria-hidden="true"
+      focusable="false"
+    >
+      <circle cx="8.4" cy="9" r="5.4" fill="#2f353b" />
+      <circle cx="23.6" cy="9" r="5.4" fill="#2f353b" />
+      <circle cx="16" cy="17.8" r="11.2" fill="#ffffff" stroke="#c9d1d8" strokeWidth="0.9" />
+      <ellipse cx="11.3" cy="16.3" rx="3.4" ry="4.3" transform="rotate(-18 11.3 16.3)" fill="#2f353b" />
+      <ellipse cx="20.7" cy="16.3" rx="3.4" ry="4.3" transform="rotate(18 20.7 16.3)" fill="#2f353b" />
+      <circle cx="11.9" cy="15.6" r="1.2" fill="#ffffff" />
+      <circle cx="20.1" cy="15.6" r="1.2" fill="#ffffff" />
+      <ellipse cx="16" cy="20.5" rx="2" ry="1.5" fill="#2f353b" />
+      <path
+        d="M13.6 22.6c.9 1.1 1.7 1.5 2.4 1.5s1.5-.4 2.4-1.5"
+        fill="none"
+        stroke="#2f353b"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 export function Icon({
   name,
   size = 16,
