@@ -66,6 +66,11 @@ export async function highlightCodeBlocks(root: HTMLElement, theme: "light" | "d
         next.dataset.highlighted = "true";
         // 保留语言，主题切换时可重新高亮。
         next.dataset.language = resolved;
+        // 保留源行号，供渲染态差异定位代码块。
+        for (const attribute of ["data-src-line", "data-src-end-line"]) {
+          const value = pre.getAttribute(attribute);
+          if (value !== null) next.setAttribute(attribute, value);
+        }
         pre.replaceWith(next);
       } catch {
         // 语言别名不支持或加载失败时保留未高亮的代码块。

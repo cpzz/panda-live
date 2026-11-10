@@ -216,6 +216,10 @@ export class DocumentManager {
       this.notify("error", "该格式没有渲染预览，请使用源码模式");
       return;
     }
+    if (mode === "git" && active && active.format !== "markdown") {
+      this.notify("error", "Git 差异视图只支持 Markdown 渲染");
+      return;
+    }
     const firstSwitch = !this.modeSwitchNoticeShown;
     this.modeSwitchNoticeShown = true;
     this.commit({ mode });
@@ -523,6 +527,8 @@ export class DocumentManager {
     if (active) this.commit({ activeId: active.id });
     if (session.mode === "wysiwyg" && active?.format !== "markdown") {
       this.commit({ mode: "split" });
+    } else if (session.mode === "git" && active?.format !== "markdown") {
+      this.commit({ mode: "source" });
     } else {
       this.commit({ mode: session.mode });
     }
@@ -671,9 +677,11 @@ export class DocumentManager {
           ? "source"
           : forceSource
             ? "source"
-            : document.format === "markdown" || this.state.mode !== "wysiwyg"
-              ? this.state.mode
-              : "source",
+            : this.state.mode === "git" && document.format !== "markdown"
+              ? "source"
+              : document.format === "markdown" || this.state.mode !== "wysiwyg"
+                ? this.state.mode
+                : "source",
       });
       if (blockLimit) {
         this.notify("info", "文档顶层块超过 8000，已默认切换到源码模式");

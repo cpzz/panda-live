@@ -7,6 +7,7 @@ import { keymap } from "prosemirror-keymap";
 import { EditorState, type Plugin } from "prosemirror-state";
 import { tableEditing } from "prosemirror-tables";
 import { markdownSchema, type PMJson } from "./schema";
+import { wysiwygDiffPlugin } from "./plugins/diff";
 import { nodeIdPlugin } from "./plugins/node-id";
 import { searchPlugin } from "./search";
 
@@ -59,6 +60,7 @@ export function buildEditorPlugins(): Plugin[] {
     tableEditing(),
     inputRules({ rules: buildInputRules() }),
     nodeIdPlugin(),
+    wysiwygDiffPlugin(),
     searchPlugin(),
   ];
 }

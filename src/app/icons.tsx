@@ -190,6 +190,61 @@ const ICONS = {
       <circle cx="12" cy="12" r="3" />
     </>
   ),
+  git: (
+    <>
+      <circle cx="6" cy="6" r="2.5" />
+      <circle cx="6" cy="18" r="2.5" />
+      <circle cx="18" cy="8" r="2.5" />
+      <path d="M6 8.5v7" />
+      <path d="M18 10.5c0 3.2-3.5 3.6-7 4" />
+    </>
+  ),
+  compare: (
+    <>
+      <rect x="3" y="4" width="7" height="16" rx="1" />
+      <rect x="14" y="4" width="7" height="16" rx="1" />
+      <path d="M5 8h3M5 12h3M5 16h3" />
+      <path d="M16 8h3M16 12h3M16 16h3" />
+    </>
+  ),
+  fileBefore: (
+    <>
+      <path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" />
+      <path d="M14 2v5a1 1 0 0 0 1 1h5" />
+      <path d="M13 13H7m2.5-2.5L7 13l2.5 2.5" />
+    </>
+  ),
+  fileAfter: (
+    <>
+      <path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" />
+      <path d="M14 2v5a1 1 0 0 0 1 1h5" />
+      <path d="m8 14 2 2 4-5" />
+    </>
+  ),
+  whitespace: (
+    <>
+      <path d="M4 6h16" />
+      <path d="M4 10h8" />
+      <circle cx="6.5" cy="15" r="0.9" fill="currentColor" stroke="none" />
+      <circle cx="10.5" cy="15" r="0.9" fill="currentColor" stroke="none" />
+      <circle cx="14.5" cy="15" r="0.9" fill="currentColor" stroke="none" />
+      <path d="M4 20h16" />
+    </>
+  ),
+  blankLines: (
+    <>
+      <path d="M4 5h16" />
+      <path d="M4 9h16" />
+      <path d="M4 14h16" strokeDasharray="2 3" />
+      <path d="M4 19h16" />
+    </>
+  ),
+  carriageReturn: (
+    <>
+      <path d="M20 5v6a3 3 0 0 1-3 3H7" />
+      <path d="m11 10-4 4 4 4" />
+    </>
+  ),
 } satisfies Record<string, ReactNode>;
 
 export type IconName = keyof typeof ICONS;

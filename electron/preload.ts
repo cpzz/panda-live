@@ -38,6 +38,9 @@ const api: PandaApi = {
   workspace: {
     open: (request) => invoke("workspace:open", request),
   },
+  git: {
+    diff: (request) => invoke("git:diff", request),
+  },
   settings: {
     get: () => invoke("settings:get", undefined),
     update: (settings) => invoke("settings:update", { settings }),

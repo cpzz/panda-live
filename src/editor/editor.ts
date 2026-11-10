@@ -17,6 +17,8 @@ import { DiagramNodeView } from "./nodeviews/diagram";
 import { GridNodeView, TabSetNodeView } from "./nodeviews/directive";
 import type { PMJson } from "./schema";
 import { createWysiwygState } from "./state";
+import { wysiwygDiffKey } from "./plugins/diff";
+import type { WysiwygDiffModel } from "../diff/wysiwyg";
 import {
   clearSearch,
   findNextMatch,
@@ -212,9 +214,39 @@ export class PandaEditor {
       return true;
     });
     if (target === null) return;
-    const dom = this.view.domAtPos(target + 1);
+    this.scrollToPosition(target + 1);
+  }
+
+  /** 应用或清除差异装饰；传 null 清除。见 doc/design.md §21.5。 */
+  setDiffModel(model: WysiwygDiffModel | null): void {
+    this.view.dispatch(this.view.state.tr.setMeta(wysiwygDiffKey, model));
+  }
+
+  /** 滚动到第 index 个顶层块，用于改动导航。 */
+  scrollToBlockIndex(index: number): void {
+    let target: number | null = null;
+    let count = 0;
+    this.view.state.doc.forEach((_node, offset) => {
+      if (target !== null) return;
+      if (count === index) {
+        target = offset;
+        return;
+      }
+      count += 1;
+    });
+    if (target === null) return;
+    this.scrollToPosition(target + 1, true);
+  }
+
+  private scrollToPosition(pos: number, flash = false): void {
+    const dom = this.view.domAtPos(pos);
     const element = dom.node.nodeType === 1 ? (dom.node as HTMLElement) : dom.node.parentElement;
-    element?.scrollIntoView({ block: "start", behavior: "smooth" });
+    if (!element) return;
+    element.scrollIntoView({ block: "center", behavior: "smooth" });
+    if (flash) {
+      element.classList.add("diff-target");
+      setTimeout(() => element.classList.remove("diff-target"), 600);
+    }
   }
 
   /** 查找：返回当前匹配序号（从 1 开始）与总数。见 doc/design.md §11.5。 */

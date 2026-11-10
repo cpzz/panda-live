@@ -11,8 +11,10 @@ export interface Settings {
     theme: "system" | "light" | "dark";
     /** 编辑器正文字号（px） */
     fontSize: number;
-    /** 正文最大行宽（px） */
+    /** 正文内容宽度；单位由 `lineWidthUnit` 决定。 */
     lineWidth: number;
+    /** 内容宽度单位：像素或占面板宽度的百分比。 */
+    lineWidthUnit: "px" | "percent";
   };
   editor: {
     /** 有路径的文档在停止输入后自动写盘。 */
@@ -21,6 +23,17 @@ export interface Settings {
     showLineNumbers: boolean;
     /** 保存时的换行符；`preserve` 沿用文件已有换行。 */
     eol: SaveEol;
+  };
+  diff: {
+    /** 新打开的文档默认显示与 Git 基线的差异。见 doc/design.md §21.11。 */
+    defaultOn: boolean;
+  };
+  git: {
+    /**
+     * Git 命令。默认 `git`；找不到时可填绝对路径或 `wsl git` / `wsl -d Ubuntu git`。
+     * 见 doc/design.md §21.3。
+     */
+    command: string;
   };
   privacy: {
     logLevel: "error" | "warn" | "info" | "debug";
@@ -32,8 +45,10 @@ export const SETTINGS_SCHEMA_VERSION = 1;
 
 export const DEFAULT_SETTINGS: Settings = {
   schemaVersion: SETTINGS_SCHEMA_VERSION,
-  appearance: { theme: "system", fontSize: 15, lineWidth: 860 },
+  appearance: { theme: "system", fontSize: 15, lineWidth: 860, lineWidthUnit: "px" },
   editor: { autoSave: true, tabSize: 2, showLineNumbers: true, eol: "preserve" },
+  diff: { defaultOn: false },
+  git: { command: "git" },
   privacy: { logLevel: "info" },
 };
 
@@ -61,17 +76,32 @@ export function mergeSettings(raw: unknown): Settings {
   const source = isRecord(raw) ? raw : {};
   const appearance = isRecord(source.appearance) ? source.appearance : {};
   const editor = isRecord(source.editor) ? source.editor : {};
+  const diff = isRecord(source.diff) ? source.diff : {};
+  const git = isRecord(source.git) ? source.git : {};
   const privacy = isRecord(source.privacy) ? source.privacy : {};
 
   return {
     ...source,
     schemaVersion: SETTINGS_SCHEMA_VERSION,
-    appearance: {
-      ...appearance,
-      theme: pickEnum(appearance.theme, ["system", "light", "dark"] as const, "system"),
-      fontSize: pickNumber(appearance.fontSize, DEFAULT_SETTINGS.appearance.fontSize, 12, 28),
-      lineWidth: pickNumber(appearance.lineWidth, DEFAULT_SETTINGS.appearance.lineWidth, 480, 1600),
-    },
+    appearance: (() => {
+      const lineWidthUnit = pickEnum(
+        appearance.lineWidthUnit,
+        ["px", "percent"] as const,
+        DEFAULT_SETTINGS.appearance.lineWidthUnit,
+      );
+      return {
+        ...appearance,
+        theme: pickEnum(appearance.theme, ["system", "light", "dark"] as const, "system"),
+        fontSize: pickNumber(appearance.fontSize, DEFAULT_SETTINGS.appearance.fontSize, 12, 28),
+        lineWidthUnit,
+        lineWidth: pickNumber(
+          appearance.lineWidth,
+          lineWidthUnit === "percent" ? 80 : DEFAULT_SETTINGS.appearance.lineWidth,
+          lineWidthUnit === "percent" ? 30 : 480,
+          lineWidthUnit === "percent" ? 100 : 1600,
+        ),
+      };
+    })(),
     editor: {
       ...editor,
       autoSave: typeof editor.autoSave === "boolean" ? editor.autoSave : DEFAULT_SETTINGS.editor.autoSave,
@@ -81,6 +111,18 @@ export function mergeSettings(raw: unknown): Settings {
           ? editor.showLineNumbers
           : DEFAULT_SETTINGS.editor.showLineNumbers,
       eol: pickEnum(editor.eol, ["preserve", "lf", "crlf"] as const, "preserve"),
+    },
+    diff: {
+      ...diff,
+      defaultOn:
+        typeof diff.defaultOn === "boolean" ? diff.defaultOn : DEFAULT_SETTINGS.diff.defaultOn,
+    },
+    git: {
+      ...git,
+      command:
+        typeof git.command === "string" && git.command.trim().length > 0
+          ? git.command.trim().slice(0, 260)
+          : DEFAULT_SETTINGS.git.command,
     },
     privacy: {
       ...privacy,

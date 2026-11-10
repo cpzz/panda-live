@@ -1,4 +1,4 @@
-/*
+﻿/*
  * 全局样式：VS Code 风格的紧凑工作台。
  * 浅色为默认值；系统深色由 prefers-color-scheme 覆盖；
  * 用户显式主题由 theme.css 中的 :root[data-theme] 覆盖。
@@ -70,6 +70,16 @@
   --cm-tag: #800000;
   --cm-attr: #0451a5;
   --cm-ini-section: #000000;
+
+  /* 渲染态差异：背景保持低透明度，保证正文对比度。见 §21.7 */
+  --diff-add-bg: rgba(46, 160, 67, 0.15);
+  --diff-add-border: #2ea043;
+  --diff-del-bg: rgba(207, 34, 46, 0.12);
+  --diff-del-border: #cf222e;
+  --diff-change-bg: rgba(191, 135, 0, 0.10);
+  --diff-change-border: #bf8700;
+  --diff-add-fg: #1a7f37;
+  --diff-del-fg: #cf222e;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -129,6 +139,15 @@
     --cm-tag: #569cd6;
     --cm-attr: #9cdcfe;
     --cm-ini-section: #ffffff;
+
+    --diff-add-bg: rgba(63, 185, 80, 0.18);
+    --diff-add-border: #3fb950;
+    --diff-del-bg: rgba(248, 81, 73, 0.16);
+    --diff-del-border: #f85149;
+    --diff-change-bg: rgba(210, 153, 34, 0.14);
+    --diff-change-border: #d29922;
+    --diff-add-fg: #56d364;
+    --diff-del-fg: #f85149;
   }
 }
 
@@ -556,7 +575,8 @@ button {
 
 .workspace.mode-source .pane,
 .workspace.mode-preview .pane,
-.workspace.mode-wysiwyg .pane {
+.workspace.mode-wysiwyg .pane,
+.workspace.mode-git .pane {
   flex: 1 1 100%;
 }
 
@@ -599,6 +619,150 @@ button {
   padding: 24px 40px 80px;
   background: var(--surface);
   overflow: auto;
+}
+
+/* Git 差异视图 */
+.git-pane {
+  display: flex;
+}
+
+.git-diff-pane {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--surface);
+}
+
+.git-diff-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-muted);
+}
+
+.git-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.git-icon-button:hover {
+  color: var(--fg);
+  border-color: var(--border-strong);
+}
+
+.git-icon-button.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.git-diff-form {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.git-diff-input {
+  width: 190px;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--fg);
+  font-size: 12px;
+}
+
+.git-diff-side {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.git-diff-state {
+  max-width: 300px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-diff-view {
+  height: 24px;
+  padding: 0 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--fg);
+  font-size: 11px;
+}
+
+.git-source-switch {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.git-source-switch .git-icon-button {
+  width: 24px;
+  height: 22px;
+  border: none;
+  background: transparent;
+}
+
+.git-source-switch .git-icon-button.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.git-diff-flags {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.git-diff-flags .git-icon-button {
+  width: 24px;
+  height: 22px;
+  border: none;
+  background: transparent;
+}
+
+.git-diff-flags .git-icon-button.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.git-diff-scroll {
+  flex: 1;
+  min-height: 0;
+  padding: 20px 40px 80px;
+  overflow: auto;
+}
+
+.git-diff-body {
+  max-width: min(var(--prose-max-width), 100%);
+  margin: 0 auto;
 }
 
 .placeholder {
@@ -1895,6 +2059,29 @@ body.resizing * {
   font-size: 12px;
 }
 
+.settings-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.settings-inline select {
+  width: auto;
+}
+
+.settings-row input[type="text"],
+.settings-row .settings-text {
+  width: 260px;
+  max-width: 62%;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--fg);
+  font-size: 12px;
+}
+
 .settings-row select {
   height: 26px;
   padding: 0 6px;
@@ -2184,4 +2371,601 @@ body.resizing * {
   border-radius: var(--radius-sm);
   color: var(--muted);
   font-size: 12px;
+}
+
+/* 渲染态 Git 差异（doc/design.md §21） */
+.diff-controls {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.diff-toggle .diff-sign {
+  margin-right: 4px;
+  font-weight: 700;
+}
+
+.diff-toggle.active {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.diff-base {
+  height: 17px;
+  max-width: 86px;
+  padding: 0 2px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--statusbar-fg);
+  font-size: 11px;
+}
+
+.diff-base option {
+  color: var(--fg);
+  background: var(--surface);
+}
+
+.diff-ref-form {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.diff-ref-input {
+  width: 132px;
+  height: 17px;
+  padding: 0 4px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--statusbar-fg);
+  font-size: 11px;
+}
+
+.diff-ref-input::placeholder {
+  color: var(--statusbar-fg);
+  opacity: 0.55;
+}
+
+.diff-note {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diff-count {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.diff-count .diff-add {
+  color: #b9f0c2;
+}
+
+.diff-count .diff-del {
+  color: #ffc4bf;
+}
+
+.diff-unavailable {
+  cursor: help;
+  text-decoration: underline dotted;
+}
+
+.diff-list-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 39;
+}
+
+.diff-list {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  z-index: 40;
+  width: 300px;
+  max-height: 340px;
+  overflow: auto;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--fg);
+  box-shadow: var(--shadow);
+}
+
+.diff-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 6px 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.diff-list-base {
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 10px;
+}
+
+.diff-list ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.diff-list-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 6px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.diff-list-item:hover {
+  background: var(--surface-hover);
+}
+
+.diff-list-item.current {
+  background: var(--accent-soft);
+}
+
+.diff-list-kind {
+  width: 12px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.diff-list-kind.add,
+.diff-list-label.add {
+  color: var(--diff-add-fg);
+}
+
+.diff-list-kind.delete,
+.diff-list-label.delete {
+  color: var(--diff-del-fg);
+}
+
+.diff-list-kind.change {
+  color: var(--diff-change-border);
+}
+
+.diff-list-line {
+  max-width: 55%;
+  overflow: hidden;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diff-list-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 源码模式：gutter 标记与行底色 */
+.cm-diff-gutter {
+  display: none;
+  background: var(--editor-gutter-bg);
+}
+
+.diff-active .cm-diff-gutter {
+  display: block;
+}
+
+.cm-diff-gutter .cm-gutterElement {
+  width: 14px;
+  padding: 0 1px;
+  font-size: 11px;
+  text-align: center;
+}
+
+.cm-diff-gutter-mark {
+  font-weight: 700;
+}
+
+.cm-diff-gutter-mark.add {
+  color: var(--diff-add-fg);
+}
+
+.cm-diff-gutter-mark.change {
+  color: var(--diff-change-border);
+}
+
+.cm-diff-gutter-mark.delete {
+  color: var(--diff-del-fg);
+}
+
+.cm-line.cm-diff-line-add {
+  background: var(--diff-add-bg);
+  box-shadow: inset 2px 0 var(--diff-add-border);
+}
+
+.cm-line.cm-diff-line-change {
+  background: var(--diff-change-bg);
+  box-shadow: inset 2px 0 var(--diff-change-border);
+}
+
+.cm-line.cm-diff-line-delete {
+  box-shadow: inset 2px 0 var(--diff-del-border);
+}
+
+/* 预览态差异：块级底色与词级标记 */
+.markdown-body .diff-add {
+  border-radius: 2px;
+  background: var(--diff-add-bg);
+  box-shadow: inset 3px 0 var(--diff-add-border);
+}
+
+/* 修改块不整块铺色，只保留左侧竖条，具体变化交给词级 ins/del。 */
+.markdown-body .diff-change {
+  border-radius: 2px;
+  background: transparent;
+  box-shadow: inset 3px 0 var(--diff-change-border);
+}
+
+.markdown-body li.diff-add,
+.markdown-body li.diff-change {
+  margin-left: -4px;
+  padding: 0 4px;
+}
+
+.markdown-body .diff-inline-add {
+  border-radius: 2px;
+  border-bottom: 1px solid var(--diff-add-border);
+  background: var(--diff-add-bg);
+  color: inherit;
+  text-decoration: none;
+}
+
+.markdown-body del.diff-inline-del {
+  border-radius: 2px;
+  background: var(--diff-del-bg);
+  color: var(--diff-del-fg);
+  text-decoration: line-through;
+}
+
+.diff-ghost {
+  margin: 10px 0;
+  padding: 8px 12px;
+  border: 1px dashed var(--diff-del-border);
+  border-radius: var(--radius-sm);
+  background: var(--diff-del-bg);
+}
+
+.diff-ghost > :not(.diff-ghost-label) {
+  opacity: 0.6;
+}
+
+/* 插回列表 / 表格的删除单元 */
+.markdown-body li.diff-ghost-item {
+  margin: 4px 0;
+  padding: 4px 8px;
+  border: 1px dashed var(--diff-del-border);
+  border-radius: var(--radius-sm);
+  background: var(--diff-del-bg);
+  opacity: 0.75;
+  text-decoration: line-through;
+}
+
+.markdown-body li.diff-ghost-label-item,
+.markdown-body tr.diff-ghost-label-row > td {
+  text-decoration: none;
+  opacity: 1;
+}
+
+.markdown-body tr.diff-ghost-row > td {
+  border-top: 1px dashed var(--diff-del-border);
+  background: var(--diff-del-bg);
+  opacity: 0.75;
+  text-decoration: line-through;
+}
+
+.diff-ghost-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  color: var(--diff-del-fg);
+  font-size: 11px;
+}
+
+.diff-ghost-label .button {
+  height: 18px;
+  padding: 0 6px;
+  font-size: 11px;
+}
+
+@media (max-width: 720px) {
+  .diff-toggle .diff-label {
+    display: none;
+  }
+
+  .diff-base {
+    max-width: 64px;
+  }
+}
+
+/* 差异状态反馈 */
+.diff-dirty-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 4px;
+  border-radius: 50%;
+  background: #ffd166;
+  vertical-align: middle;
+}
+
+.diff-stale {
+  color: var(--warning-fg, #bf8700);
+}
+
+/* 改动导航目标块：静态轮廓 + 短暂脉冲，尊重减少动态偏好 */
+.diff-target {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  animation: diff-target-pulse 600ms ease-out;
+}
+
+@keyframes diff-target-pulse {
+  from {
+    outline-color: var(--accent);
+    outline-offset: 6px;
+  }
+  to {
+    outline-color: var(--accent);
+    outline-offset: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .diff-target {
+    animation: none;
+  }
+}
+
+.diff-mode-select {
+  height: 20px;
+  padding: 0 2px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--surface);
+  color: var(--fg);
+  font-size: 11px;
+}
+
+/* 不可见内容提示 */
+.diff-notice {
+  margin: 0 0 12px;
+  padding: 6px 10px;
+  border: 1px solid var(--warning-border);
+  border-radius: var(--radius-sm);
+  background: var(--warning-bg);
+  color: var(--fg);
+  font-size: 12px;
+}
+
+/* 折叠未改动 */
+.diff-collapse-bar {
+  margin: 8px 0;
+  padding: 4px 10px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-muted);
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+.diff-collapse-bar:hover {
+  color: var(--fg);
+  border-color: var(--accent);
+}
+
+/* 仅改动片段 */
+.diff-fragment-card {
+  margin: 10px 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.diff-fragment-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-muted);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.diff-fragment-breadcrumb {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diff-fragment-count {
+  white-space: nowrap;
+}
+
+.diff-fragment-actions {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.diff-fragment-body {
+  padding: 4px 12px 10px;
+}
+
+/* 代码块逐行差异 */
+.markdown-body pre code.diff-code {
+  display: block;
+}
+
+.diff-code-line {
+  display: block;
+  min-height: 1.6em;
+  padding-left: 18px;
+  position: relative;
+  white-space: pre;
+}
+
+.diff-code-line::before {
+  position: absolute;
+  left: 0;
+  width: 12px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.diff-code-line.add {
+  background: var(--diff-add-bg);
+  box-shadow: inset 2px 0 var(--diff-add-border);
+}
+
+.diff-code-line.add::before {
+  content: "+";
+  color: var(--diff-add-fg);
+}
+
+.diff-code-line.del {
+  background: var(--diff-del-bg);
+  box-shadow: inset 2px 0 var(--diff-del-border);
+  text-decoration: line-through;
+}
+
+.diff-code-line.del::before {
+  content: "−";
+  color: var(--diff-del-fg);
+}
+
+.diff-code-word {
+  border-radius: 2px;
+  font-weight: 600;
+}
+
+.diff-code-word.add {
+  border-bottom: 2px solid var(--diff-add-border);
+  color: var(--diff-add-fg);
+}
+
+.diff-code-word.del {
+  border-bottom: 2px solid var(--diff-del-border);
+  color: var(--diff-del-fg);
+  text-decoration: line-through;
+}
+
+/* 表格行无法做词级标记时，直接显示「改动前 / 改动后」两行。 */
+.markdown-body tr.diff-row-before {
+  background: var(--diff-del-bg);
+  box-shadow: inset 3px 0 var(--diff-del-border);
+}
+
+.markdown-body tr.diff-row-before > td,
+.markdown-body tr.diff-row-before > th {
+  opacity: 0.9;
+}
+
+.markdown-body tr.diff-row-after {
+  box-shadow: inset 3px 0 var(--diff-add-border);
+}
+
+.markdown-body tr.diff-format-only {
+  box-shadow: inset 3px 0 var(--border-strong);
+}
+
+.markdown-body tr.diff-row-before > td:first-child::before,
+.markdown-body tr.diff-row-after > td:first-child::after,
+.markdown-body tr.diff-format-only > td:first-child::after {
+  display: inline-block;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 500;
+  vertical-align: 1px;
+}
+
+.markdown-body tr.diff-row-before > td:first-child::before {
+  content: "改动前";
+  margin-right: 6px;
+  border: 1px solid var(--diff-del-border);
+  background: var(--diff-del-bg);
+  color: var(--diff-del-fg);
+}
+
+.markdown-body tr.diff-row-after > td:first-child::after {
+  content: "改动后";
+  margin-left: 6px;
+  border: 1px solid var(--diff-add-border);
+  background: var(--diff-add-bg);
+  color: var(--diff-add-fg);
+}
+
+.markdown-body tr.diff-format-only > td:first-child::after {
+  content: "仅格式";
+  margin-left: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-muted);
+  color: var(--muted);
+}
+
+/* WYSIWYG（ProseMirror）差异装饰 */
+.prose-editor .pm-diff-add {
+  border-radius: 3px;
+  background: var(--diff-add-bg);
+  box-shadow: inset 3px 0 var(--diff-add-border);
+}
+
+.prose-editor .pm-diff-change {
+  border-radius: 3px;
+  background: transparent;
+  box-shadow: inset 3px 0 var(--diff-change-border);
+}
+
+/* WYSIWYG 代码块逐行差异：新增行底色、删除行幽灵 */
+.prose-editor .pm-diff-code-add {
+  border-radius: 2px;
+  background: var(--diff-add-bg);
+  box-shadow: inset 2px 0 var(--diff-add-border);
+}
+
+.prose-editor .pm-diff-code-del {
+  display: block;
+  background: var(--diff-del-bg);
+  box-shadow: inset 2px 0 var(--diff-del-border);
+  color: var(--diff-del-fg);
+  text-decoration: line-through;
+}
+
+.pm-diff-ghost {
+  user-select: none;
+}
+
+.pm-diff-ghost-body {
+  opacity: 0.6;
+}
+
+.pm-diff-ghost .diff-ghost-label {
+  cursor: default;
 }

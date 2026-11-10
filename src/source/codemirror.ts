@@ -24,8 +24,22 @@ import { swift } from "@codemirror/legacy-modes/mode/swift";
 import { toml } from "@codemirror/legacy-modes/mode/toml";
 import { HighlightStyle, StreamLanguage, indentUnit, syntaxHighlighting } from "@codemirror/language";
 import { closeSearchPanel, openSearchPanel, search } from "@codemirror/search";
-import { EditorState, Compartment, type Extension } from "@codemirror/state";
-import { EditorView } from "@codemirror/view";
+import {
+  EditorState,
+  Compartment,
+  RangeSetBuilder,
+  StateEffect,
+  StateField,
+  type Extension,
+  type Text,
+} from "@codemirror/state";
+import {
+  Decoration,
+  EditorView,
+  GutterMarker,
+  gutter,
+  type DecorationSet,
+} from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import { iniStreamParser } from "./ini-mode";
 
@@ -64,6 +78,93 @@ export type SourceLanguage =
   | "ini"
   | "toml"
   | "plain";
+
+/** 源码模式的 diff 行标记；`delete` 表示该行之前有删除内容。 */
+export interface DiffLineMarker {
+  line: number;
+  kind: "add" | "change" | "delete";
+}
+
+const setDiffMarkersEffect = StateEffect.define<readonly DiffLineMarker[]>();
+
+class DiffGutterMarker extends GutterMarker {
+  constructor(readonly kind: DiffLineMarker["kind"]) {
+    super();
+  }
+
+  override eq(other: GutterMarker): boolean {
+    return other instanceof DiffGutterMarker && other.kind === this.kind;
+  }
+
+  override toDOM(): Node {
+    const span = document.createElement("span");
+    span.className = `cm-diff-gutter-mark ${this.kind}`;
+    span.textContent = this.kind === "add" ? "+" : this.kind === "change" ? "±" : "−";
+    span.title = this.kind === "add" ? "新增" : this.kind === "change" ? "修改" : "删除";
+    return span;
+  }
+}
+
+const diffGutterMarkers: Record<DiffLineMarker["kind"], DiffGutterMarker> = {
+  add: new DiffGutterMarker("add"),
+  change: new DiffGutterMarker("change"),
+  delete: new DiffGutterMarker("delete"),
+};
+
+function clampLine(doc: Text, line: number): number {
+  return Math.min(Math.max(1, line), doc.lines);
+}
+
+function buildDiffDecorations(markers: readonly DiffLineMarker[], doc: Text): DecorationSet {
+  const seen = new Set<number>();
+  const ranges = [];
+  for (const marker of markers) {
+    const line = clampLine(doc, marker.line);
+    if (seen.has(line)) continue;
+    seen.add(line);
+    ranges.push(Decoration.line({ class: `cm-diff-line-${marker.kind}` }).range(doc.line(line).from));
+  }
+  return Decoration.set(ranges, true);
+}
+
+function buildDiffGutterMarkers(markers: readonly DiffLineMarker[], doc: Text) {
+  const sorted = [...markers].sort((a, b) => a.line - b.line);
+  const builder = new RangeSetBuilder<GutterMarker>();
+  let last = -1;
+  for (const marker of sorted) {
+    const line = clampLine(doc, marker.line);
+    if (line === last) continue;
+    last = line;
+    const from = doc.line(line).from;
+    builder.add(from, from, diffGutterMarkers[marker.kind]);
+  }
+  return builder.finish();
+}
+
+const diffMarkerField = StateField.define<readonly DiffLineMarker[]>({
+  create: () => [],
+  update(value, transaction) {
+    for (const effect of transaction.effects) {
+      if (effect.is(setDiffMarkersEffect)) return effect.value;
+    }
+    // 行号会随编辑漂移，输入时先清空，等下一轮 diff 结果再补齐。
+    return transaction.docChanged ? [] : value;
+  },
+  provide: (field) =>
+    EditorView.decorations.compute([field, "doc"], (state) =>
+      buildDiffDecorations(state.field(field), state.doc),
+    ),
+});
+
+/** 源码 diff 装饰：左侧 gutter 标记 + 行底色。见 doc/design.md §21.6、§21.8。 */
+const diffExtension: Extension = [
+  diffMarkerField,
+  gutter({
+    class: "cm-diff-gutter",
+    markers: (view) => buildDiffGutterMarkers(view.state.field(diffMarkerField), view.state.doc),
+    initialSpacer: () => diffGutterMarkers.add,
+  }),
+];
 
 /** 语言标识 → CodeMirror 语言扩展；未知语言退化为纯文本。 */
 function languageExtension(language: SourceLanguage): Extension {
@@ -254,6 +355,7 @@ function createState(
       ]),
       syntaxHighlighting(pandaHighlight),
       pandaTheme,
+      diffExtension,
       EditorState.readOnly.of(readOnly),
       EditorView.editable.of(!readOnly),
       updateListener,
@@ -315,6 +417,12 @@ export class SourceEditor {
     if (enabled === this.showLineNumbers) return;
     this.showLineNumbers = enabled;
     this.applyShowLineNumbers();
+  }
+
+  /** 更新 diff 行标记；传空数组关闭装饰。 */
+  setDiffMarkers(markers: readonly DiffLineMarker[]): void {
+    this.view.dom.classList.toggle("diff-active", markers.length > 0);
+    this.view.dispatch({ effects: setDiffMarkersEffect.of(markers) });
   }
 
   private applyShowLineNumbers(): void {

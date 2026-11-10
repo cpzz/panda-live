@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { GitDiffRequest, GitDiffResult } from "./diff";
 import type { PandaErrorPayload } from "./errors";
 import type { MenuCommand } from "./menu";
 import type { Settings } from "./settings";
@@ -35,7 +36,7 @@ export type Eol = "lf" | "crlf";
 /** 检测到的文本编码；非 UTF-8 时以只读方式打开。 */
 export type TextEncoding = "utf-8" | "utf-8-bom" | "utf-16le" | "utf-16be" | "unknown";
 
-export type EditorMode = "wysiwyg" | "split" | "source" | "preview";
+export type EditorMode = "wysiwyg" | "split" | "source" | "preview" | "git";
 
 export interface OpenFilesRequest {
   filters?: FileFilter[];
@@ -281,7 +282,7 @@ const FileFilterSchema = z.object({
   extensions: z.array(z.string().min(1)),
 });
 
-const EditorModeSchema = z.enum(["wysiwyg", "split", "source", "preview"]);
+const EditorModeSchema = z.enum(["wysiwyg", "split", "source", "preview", "git"]);
 const CursorSchema = z.object({ line: z.number().int().min(1), column: z.number().int().min(1) });
 
 const SessionSchema = z.object({
@@ -400,6 +401,16 @@ export const ipcRequestSchemas = {
   "ext:command": z.object({ id: z.string().min(1), args: z.unknown().optional() }),
   "fs:stat": z.object({ path: z.string().min(1) }),
   "fs:inspectDrop": z.object({ path: z.string().min(1) }),
+  "git:diff": z
+    .object({
+      path: z.string().min(1),
+      base: z.enum(["head", "index", "commit"]),
+      ref: z.string().trim().min(1).max(120).optional(),
+      newText: z.string(),
+    })
+    .refine((value) => value.base !== "commit" || (value.ref?.length ?? 0) > 0, {
+      message: "指定提交基线需要提供 ref",
+    }),
   "export:pdf": z.object({ html: z.string(), suggestedName: z.string().min(1) }),
   "latex:detect": z.undefined(),
   "latex:compile": z.object({ jobId: z.string().min(1), rootPath: z.string().min(1) }),
@@ -455,6 +466,7 @@ export interface IpcResponseMap {
   "ext:command": unknown;
   "fs:stat": StatResult;
   "fs:inspectDrop": { ref: FileRef; isFile: boolean };
+  "git:diff": GitDiffResult;
   "export:pdf": PdfExportResult;
   "latex:detect": EngineStatus;
   "latex:compile": CompileResult;
@@ -488,6 +500,10 @@ export interface PandaApi {
   };
   workspace: {
     open(request: WorkspaceOpenRequest): Promise<WorkspaceOpenResult>;
+  };
+  git: {
+    /** 读取渲染进程指定基线的旧文本；当前文本由渲染进程提供。 */
+    diff(request: GitDiffRequest): Promise<GitDiffResult>;
   };
   settings: {
     get(): Promise<Settings>;

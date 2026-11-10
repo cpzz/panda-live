@@ -84,16 +84,35 @@ export function SettingsDialog({
               />
             </label>
             <label className="settings-row">
-              <span>正文行宽（px）</span>
-              <input
-                type="number"
-                min={480}
-                max={1600}
-                step={20}
-                value={draft.appearance.lineWidth}
-                onChange={(event) => patch("appearance", { lineWidth: Number(event.target.value) })}
-              />
+              <span>内容宽度</span>
+              <span className="settings-inline">
+                <input
+                  type="number"
+                  min={draft.appearance.lineWidthUnit === "percent" ? 30 : 480}
+                  max={draft.appearance.lineWidthUnit === "percent" ? 100 : 1600}
+                  step={draft.appearance.lineWidthUnit === "percent" ? 5 : 20}
+                  value={draft.appearance.lineWidth}
+                  onChange={(event) => patch("appearance", { lineWidth: Number(event.target.value) })}
+                />
+                <select
+                  aria-label="内容宽度单位"
+                  value={draft.appearance.lineWidthUnit}
+                  onChange={(event) => {
+                    const unit = event.target.value as "px" | "percent";
+                    patch("appearance", {
+                      lineWidthUnit: unit,
+                      lineWidth: unit === "percent" ? 80 : 860,
+                    });
+                  }}
+                >
+                  <option value="px">px</option>
+                  <option value="percent">%</option>
+                </select>
+              </span>
             </label>
+            <p className="settings-note">
+              百分比按当前渲染面板宽度计算；超宽表格与代码块会在内容区内部出现水平滚动条。
+            </p>
           </section>
 
           <section className="settings-group">
@@ -135,6 +154,34 @@ export function SettingsDialog({
                 <option value="crlf">CRLF</option>
               </select>
             </label>
+          </section>
+
+          <section className="settings-group">
+            <h3>改动对比</h3>
+            <label className="settings-row">
+              <span>新打开文档默认显示 Git 改动</span>
+              <input
+                type="checkbox"
+                checked={draft.diff.defaultOn}
+                onChange={(event) => patch("diff", { defaultOn: event.target.checked })}
+              />
+            </label>
+            <label className="settings-row">
+              <span>Git 命令</span>
+              <input
+                type="text"
+                className="settings-text"
+                value={draft.git.command}
+                placeholder="git 或 wsl git"
+                onChange={(event) => patch("git", { command: event.target.value })}
+              />
+            </label>
+            <p className="settings-note">
+              默认使用 PATH 中的 <code>git</code>。找不到时可填绝对路径（含空格请加引号），
+              或使用 WSL：<code>wsl git</code>、<code>wsl -d Ubuntu git</code>。
+              保存后会自动重试当前文档的 Git 基线。
+            </p>
+            <p className="settings-note">可在状态栏随时开关；非 Git 仓库自动改用「上次保存」对比。</p>
           </section>
 
           <section className="settings-group">

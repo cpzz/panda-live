@@ -30,6 +30,25 @@ describe("设置合并", () => {
     expect(merged.appearance.theme).toBe("light");
   });
 
+  it("内容宽度支持像素与百分比，并按单位校正范围", () => {
+    expect(mergeSettings({ appearance: { lineWidth: 900 } }).appearance).toMatchObject({
+      lineWidth: 900,
+      lineWidthUnit: "px",
+    });
+    expect(
+      mergeSettings({ appearance: { lineWidthUnit: "percent", lineWidth: 120 } }).appearance,
+    ).toMatchObject({ lineWidth: 100, lineWidthUnit: "percent" });
+    expect(
+      mergeSettings({ appearance: { lineWidthUnit: "percent", lineWidth: 10 } }).appearance,
+    ).toMatchObject({ lineWidth: 30, lineWidthUnit: "percent" });
+  });
+
+  it("Git 命令为空时回落默认值，并保留自定义命令", () => {
+    expect(mergeSettings({ git: { command: "   " } }).git.command).toBe("git");
+    expect(mergeSettings({ git: { command: " wsl git " } }).git.command).toBe("wsl git");
+    expect(mergeSettings({ git: { command: 42 } }).git.command).toBe("git");
+  });
+
   it("补丁按分组深度合并", () => {
     const base = mergeSettings({ appearance: { fontSize: 18, theme: "dark" } });
     const patched = patchSettings(base, { appearance: { lineWidth: 700 }, editor: { autoSave: false } });

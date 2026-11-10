@@ -1,5 +1,6 @@
 .markdown-body {
-  max-width: var(--prose-max-width, 860px);
+  /* 百分比按面板宽度计算；px 值也不会超过可用宽度。 */
+  max-width: min(var(--prose-max-width, 860px), 100%);
   margin: 0 auto;
   color: var(--fg);
   font-size: var(--prose-font-size, 15px);
@@ -126,6 +127,13 @@
   width: 100%;
   border-collapse: collapse;
   font-size: 0.95em;
+}
+
+/* 预览/Git 面板中的超宽表格在内容区内部横向滚动，不撑破面板。 */
+.markdown-body:not(.prose-editor) table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
 }
 
 .markdown-body th,

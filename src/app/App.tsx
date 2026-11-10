@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from "react";
 import type { EditorState } from "@codemirror/state";
 import { renderMarkdownToHtml } from "../formats/markdown/preview";
 import { parseMarkdown } from "../formats/markdown/parse";
@@ -6,10 +6,7 @@ import { buildOutline, type OutlineItem } from "../formats/outline";
 import { EMPTY_PROBLEMS, problemStore, type Problem } from "../services/problem-store";
 import { getFormatEntry, refreshExtensionFormats } from "../extensions/registry";
 import { sanitizeHtml } from "../render/html";
-import { highlightCodeBlocks } from "../render/code-highlight";
-import { renderPreviewDiagrams } from "../render/markdown/diagram-preview";
-import { onThemeChange, resolveTheme, type AppTheme } from "../services/theme";
-import { resolveRelativePath } from "../utils/paths";
+import { RenderedMarkdown } from "./RenderedMarkdown";
 import {
   DocumentManager,
   type DocumentState,
@@ -17,7 +14,7 @@ import {
 } from "../services/document-manager";
 import { settingsStore } from "../services/settings-store";
 import { WorkspaceStore } from "../services/workspace-store";
-import { SourceEditor, type SelectionInfo, type SourceLanguage } from "../source/codemirror";
+import { SourceEditor, type DiffLineMarker, type SelectionInfo, type SourceLanguage } from "../source/codemirror";
 import { renderMathml } from "../render/math/mathml";
 import {
   currentDiagramTheme,
@@ -30,6 +27,11 @@ import type { Settings } from "../shared/settings";
 import { describeError, getErrorCode } from "../shared/errors";
 import { RecoveryDialog } from "./RecoveryDialog";
 import { CommandPalette, type CommandItem } from "./CommandPalette";
+import { DiffControls, type DiffListItem } from "./DiffControls";
+import { diffLineMarkers, describeHunk, useDocumentDiff } from "./useDocumentDiff";
+import { hunkAnchorLine, type DiffHunk } from "../diff/compute";
+import type { PreviewDiffModel } from "../diff/preview";
+import type { DiffBase, DiffViewMode } from "../shared/diff";
 import { Icon, PandaMark, type IconName } from "./icons";
 import { OutlinePanel } from "./OutlinePanel";
 import { PdfPreview } from "./PdfPreview";
@@ -38,12 +40,14 @@ import { ProblemPanel } from "./ProblemPanel";
 import { SettingsDialog } from "./SettingsDialog";
 import { WorkspacePanel } from "./WorkspacePanel";
 import { WysiwygPane } from "./WysiwygPane";
+import { GitPane } from "./GitPane";
 
 const MODE_LABELS: Record<EditorMode, string> = {
   wysiwyg: "所见即所得",
   source: "源码",
   split: "分栏",
   preview: "预览",
+  git: "Git 差异",
 };
 
 const MODE_ICONS: Record<EditorMode, IconName> = {
@@ -51,6 +55,7 @@ const MODE_ICONS: Record<EditorMode, IconName> = {
   source: "code",
   split: "split",
   preview: "eye",
+  git: "git",
 };
 
 /** 源码编辑器支持高亮的语言标识，与 SourceLanguage 保持一致。 */
@@ -111,6 +116,15 @@ function formatTime(ms: number): string {
   return new Date(ms).toLocaleString("zh-CN", { hour12: false });
 }
 
+const EMPTY_DIFF_HUNKS: DiffHunk[] = [];
+
+/** 计算文本行数；末尾换行不额外计入一行，与 diff 的行号口径一致。 */
+function textLineCount(text: string): number {
+  if (!text) return 1;
+  const normalized = text.replace(/\r\n?/g, "\n").replace(/\n$/, "");
+  return normalized.split("\n").length;
+}
+
 interface SavedEditorState {
   state: EditorState;
   revision: number;
@@ -124,6 +138,7 @@ function SourcePane({
   jump,
   tabSize,
   showLineNumbers,
+  diffMarkers,
   onChange,
   onSelection,
 }: {
@@ -133,6 +148,7 @@ function SourcePane({
   jump: { line: number; column: number; token: number } | null;
   tabSize: number;
   showLineNumbers: boolean;
+  diffMarkers: readonly DiffLineMarker[];
   onChange(content: string): void;
   onSelection(info: SelectionInfo): void;
 }) {
@@ -149,6 +165,8 @@ function SourcePane({
   } | null>(null);
   const callbacksRef = useRef({ onChange, onSelection });
   callbacksRef.current = { onChange, onSelection };
+  const diffMarkersRef = useRef(diffMarkers);
+  diffMarkersRef.current = diffMarkers;
   const [gotoOpen, setGotoOpen] = useState(false);
   const [gotoValue, setGotoValue] = useState("");
 
@@ -165,7 +183,7 @@ function SourcePane({
   }, []);
 
   useEffect(() => {
-    if (searchSignal > 0 && mode !== "wysiwyg" && mode !== "preview") {
+    if (searchSignal > 0 && mode !== "wysiwyg" && mode !== "preview" && mode !== "git") {
       editorRef.current?.openSearch();
     }
   }, [searchSignal, mode]);
@@ -184,6 +202,11 @@ function SourcePane({
   useEffect(() => {
     editorRef.current?.setShowLineNumbers(showLineNumbers);
   }, [showLineNumbers]);
+
+  // diff 行标记随对比结果更新；重置编辑器后由重建分支补回。
+  useEffect(() => {
+    editorRef.current?.setDiffMarkers(diffMarkers);
+  }, [diffMarkers]);
 
   // Ctrl/Cmd+G 跳转行；不依赖 window.prompt（Electron 不支持）。见 §11.5。
   useEffect(() => {
@@ -239,12 +262,16 @@ function SourcePane({
         previous &&
         (previous.revision !== document.revision ||
           previous.language !== language ||
-          (previous.mode !== mode && mode !== "preview" && mode !== "wysiwyg"))
+          (previous.mode !== mode &&
+            mode !== "preview" &&
+            mode !== "wysiwyg" &&
+            mode !== "git"))
       ) {
         editor.reset(document.content, document.readOnly, language);
       }
     }
     lastRef.current = { id: document.id, revision: document.revision, mode, language };
+    editor.setDiffMarkers(diffMarkersRef.current);
     // 只响应标签切换、模式切换、外部重载与只读变化；普通输入由编辑器自身维护。
   }, [document.id, document.revision, document.readOnly, mode, language, document.content]);
 
@@ -584,88 +611,31 @@ function TexPreviewPane({
   );
 }
 
-function MarkdownPreview({ html, doc }: { html: string; doc: DocumentState }) {
-  const hostRef = useRef<HTMLElement>(null);
-  const [theme, setTheme] = useState<AppTheme>(resolveTheme);
-
-  useEffect(() => onThemeChange(setTheme), []);
-
-  // 超过 1 MB 的图片改为占位 + 手动加载。见 doc/design.md §14.3。
-  useEffect(() => {
-    const host = hostRef.current;
-    if (!host || !doc.path) return;
-    let cancelled = false;
-    for (const image of [...host.querySelectorAll("img")]) {
-      const src = image.getAttribute("src") ?? "";
-      const resolved = resolveRelativePath(doc.path, src);
-      if (!resolved) continue;
-      void window.panda.fs
-        .stat({ path: resolved })
-        .then((stats) => {
-          if (cancelled || stats.size <= 1024 * 1024) return;
-          const wrapper = globalThis.document.createElement("div");
-          wrapper.className = "big-image-placeholder";
-          const label = globalThis.document.createElement("span");
-          label.textContent = `图片较大（${(stats.size / (1024 * 1024)).toFixed(1)} MB），未自动加载`;
-          const button = globalThis.document.createElement("button");
-          button.type = "button";
-          button.className = "button small";
-          button.textContent = "加载图片";
-          button.addEventListener("click", () => {
-            void window.panda.fs.readBase64({ path: resolved }).then((file) => {
-              const loaded = globalThis.document.createElement("img");
-              loaded.src = `data:${file.mime};base64,${file.data}`;
-              wrapper.replaceWith(loaded);
-            });
-          });
-          wrapper.append(label, button);
-          image.replaceWith(wrapper);
-        })
-        .catch(() => undefined);
-    }
-    return () => {
-      cancelled = true;
-    };
-  }, [html, doc.path]);
-
-  // 预览增强：图表围栏替换为 SVG，其余代码块按语言高亮。见 §10.3、§14.2。
-  useEffect(() => {
-    const host = hostRef.current;
-    if (!host) return;
-    let cancelled = false;
-    void (async () => {
-      await renderPreviewDiagrams(host, `md-preview:${doc.id}`, () => cancelled);
-      if (cancelled) return;
-      await highlightCodeBlocks(host, theme);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [html, doc.id, theme]);
-
-  return (
-    <article className="markdown-body" ref={hostRef} dangerouslySetInnerHTML={{ __html: html }} />
-  );
-}
-
 function PreviewPane({
   document,
   enabled,
   compileSignal,
+  diff,
+  onDiffModeChange,
+  onDiffJump,
 }: {
   document: DocumentState;
   enabled: boolean;
   compileSignal: number;
+  diff: PreviewDiffModel | null;
+  onDiffModeChange(mode: DiffViewMode): void;
+  onDiffJump(line: number): void;
 }) {
   const [html, setHtml] = useState("");
   const [error, setError] = useState<string | null>(null);
   const supported = document.format === "markdown";
+  const annotate = diff !== null;
 
   useEffect(() => {
     if (!supported || !enabled) return;
     let cancelled = false;
     const timer = setTimeout(() => {
-      renderMarkdownToHtml(document.content)
+      renderMarkdownToHtml(document.content, { annotateSource: annotate })
         .then((result) => {
           if (cancelled) return;
           setHtml(result);
@@ -680,7 +650,7 @@ function PreviewPane({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [document.content, supported, enabled]);
+  }, [document.content, supported, enabled, annotate]);
 
   const entry = getFormatEntry(document.format);
   if (entry?.extensionId) {
@@ -708,7 +678,14 @@ function PreviewPane({
       {error ? (
         <p className="placeholder">预览渲染失败：{error}</p>
       ) : (
-        <MarkdownPreview html={html} doc={document} />
+        <RenderedMarkdown
+          html={html}
+          filePath={document.path}
+          sourceKey={`md-preview:${document.id}`}
+          diff={diff}
+          onDiffModeChange={onDiffModeChange}
+          onDiffJump={onDiffJump}
+        />
       )}
     </div>
   );
@@ -758,6 +735,9 @@ export function App() {
     null,
   );
   const [wysiwygJump, setWysiwygJump] = useState<{ index: number; token: number } | null>(null);
+  const [wysiwygDiffJump, setWysiwygDiffJump] = useState<{ line: number; token: number } | null>(
+    null,
+  );
   const jumpTokenRef = useRef(0);
 
   const stateRef = useRef(state);
@@ -777,6 +757,125 @@ export function App() {
   const activeContent = active?.content ?? "";
   const activeFormat = active?.format ?? "";
   const activeId = active?.id ?? "";
+
+  // 渲染态差异：每个文档独立保存开关与基线。见 doc/design.md §21.8.1。
+  const [diffOptions, setDiffOptions] = useState<
+    Record<string, { enabled: boolean; base: DiffBase; mode: DiffViewMode; ref: string }>
+  >({});
+  const [diffIndex, setDiffIndex] = useState(-1);
+  const [diffRefresh, setDiffRefresh] = useState(0);
+  const activeDiff = activeId ? diffOptions[activeId] : undefined;
+  const diffEnabled = activeDiff?.enabled ?? false;
+  const diffBase = activeDiff?.base ?? "head";
+  const diffMode = activeDiff?.mode ?? "full";
+  const diffRef = activeDiff?.ref ?? "";
+
+  useEffect(() => {
+    if (!activeId) return;
+    setDiffOptions((current) =>
+      current[activeId]
+        ? current
+        : {
+            ...current,
+            [activeId]: {
+              enabled: settingsRef.current.diff.defaultOn,
+              base: "head",
+              mode: "full",
+              ref: "",
+            },
+          },
+    );
+  }, [activeId]);
+
+  // 文档关闭后清理其 diff 选项，避免长期运行时状态无限增长。见 §21.8.6。
+  useEffect(() => {
+    const openIds = new Set(state.documents.map((doc) => doc.id));
+    setDiffOptions((current) => {
+      const keys = Object.keys(current);
+      if (keys.every((id) => openIds.has(id))) return current;
+      const next: typeof current = {};
+      for (const id of keys) {
+        if (openIds.has(id)) next[id] = current[id]!;
+      }
+      return next;
+    });
+  }, [state.documents]);
+
+  const updateDiffOption = (
+    id: string,
+    patch: Partial<{ enabled: boolean; base: DiffBase; mode: DiffViewMode; ref: string }>,
+  ): void => {
+    if (!id) return;
+    setDiffOptions((current) => {
+      const previous = current[id] ?? {
+        enabled: false,
+        base: "head" as DiffBase,
+        mode: "full" as DiffViewMode,
+        ref: "",
+      };
+      return { ...current, [id]: { ...previous, ...patch } };
+    });
+    setDiffIndex(-1);
+  };
+
+  const diffState = useDocumentDiff({
+    document: active,
+    enabled: diffEnabled,
+    base: diffBase,
+    ref: diffRef,
+    refreshKey: diffRefresh,
+    onFallback: () => {
+      const id = activeRef.current?.id;
+      if (id) updateDiffOption(id, { base: "lastSave" });
+    },
+  });
+
+  const sourceDiffMarkers = useMemo(() => diffLineMarkers(diffState.diff), [diffState.diff]);
+  const diffHunks = diffState.diff?.hunks ?? EMPTY_DIFF_HUNKS;
+  const activeLineCount = active ? textLineCount(active.content) : 1;
+  const diffAnchors = useMemo(
+    () => diffHunks.map((hunk) => hunkAnchorLine(hunk, activeLineCount)),
+    [diffHunks, activeLineCount],
+  );
+  const diffItems = useMemo<DiffListItem[]>(() => {
+    // 改动列表显示所属标题面包屑。见 §21.8.3。
+    const breadcrumbAt = (line: number): string => {
+      const stack: OutlineItem[] = [];
+      for (const heading of outline) {
+        if (heading.line > line) break;
+        while (stack.length > 0 && stack[stack.length - 1]!.level >= heading.level) stack.pop();
+        stack.push(heading);
+      }
+      return stack.map((heading) => heading.text).join(" › ");
+    };
+    return diffHunks.map((hunk, index) => {
+      const line = diffAnchors[index] ?? hunk.newStart;
+      return {
+        line,
+        label: describeHunk(hunk),
+        kind: hunk.kind,
+        breadcrumb: breadcrumbAt(line),
+      };
+    });
+  }, [diffHunks, diffAnchors, outline]);
+
+  // 预览装饰只在对比就绪时启用；关闭后传 null 由渲染层清理。
+  const previewDiff = useMemo<PreviewDiffModel | null>(() => {
+    if (!diffEnabled) return null;
+    if (diffState.status !== "ready" && diffState.status !== "stale") return null;
+    if (!diffState.diff || diffState.oldText === null) return null;
+    return {
+      oldText: diffState.oldText,
+      newText: activeRef.current?.content ?? "",
+      diff: diffState.diff,
+      mode: diffMode,
+    };
+  }, [diffEnabled, diffState.status, diffState.diff, diffState.oldText, diffMode]);
+
+  useEffect(() => {
+    setDiffIndex(-1);
+  }, [diffState.diff, diffBase, diffEnabled, activeId]);
+
 
   // 大纲随内容变化防抖重建；仅 Markdown 与 LaTeX 提供大纲。见 doc/design.md §15.1。
   useEffect(() => {
@@ -820,7 +919,9 @@ export function App() {
 
   const jumpToProblem = (problem: Problem): void => {
     if (problem.line === undefined) return;
-    if (state.mode === "wysiwyg" || state.mode === "preview") manager.setMode("source");
+    if (state.mode === "wysiwyg" || state.mode === "preview" || state.mode === "git") {
+      manager.setMode("source");
+    }
     jumpTokenRef.current += 1;
     setSourceJump({ line: problem.line, column: problem.column ?? 1, token: jumpTokenRef.current });
   };
@@ -840,6 +941,63 @@ export function App() {
       ".pane:not([hidden]) .markdown-body :is(h1,h2,h3,h4,h5,h6)",
     );
     headings[item.index]?.scrollIntoView({ block: "start", behavior: "smooth" });
+  };
+
+  /** 定位到渲染预览中覆盖指定源码行号的块。见 doc/design.md §21.8.3。 */
+  const scrollPreviewToLine = (line: number): void => {
+    const blocks = [
+      ...document.querySelectorAll<HTMLElement>(
+        ".pane:not([hidden]) .markdown-body [data-src-line]",
+      ),
+    ].filter((element) => element.closest("[data-diff-ghost]") === null);
+    if (blocks.length === 0) return;
+    const exact = blocks.find((element) => {
+      const start = Number(element.dataset["srcLine"]);
+      const end = Number(element.dataset["srcEndLine"] ?? element.dataset["srcLine"]);
+      return Number.isFinite(start) && line >= start && line <= (Number.isFinite(end) ? end : start);
+    });
+    const fallback = [...blocks]
+      .reverse()
+      .find((element) => Number(element.dataset["srcLine"]) <= line);
+    const target = exact ?? fallback;
+    target?.scrollIntoView({ block: "center", behavior: "smooth" });
+    if (target) {
+      // 目标块短暂高亮，便于在长文档中定位。见 §21.8.3。
+      target.classList.add("diff-target");
+      setTimeout(() => target.classList.remove("diff-target"), 600);
+    }
+  };
+
+  const revealDiffAt = (line: number): void => {
+    if (!active) return;
+    jumpTokenRef.current += 1;
+    const token = jumpTokenRef.current;
+    if (state.mode === "source" || state.mode === "split") {
+      setSourceJump({ line, column: 1, token });
+      return;
+    }
+    if (state.mode === "wysiwyg") {
+      setWysiwygDiffJump({ line, token });
+      return;
+    }
+    scrollPreviewToLine(line);
+  };
+
+  const navigateDiff = (direction: 1 | -1): void => {
+    if (diffAnchors.length === 0) return;
+    const next =
+      diffIndex < 0
+        ? direction === 1
+          ? 0
+          : diffAnchors.length - 1
+        : (diffIndex + direction + diffAnchors.length) % diffAnchors.length;
+    // 从首/尾绕回时给出短暂提示。见 §21.8.3。
+    if (diffIndex >= 0 && next === (direction === 1 ? 0 : diffAnchors.length - 1)) {
+      manager.showNotice("info", direction === 1 ? "已回到第一处" : "已回到最后一处");
+    }
+    setDiffIndex(next);
+    const line = diffAnchors[next];
+    if (line !== undefined) revealDiffAt(line);
   };
 
   const saveSession = async (): Promise<void> => {
@@ -1149,6 +1307,24 @@ export function App() {
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [manager, workspaces]);
 
+  // 改动导航：Ctrl+Shift+D 开关，F7 / Shift+F7 在改动间循环。见 §21.8.8。
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "d") {
+        if (!activeId) return;
+        event.preventDefault();
+        updateDiffOption(activeId, { enabled: !diffEnabled });
+        return;
+      }
+      if (event.key === "F7" && diffEnabled) {
+        event.preventDefault();
+        navigateDiff(event.shiftKey ? -1 : 1);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [activeId, diffEnabled, diffAnchors, diffIndex, state.mode, active]);
+
   useEffect(() => {
     setCursor({ line: 1, column: 1 });
   }, [state.activeId]);
@@ -1201,6 +1377,27 @@ export function App() {
     { id: "file.exportPdf", title: "导出 PDF…", run: () => void exportPdfActive() },
     { id: "file.exportSvg", title: "导出图表 SVG…", run: () => void exportSvgActive() },
     { id: "view.find", title: "查找替换", shortcut: "Ctrl+F", run: () => setSearchSignal((value) => value + 1) },
+    {
+      id: "diff.toggle",
+      title: diffEnabled ? "隐藏改动" : "显示改动",
+      shortcut: "Ctrl+Shift+D",
+      run: () => updateDiffOption(activeId, { enabled: !diffEnabled }),
+    },
+    {
+      id: "diff.mode.full",
+      title: "差异视图：全文标注",
+      run: () => updateDiffOption(activeId, { mode: "full" }),
+    },
+    {
+      id: "diff.mode.collapse",
+      title: "差异视图：折叠未改动",
+      run: () => updateDiffOption(activeId, { mode: "collapse" }),
+    },
+    {
+      id: "diff.mode.fragments",
+      title: "差异视图：仅改动片段",
+      run: () => updateDiffOption(activeId, { mode: "fragments" }),
+    },
     { id: "view.settings", title: "打开设置…", shortcut: "Ctrl+,", run: () => setSettingsOpen(true) },
     { id: "latex.compile", title: "编译 LaTeX", shortcut: "Ctrl+B", run: () => setCompileSignal((value) => value + 1) },
     { id: "update.check", title: "检查更新", run: () => void checkUpdate() },
@@ -1208,6 +1405,7 @@ export function App() {
     { id: "view.mode.source", title: "视图模式：源码", run: () => manager.setMode("source") },
     { id: "view.mode.split", title: "视图模式：分栏", run: () => manager.setMode("split") },
     { id: "view.mode.preview", title: "视图模式：预览", run: () => manager.setMode("preview") },
+    { id: "view.mode.git", title: "视图模式：Git 差异", run: () => manager.setMode("git") },
     ...(import.meta.env.DEV
       ? [
           {
@@ -1351,6 +1549,7 @@ export function App() {
               disabled={
                 !active ||
                 (mode === "wysiwyg" && active.format !== "markdown") ||
+                (mode === "git" && active.format !== "markdown") ||
                 ((mode === "split" || mode === "preview") &&
                   !formatSupportsPreview(active.format))
               }
@@ -1555,6 +1754,26 @@ export function App() {
         </div>
       )}
 
+      {diffEnabled && diffState.status === "error" && (
+        <div className="banner banner-warning" role="status">
+          <span className="banner-text">读取差异基线失败：{diffState.message ?? "未知错误"}</span>
+          <button
+            type="button"
+            className="button small"
+            onClick={() => setDiffRefresh((value) => value + 1)}
+          >
+            重试
+          </button>
+          <button
+            type="button"
+            className="button small ghost"
+            onClick={() => updateDiffOption(activeId, { base: "lastSave" })}
+          >
+            改用上次保存
+          </button>
+        </div>
+      )}
+
         {active ? (
           <main ref={workspacePaneRef} className={`workspace mode-${state.mode}`}>
             <section
@@ -1567,12 +1786,16 @@ export function App() {
                 mode={state.mode}
                 searchSignal={searchSignal}
                 jump={wysiwygJump}
+                diff={previewDiff}
+                diffJump={wysiwygDiffJump}
                 onChange={(content) => manager.updateContent(active.id, content)}
               />
             </section>
             <section
               className="pane source-pane"
-              hidden={state.mode === "preview" || state.mode === "wysiwyg"}
+              hidden={
+                state.mode === "preview" || state.mode === "wysiwyg" || state.mode === "git"
+              }
               aria-label="源码编辑"
             >
               <SourcePane
@@ -1582,6 +1805,7 @@ export function App() {
                 jump={sourceJump}
                 tabSize={settings.editor.tabSize}
                 showLineNumbers={settings.editor.showLineNumbers}
+                diffMarkers={sourceDiffMarkers}
                 onChange={(content) => manager.updateContent(active.id, content)}
                 onSelection={(info) => {
                   setCursor(info);
@@ -1600,13 +1824,33 @@ export function App() {
             )}
             <section
               className="pane"
-              hidden={state.mode === "source" || state.mode === "wysiwyg"}
+              hidden={
+                state.mode === "source" || state.mode === "wysiwyg" || state.mode === "git"
+              }
               aria-label="渲染预览"
             >
               <PreviewPane
                 document={active}
-                enabled={state.mode !== "source"}
+                enabled={state.mode === "split" || state.mode === "preview"}
                 compileSignal={compileSignal}
+                diff={previewDiff}
+                onDiffModeChange={(mode) => updateDiffOption(active.id, { mode })}
+                onDiffJump={(line) => {
+                  if (state.mode === "preview") manager.setMode("source");
+                  jumpTokenRef.current += 1;
+                  setSourceJump({ line, column: 1, token: jumpTokenRef.current });
+                }}
+              />
+            </section>
+            <section
+              className="pane git-pane"
+              hidden={state.mode !== "git"}
+              aria-label="Git 差异"
+            >
+              <GitPane
+                key={active.id}
+                document={active}
+                active={state.mode === "git"}
               />
             </section>
           </main>
@@ -1725,6 +1969,30 @@ export function App() {
               ? (workspace.roots[0]?.root.name ?? "无工作区")
               : `${workspace.roots.length} 个工作区`}
         </span>
+        <DiffControls
+          enabled={diffEnabled}
+          state={diffState}
+          items={diffItems}
+          currentIndex={diffIndex}
+          disabled={!active}
+          dirty={active?.dirty ?? false}
+          mode={diffMode}
+          modeAvailable={state.mode !== "wysiwyg"}
+          commitRef={diffRef}
+          onToggle={() => updateDiffOption(activeId, { enabled: !diffEnabled })}
+          onBaseChange={(base) => updateDiffOption(activeId, { base })}
+          onCommitRefApply={(ref) => updateDiffOption(activeId, { base: "commit", ref })}
+          onModeChange={(mode) => updateDiffOption(activeId, { mode })}
+          onRefresh={() => setDiffRefresh((value) => value + 1)}
+          onPrev={() => navigateDiff(-1)}
+          onNext={() => navigateDiff(1)}
+          onJump={(index) => {
+            const line = diffAnchors[index];
+            if (line === undefined) return;
+            setDiffIndex(index);
+            revealDiffAt(line);
+          }}
+        />
         {(problems.length > 0 || problemsOpen) && (
           <button
             type="button"
@@ -1757,9 +2025,16 @@ export function App() {
         onClose={() => setSettingsOpen(false)}
         onSave={(patch) => {
           const next = patch as Settings;
+          const gitCommandChanged = next.git.command !== settings.git.command;
           manager.setAutoSave(next.editor.autoSave);
           manager.setSaveEol(next.editor.eol);
-          void settingsStore.update(next);
+          void settingsStore.update(next).then(() => {
+            if (!gitCommandChanged) return;
+            // Git 命令变更后重新尝试 Git 基线，而不是停留在「上次保存」。
+            const id = activeRef.current?.id;
+            if (id) updateDiffOption(id, { base: "head" });
+            setDiffRefresh((value) => value + 1);
+          });
         }}
         onExtensionsChanged={() => {
           void refreshExtensionFormats();

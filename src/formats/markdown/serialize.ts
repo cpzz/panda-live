@@ -90,3 +90,40 @@ export function serializeMarkdown(doc: PMJson): string {
 }
 
 export type { MdNode };
+
+export interface BlockLineRange {
+  /** 顶层块在序列化文本中的起始行（1 基）。 */
+  start: number;
+  /** 结束行（含）。 */
+  end: number;
+}
+
+export interface BlockLineMap {
+  ranges: BlockLineRange[];
+  /** 序列化文本的总行数，用于校验映射是否与整篇序列化一致。 */
+  totalLines: number;
+}
+
+function countLines(text: string): number {
+  return text.length === 0 ? 0 : text.split("\n").length;
+}
+
+/**
+ * 计算每个顶层块在序列化 Markdown 中的行范围。
+ * 与 `serializeMarkdown` 使用同一序列化器，块之间固定一个空行。见 §21.5。
+ */
+export function blockLineRanges(doc: PMJson): BlockLineMap {
+  const tree = convertDirectives(pmJsonToMdast(doc));
+  const children = tree.children ?? [];
+  const ranges: BlockLineRange[] = [];
+  let cursor = 1;
+  for (const child of children) {
+    const lines = Math.max(1, countLines(stringifyNodes([child])));
+    ranges.push({ start: cursor, end: cursor + lines - 1 });
+    cursor += lines + 1;
+  }
+  return {
+    ranges,
+    totalLines: Math.max(1, countLines(serializeMarkdown(doc).replace(/\n$/, ""))),
+  };
+}

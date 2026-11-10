@@ -1,4 +1,4 @@
-/*
+﻿/*
  * 显式主题覆盖。系统主题由 base.css 的 prefers-color-scheme 提供；
  * 用户选择“浅色/深色”时通过 :root[data-theme] 覆盖。见 doc/design.md §15.2。
  * 变量需与 base.css 保持同步。
@@ -61,6 +61,15 @@
   --cm-tag: #800000;
   --cm-attr: #0451a5;
   --cm-ini-section: #000000;
+
+  --diff-add-bg: rgba(46, 160, 67, 0.15);
+  --diff-add-border: #2ea043;
+  --diff-del-bg: rgba(207, 34, 46, 0.12);
+  --diff-del-border: #cf222e;
+  --diff-change-bg: rgba(191, 135, 0, 0.10);
+  --diff-change-border: #bf8700;
+  --diff-add-fg: #1a7f37;
+  --diff-del-fg: #cf222e;
 }
 
 :root[data-theme="dark"] {
@@ -121,4 +130,13 @@
   --cm-tag: #569cd6;
   --cm-attr: #9cdcfe;
   --cm-ini-section: #ffffff;
+
+  --diff-add-bg: rgba(63, 185, 80, 0.18);
+  --diff-add-border: #3fb950;
+  --diff-del-bg: rgba(248, 81, 73, 0.16);
+  --diff-del-border: #f85149;
+    --diff-change-bg: rgba(210, 153, 34, 0.14);
+  --diff-change-border: #d29922;
+  --diff-add-fg: #56d364;
+  --diff-del-fg: #f85149;
 }
