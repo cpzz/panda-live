@@ -1,4 +1,5 @@
 import { dialog, shell, type BrowserWindow } from "electron";
+import { t } from "../../src/i18n";
 import type { FileService } from "../services/file-service";
 import type { WorkspaceService } from "../services/workspace-service";
 import { handle } from "./router";
@@ -47,10 +48,10 @@ export function registerWorkspaceHandlers({
     try {
       protocol = new URL(request.url).protocol;
     } catch {
-      throw new Error("E_PAYLOAD_INVALID: 链接格式不合法");
+      throw new Error(`E_PAYLOAD_INVALID: ${t("链接格式不合法")}`);
     }
     if (!["http:", "https:", "mailto:"].includes(protocol)) {
-      throw new Error("E_PAYLOAD_INVALID: 仅允许 http/https/mailto 外链");
+      throw new Error(`E_PAYLOAD_INVALID: ${t("仅允许 http/https/mailto 外链")}`);
     }
     await shell.openExternal(request.url);
   });

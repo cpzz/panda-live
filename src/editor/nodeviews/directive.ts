@@ -1,5 +1,6 @@
 import type { Node as PMNode } from "prosemirror-model";
 import type { NodeView } from "prosemirror-view";
+import { t } from "../../i18n";
 
 /**
  * MyST `tab-set` 容器：页签状态由 NodeView 本地维护，不进入文档。见 doc/design.md §11.1。
@@ -42,7 +43,7 @@ export class TabSetNodeView implements NodeView {
   private sync(node: PMNode): void {
     const labels: string[] = [];
     node.content.forEach((child, _offset, index) => {
-      labels.push(String(child.attrs.label ?? "") || `页签 ${index + 1}`);
+      labels.push(String(child.attrs.label ?? "") || t("页签 {0}", index + 1));
     });
     const changed = labels.length !== this.labels.length || labels.some((label, index) => label !== this.labels[index]);
     if (changed) {
@@ -60,7 +61,7 @@ export class TabSetNodeView implements NodeView {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "myst-tab-button";
-      button.textContent = label || `页签 ${index + 1}`;
+      button.textContent = label || t("页签 {0}", index + 1);
       button.addEventListener("mousedown", (event) => event.preventDefault());
       button.addEventListener("click", () => {
         this.active = index;

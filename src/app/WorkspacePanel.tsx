@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type DragEvent as ReactDragEvent, type ReactNode } from "react";
 import type { FileRef } from "../shared/ipc";
+import { t } from "../i18n";
 import type { WorkspaceNode, WorkspaceStore } from "../services/workspace-store";
 import { Icon } from "./icons";
 
@@ -44,7 +45,7 @@ function NodeRow({
   askName(title: string, initial: string, submit: (value: string) => void): void;
 }) {
   const rename = (): void => {
-    askName(`将“${node.name}”重命名为`, node.name, (next) => {
+    askName(t("将“{0}”重命名为", node.name), node.name, (next) => {
       if (!next || next === node.name) return;
       void store.renameNode(node.path, next).then((ref) => {
         if (ref) onRenamed(node.path, ref);
@@ -53,8 +54,11 @@ function NodeRow({
   };
 
   const remove = (): void => {
-    const label = node.kind === "dir" ? "目录及其全部内容" : "文件";
-    if (!window.confirm(`确定删除${label}“${node.name}”吗？`)) return;
+    const message =
+      node.kind === "dir"
+        ? t("确定删除文件夹“{0}”及其全部内容吗？", node.name)
+        : t("确定删除文件“{0}”吗？", node.name);
+    if (!window.confirm(message)) return;
     void store.deleteNode(node.path, node.kind === "dir").then((ok) => {
       if (ok) onDeleted(node.path, node.kind === "dir");
     });
@@ -81,7 +85,7 @@ function NodeRow({
           <button
             type="button"
             className="tree-toggle"
-            aria-label={node.expanded ? "折叠" : "展开"}
+            aria-label={node.expanded ? t("折叠") : t("展开")}
             onClick={() => void store.toggle(node.path)}
           >
             {node.expanded ? "▾" : "▸"}
@@ -104,8 +108,8 @@ function NodeRow({
           <button
             type="button"
             className="tree-action"
-            title="重命名"
-            aria-label={`重命名 ${node.name}`}
+            title={t("重命名")}
+            aria-label={t("重命名 {0}", node.name)}
             onClick={rename}
           >
             <Icon name="pencil" size={13} />
@@ -113,8 +117,8 @@ function NodeRow({
           <button
             type="button"
             className="tree-action"
-            title="删除"
-            aria-label={`删除 ${node.name}`}
+            title={t("删除")}
+            aria-label={t("删除 {0}", node.name)}
             onClick={remove}
           >
             <Icon name="trash" size={13} />
@@ -122,8 +126,8 @@ function NodeRow({
           <button
             type="button"
             className="tree-action"
-            title="在文件管理器中显示"
-            aria-label={`显示 ${node.name}`}
+            title={t("在文件管理器中显示")}
+            aria-label={t("显示 {0}", node.name)}
             onClick={() => void store.reveal(node.path)}
           >
             <Icon name="reveal" size={13} />
@@ -186,7 +190,7 @@ export function WorkspacePanel({
   };
 
   const create = (rootPath: string, kind: "file" | "dir"): void => {
-    askName(kind === "dir" ? "新文件夹名称" : "新文件名", "", (name) => {
+    askName(kind === "dir" ? t("新文件夹名称") : t("新文件名"), "", (name) => {
       if (!name) return;
       void store.createNode(rootPath, kind, name);
     });
@@ -251,7 +255,7 @@ export function WorkspacePanel({
     <>
       <aside
         className={dragging ? "sidebar dragging" : "sidebar"}
-        aria-label="工作区"
+        aria-label={t("工作区")}
         onDragEnter={handleDragEnter}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -260,22 +264,22 @@ export function WorkspacePanel({
         {dragging && (
           <div className="sidebar-drop-hint" aria-hidden="true">
             <Icon name="folder-open" size={22} />
-            <span>松开以打开文件或文件夹</span>
+            <span>{t("松开以打开文件或文件夹")}</span>
           </div>
         )}
         <div className="sidebar-header">
           <span className="sidebar-title" title={state.roots.map((entry) => entry.root.path).join("\n")}>
             {state.roots.length === 0
-              ? "工作区"
+              ? t("工作区")
               : state.roots.length === 1
-                ? (state.roots[0]?.root.name ?? "工作区")
-                : `${state.roots.length} 个文件夹`}
+                ? (state.roots[0]?.root.name ?? t("工作区"))
+                : t("{0} 个文件夹", state.roots.length)}
           </span>
           <button
             type="button"
             className="icon-button"
-            title="打开文件夹"
-            aria-label="打开文件夹"
+            title={t("打开文件夹")}
+            aria-label={t("打开文件夹")}
             onClick={() => void store.openPicker()}
           >
             <Icon name="folder-open" />
@@ -284,8 +288,8 @@ export function WorkspacePanel({
             <button
               type="button"
               className="icon-button"
-              title="刷新全部"
-              aria-label="刷新工作区"
+              title={t("刷新全部")}
+              aria-label={t("刷新工作区")}
               onClick={() => void store.refresh()}
             >
               <Icon name="refresh" />
@@ -293,7 +297,7 @@ export function WorkspacePanel({
           )}
         </div>
 
-        <div className="sidebar-tabs" role="tablist" aria-label="侧栏视图">
+        <div className="sidebar-tabs" role="tablist" aria-label={t("侧栏视图")}>
           <button
             type="button"
             role="tab"
@@ -302,7 +306,7 @@ export function WorkspacePanel({
             onClick={() => setTab("files")}
           >
             <Icon name="folder-open" size={14} />
-            文件
+            {t("文件")}
           </button>
           <button
             type="button"
@@ -312,7 +316,7 @@ export function WorkspacePanel({
             onClick={() => setTab("outline")}
           >
             <Icon name="list" size={14} />
-            大纲
+            {t("大纲")}
           </button>
         </div>
 
@@ -333,9 +337,9 @@ export function WorkspacePanel({
                         <button
                           type="button"
                           className="tree-toggle workspace-root-toggle"
-                          aria-label={`${collapsed ? "展开" : "折叠"} ${entry.root.name}`}
+                          aria-label={t("{0} {1}", collapsed ? t("展开") : t("折叠"), entry.root.name)}
                           aria-expanded={!collapsed}
-                          title={collapsed ? "展开文件夹" : "折叠文件夹"}
+                          title={collapsed ? t("展开文件夹") : t("折叠文件夹")}
                           onClick={() => toggleRoot(entry.root.path)}
                         >
                           <Icon name={collapsed ? "chevron-right" : "chevron-down"} size={13} />
@@ -347,8 +351,8 @@ export function WorkspacePanel({
                           <button
                             type="button"
                             className="tree-action"
-                            title="新建文件"
-                            aria-label={`在 ${entry.root.name} 新建文件`}
+                            title={t("新建文件")}
+                            aria-label={t("在 {0} 新建文件", entry.root.name)}
                             onClick={() => create(entry.root.path, "file")}
                           >
                             <Icon name="file-plus" size={13} />
@@ -356,8 +360,8 @@ export function WorkspacePanel({
                           <button
                             type="button"
                             className="tree-action"
-                            title="新建文件夹"
-                            aria-label={`在 ${entry.root.name} 新建文件夹`}
+                            title={t("新建文件夹")}
+                            aria-label={t("在 {0} 新建文件夹", entry.root.name)}
                             onClick={() => create(entry.root.path, "dir")}
                           >
                             <Icon name="folder-plus" size={13} />
@@ -365,8 +369,8 @@ export function WorkspacePanel({
                           <button
                             type="button"
                             className="tree-action"
-                            title="刷新"
-                            aria-label={`刷新 ${entry.root.name}`}
+                            title={t("刷新")}
+                            aria-label={t("刷新 {0}", entry.root.name)}
                             onClick={() => void store.refresh(entry.root.path)}
                           >
                             <Icon name="refresh" size={13} />
@@ -374,8 +378,8 @@ export function WorkspacePanel({
                           <button
                             type="button"
                             className="tree-action"
-                            title="移除文件夹"
-                            aria-label={`移除文件夹 ${entry.root.name}`}
+                            title={t("移除文件夹")}
+                            aria-label={t("移除文件夹 {0}", entry.root.name)}
                             onClick={() => void store.closeRoot(entry.root.path)}
                           >
                             <Icon name="close" size={13} />
@@ -383,7 +387,7 @@ export function WorkspacePanel({
                         </span>
                       </div>
                       {!collapsed && (
-                        <div className="tree" role="tree" aria-label={`目录树：${entry.root.name}`}>
+                        <div className="tree" role="tree" aria-label={t("目录树：{0}", entry.root.name)}>
                           {entry.nodes.map((node) => (
                             <NodeRow
                               key={node.path}
@@ -398,7 +402,7 @@ export function WorkspacePanel({
                               askName={askName}
                             />
                           ))}
-                          {entry.nodes.length === 0 && <p className="sidebar-empty">目录为空</p>}
+                          {entry.nodes.length === 0 && <p className="sidebar-empty">{t("目录为空")}</p>}
                         </div>
                       )}
                     </section>
@@ -407,9 +411,9 @@ export function WorkspacePanel({
               </div>
             ) : (
               <div className="sidebar-empty">
-                <p>未打开文件夹</p>
+                <p>{t("未打开文件夹")}</p>
                 <button type="button" className="button" onClick={() => void store.openPicker()}>
-                  打开文件夹
+                  {t("打开文件夹")}
                 </button>
               </div>
             )}
@@ -437,7 +441,7 @@ export function WorkspacePanel({
           >
             <header className="modal-header">
               <h2>{prompt.title}</h2>
-              <button type="button" className="icon-button" aria-label="关闭" onClick={() => setPrompt(null)}>
+              <button type="button" className="icon-button" aria-label={t("关闭")} onClick={() => setPrompt(null)}>
                 <Icon name="close" />
               </button>
             </header>
@@ -451,10 +455,10 @@ export function WorkspacePanel({
             </div>
             <footer className="modal-footer">
               <button type="button" className="button ghost" onClick={() => setPrompt(null)}>
-                取消
+                {t("取消")}
               </button>
               <button type="submit" className="button primary">
-                确定
+                {t("确定")}
               </button>
             </footer>
           </form>

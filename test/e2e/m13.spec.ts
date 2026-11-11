@@ -33,7 +33,7 @@ test("M13：公式与图表诊断汇入问题面板", async () => {
     await expect(page.locator(".math-node-error")).toBeVisible({ timeout: 15_000 });
     await expect(page.locator(".diagram-error")).toBeVisible({ timeout: 15_000 });
 
-    const statusButton = page.locator(".statusbar-button");
+    const statusButton = page.getByRole("button", { name: "问题面板" });
     await expect(statusButton).toContainText("错误 2", { timeout: 15_000 });
     await statusButton.click();
 

@@ -1,5 +1,6 @@
 import DOMPurify from "dompurify";
 import type { Node as PMNode } from "prosemirror-model";
+import { t } from "../../i18n";
 import type { EditorView, NodeView } from "prosemirror-view";
 import { extractMathml, renderKatex } from "../../render/math/katex";
 import { problemStore } from "../../services/problem-store";
@@ -30,7 +31,7 @@ export class MathNodeView implements NodeView {
     this.problemKey = String(node.attrs.nodeId ?? `math-${Math.random().toString(36).slice(2, 10)}`);
     this.dom = document.createElement(displayMode ? "div" : "span");
     this.dom.className = displayMode ? "math-node math-node-block" : "math-node math-node-inline";
-    this.dom.title = "双击编辑公式";
+    this.dom.title = t("双击编辑公式");
     this.dom.addEventListener("dblclick", () => {
       void this.startEditing();
     });
@@ -58,13 +59,13 @@ export class MathNodeView implements NodeView {
     if (result.ok) {
       this.dom.innerHTML = DOMPurify.sanitize(result.html, KATEX_PROFILE);
       this.dom.classList.remove("math-node-error");
-      this.dom.title = "双击编辑公式";
+      this.dom.title = t("双击编辑公式");
       this.reportProblem(null);
     } else {
       this.dom.textContent = `${this.displayMode ? "$$" : "$"}${source}${this.displayMode ? "$$" : "$"}`;
       this.dom.classList.add("math-node-error");
-      this.dom.title = `公式错误：${result.error}`;
-      this.reportProblem(`公式渲染失败：${result.error}`);
+      this.dom.title = t("公式错误：{0}", result.error);
+      this.reportProblem(t("公式渲染失败：{0}", result.error));
     }
   }
 
@@ -102,16 +103,16 @@ export class MathNodeView implements NodeView {
       const copyButton = document.createElement("button");
       copyButton.type = "button";
       copyButton.className = "button small ghost math-copy-mathml";
-      copyButton.textContent = "复制 MathML";
+      copyButton.textContent = t("复制 MathML");
       copyButton.addEventListener("mousedown", (event) => event.preventDefault());
       copyButton.addEventListener("click", () => {
         const mathml = extractMathml(field.value, this.displayMode);
         if (!mathml) {
-          this.dom.title = "公式无法生成 MathML";
+          this.dom.title = t("公式无法生成 MathML");
           return;
         }
         void copyText(mathml).then((copied) => {
-          this.dom.title = copied ? "已复制 MathML" : "复制失败";
+          this.dom.title = copied ? t("已复制 MathML") : t("复制失败");
         });
       });
 

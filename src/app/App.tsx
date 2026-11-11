@@ -26,6 +26,7 @@ import type { DraftEntry, RecentEntry, SessionState } from "../shared/ipc";
 import type { CompileResult, EngineStatus } from "../shared/ipc";
 import type { Settings } from "../shared/settings";
 import { describeError, getErrorCode } from "../shared/errors";
+import { localeTag, resolveLocale, setLocale, t } from "../i18n";
 import { RecoveryDialog } from "./RecoveryDialog";
 import { CommandPalette, type CommandItem } from "./CommandPalette";
 import { DiffControls, type DiffListItem } from "./DiffControls";
@@ -81,7 +82,7 @@ function formatSize(bytes: number): string {
 }
 
 function formatTime(ms: number): string {
-  return new Date(ms).toLocaleString("zh-CN", { hour12: false });
+  return new Date(ms).toLocaleString(localeTag(), { hour12: false });
 }
 
 const EMPTY_DIFF_HUNKS: DiffHunk[] = [];
@@ -262,8 +263,8 @@ function SourcePane({
           <input
             autoFocus
             className="goto-input"
-            placeholder="行:列"
-            aria-label="跳转到行"
+            placeholder={t("行:列")}
+            aria-label={t("跳转到行")}
             value={gotoValue}
             onChange={(event) => setGotoValue(event.target.value)}
             onKeyDown={(event) => {
@@ -274,10 +275,10 @@ function SourcePane({
             }}
           />
           <button type="submit" className="button small">
-            跳转
+            {t("跳转")}
           </button>
           <button type="button" className="button small ghost" onClick={() => setGotoOpen(false)}>
-            取消
+            {t("取消")}
           </button>
         </form>
       )}
@@ -310,7 +311,7 @@ function MathmlPreviewPane({ document, enabled }: { document: DocumentState; ena
   return (
     <div className="preview-pane">
       {error ? (
-        <p className="placeholder">MathML 诊断：{error}</p>
+        <p className="placeholder">{t("MathML 诊断：{0}", error)}</p>
       ) : (
         <div className="mathml-preview" dangerouslySetInnerHTML={{ __html: html }} />
       )}
@@ -357,14 +358,14 @@ function DiagramPreviewPane({ document, enabled }: { document: DocumentState; en
       document.id,
       "diagram",
       "preview",
-      enabled && error ? [{ severity: "error", message: `图表渲染失败：${error}` }] : [],
+      enabled && error ? [{ severity: "error", message: t("图表渲染失败：{0}", error) }] : [],
     );
   }, [document.id, error, enabled]);
 
   return (
     <div className="preview-pane">
       {error ? (
-        <p className="placeholder">图表诊断：{error}</p>
+        <p className="placeholder">{t("图表诊断：{0}", error)}</p>
       ) : (
         <div className="diagram-svg-preview" dangerouslySetInnerHTML={{ __html: svg }} />
       )}
@@ -439,7 +440,7 @@ function ExtensionPreviewPane({
   if (!entry?.extensionId) {
     return (
       <div className="preview-pane">
-        <p className="placeholder">该格式的扩展已被禁用，按纯文本打开</p>
+        <p className="placeholder">{t("该格式的扩展已被禁用，按纯文本打开")}</p>
       </div>
     );
   }
@@ -447,7 +448,7 @@ function ExtensionPreviewPane({
   return (
     <div className="preview-pane">
       {error ? (
-        <p className="placeholder">扩展预览诊断：{error}</p>
+        <p className="placeholder">{t("扩展预览诊断：{0}", error)}</p>
       ) : (
         <article className="markdown-body extension-preview" dangerouslySetInnerHTML={{ __html: html }} />
       )}
@@ -497,7 +498,7 @@ function TexPreviewPane({
 
   const compile = async (): Promise<void> => {
     if (!document.path) {
-      setError("请先保存 .tex 文件后再编译");
+      setError(t("请先保存 .tex 文件后再编译"));
       return;
     }
     setBusy(true);
@@ -539,10 +540,12 @@ function TexPreviewPane({
     return (
       <div className="preview-pane">
         <div className="tex-placeholder">
-          <p>未检测到 TeX 引擎（Tectonic / latexmk / xelatex）。</p>
-          <p className="placeholder">安装任一引擎后点击“重新检测”；其他功能不受影响。</p>
+          <p>{t("未检测到 TeX 引擎（Tectonic / latexmk / xelatex）。")}</p>
+          <p className="placeholder">
+            {t("安装任一引擎后点击“重新检测”；其他功能不受影响。")}
+          </p>
           <button type="button" className="button small" onClick={() => void detect()}>
-            重新检测
+            {t("重新检测")}
           </button>
         </div>
       </div>
@@ -552,9 +555,11 @@ function TexPreviewPane({
   return (
     <div className="preview-pane tex-preview">
       {error && <p className="placeholder">{error}</p>}
-      {document.dirty && <p className="placeholder">当前有未保存修改，编译仅使用磁盘内容。</p>}
+      {document.dirty && (
+        <p className="placeholder">{t("当前有未保存修改，编译仅使用磁盘内容。")}</p>
+      )}
       {busy && (
-        <p className="placeholder">编译中…（首次编译需下载 TeX 宏包，可能需要几分钟）</p>
+        <p className="placeholder">{t("编译中…（首次编译需下载 TeX 宏包，可能需要几分钟）")}</p>
       )}
       {result && result.ok && result.pdfKey ? (
         <PdfPreview pdfKey={result.pdfKey} />
@@ -563,14 +568,14 @@ function TexPreviewPane({
         <ul className="tex-diagnostics">
           {result.diagnostics.map((diagnostic, index) => (
             <li key={`${index}-${diagnostic.message}`} className={`tex-diagnostic ${diagnostic.severity}`}>
-              {diagnostic.line !== undefined ? `第 ${diagnostic.line} 行：` : ""}
+              {diagnostic.line !== undefined ? t("第 {0} 行：", diagnostic.line) : ""}
               {diagnostic.message}
             </li>
           ))}
         </ul>
       )}
       {!result && engines?.available && !busy && (
-        <p className="placeholder">保存后自动编译。</p>
+        <p className="placeholder">{t("保存后自动编译。")}</p>
       )}
     </div>
   );
@@ -633,7 +638,7 @@ function PreviewPane({
   if (!supported) {
     return (
       <div className="preview-pane">
-        <p className="placeholder">该格式暂不支持渲染预览</p>
+        <p className="placeholder">{t("该格式暂不支持渲染预览")}</p>
       </div>
     );
   }
@@ -641,7 +646,7 @@ function PreviewPane({
   return (
     <div className="preview-pane">
       {error ? (
-        <p className="placeholder">预览渲染失败：{error}</p>
+        <p className="placeholder">{t("预览渲染失败：{0}", error)}</p>
       ) : (
         <RenderedMarkdown
           html={html}
@@ -667,6 +672,16 @@ export function App() {
   const state = useSyncExternalStore(manager.subscribe, manager.getState);
   const settings = useSyncExternalStore(settingsStore.subscribe, settingsStore.getState);
   const workspace = useSyncExternalStore(workspaces.subscribe, workspaces.getState);
+
+  // 界面语言在父组件渲染前写入全局，子组件直接调用 t() 即可拿到当前语言。
+  const locale = useMemo(() => {
+    const resolved = resolveLocale(settings.appearance.language, navigator.language);
+    setLocale(resolved);
+    if (typeof document !== "undefined") {
+      document.documentElement.lang = resolved === "zh" ? "zh-CN" : "en";
+    }
+    return resolved;
+  }, [settings.appearance.language]);
 
   const [cursor, setCursor] = useState<SelectionInfo>({ line: 1, column: 1 });
   const [searchSignal, setSearchSignal] = useState(0);
@@ -958,7 +973,7 @@ export function App() {
         : (diffIndex + direction + diffAnchors.length) % diffAnchors.length;
     // 从首/尾绕回时给出短暂提示。见 §21.8.3。
     if (diffIndex >= 0 && next === (direction === 1 ? 0 : diffAnchors.length - 1)) {
-      manager.showNotice("info", direction === 1 ? "已回到第一处" : "已回到最后一处");
+      manager.showNotice("info", direction === 1 ? t("已回到第一处") : t("已回到最后一处"));
     }
     setDiffIndex(next);
     const line = diffAnchors[next];
@@ -989,14 +1004,14 @@ export function App() {
     const doc = activeRef.current;
     if (!doc) return;
     if (doc.format !== "markdown") {
-      manager.showNotice("error", "仅 Markdown 文档支持导出 HTML");
+      manager.showNotice("error", t("仅 Markdown 文档支持导出 HTML"));
       return;
     }
     try {
       const { buildDocumentHtml, saveHtml } = await import("../services/export-service");
       const html = await buildDocumentHtml(doc, { theme: exportTheme() });
       const savedPath = await saveHtml(doc, html);
-      if (savedPath) manager.showNotice("info", `已导出 HTML：${savedPath}`);
+      if (savedPath) manager.showNotice("info", t("已导出 HTML：{0}", savedPath));
     } catch (reason) {
       manager.showNotice("error", describeError(reason));
     }
@@ -1006,7 +1021,7 @@ export function App() {
     const doc = activeRef.current;
     if (!doc) return;
     if (doc.format !== "markdown") {
-      manager.showNotice("error", "仅 Markdown 文档支持导出 PDF");
+      manager.showNotice("error", t("仅 Markdown 文档支持导出 PDF"));
       return;
     }
     try {
@@ -1016,7 +1031,7 @@ export function App() {
         html,
         suggestedName: `${doc.name.replace(/\.[^.]+$/, "")}.pdf`,
       });
-      manager.showNotice("info", `已导出 PDF：${result.path}`);
+      manager.showNotice("info", t("已导出 PDF：{0}", result.path));
     } catch (reason) {
       if (getErrorCode(reason) === "E_CANCELLED") return;
       manager.showNotice("error", describeError(reason));
@@ -1027,13 +1042,13 @@ export function App() {
     const doc = activeRef.current;
     if (!doc) return;
     if (doc.format !== "plantuml" && doc.format !== "mermaid") {
-      manager.showNotice("error", "仅 PlantUML / Mermaid 文档支持导出 SVG");
+      manager.showNotice("error", t("仅 PlantUML / Mermaid 文档支持导出 SVG"));
       return;
     }
     try {
       const { exportDiagramSvg } = await import("../services/export-service");
       const savedPath = await exportDiagramSvg(doc);
-      if (savedPath) manager.showNotice("info", `已导出 SVG：${savedPath}`);
+      if (savedPath) manager.showNotice("info", t("已导出 SVG：{0}", savedPath));
     } catch (reason) {
       if (getErrorCode(reason) === "E_CANCELLED") return;
       manager.showNotice("error", describeError(reason));
@@ -1045,19 +1060,23 @@ export function App() {
       const result = await window.panda.update.check();
       switch (result.status) {
         case "not-configured":
-          manager.showNotice("info", result.message ?? "未配置更新源");
+          manager.showNotice("info", result.message ?? t("未配置更新源"));
           return;
         case "available":
           manager.showNotice(
             "info",
-            `发现新版本 ${result.latestVersion ?? ""}（当前 ${result.currentVersion}）`,
+            t(
+              "发现新版本 {0}（当前 {1}）",
+              result.latestVersion ?? "",
+              result.currentVersion,
+            ),
           );
           return;
         case "latest":
-          manager.showNotice("info", `当前已是最新版本（${result.currentVersion}）`);
+          manager.showNotice("info", t("当前已是最新版本（{0}）", result.currentVersion));
           return;
         default:
-          manager.showNotice("error", `更新检查失败：${result.message ?? ""}`);
+          manager.showNotice("error", t("更新检查失败：{0}", result.message ?? ""));
       }
     } catch (reason) {
       manager.showNotice("error", describeError(reason));
@@ -1171,7 +1190,7 @@ export function App() {
             title: item.title,
             run: async () => {
               await window.panda.ext.command(item.id);
-              manager.showNotice("info", `已执行：${item.title}`);
+              manager.showNotice("info", t("已执行：{0}", item.title));
             },
           })),
         );
@@ -1306,17 +1325,22 @@ export function App() {
   }, [splitRatio, state.mode, state.activeId]);
 
   const paletteCommands: CommandItem[] = [
-    { id: "file.new", title: "新建文档", shortcut: "Ctrl+N", run: () => manager.newDocument() },
-    { id: "file.open", title: "打开文件…", shortcut: "Ctrl+O", run: () => void manager.openFiles() },
+    { id: "file.new", title: t("新建文档"), shortcut: "Ctrl+N", run: () => manager.newDocument() },
+    {
+      id: "file.open",
+      title: t("打开文件…"),
+      shortcut: "Ctrl+O",
+      run: () => void manager.openFiles(),
+    },
     {
       id: "workspace.open",
-      title: "打开文件夹…",
+      title: t("打开文件夹…"),
       shortcut: "Ctrl+Shift+O",
       run: () => void workspaces.openPicker(),
     },
     {
       id: "file.save",
-      title: "保存",
+      title: t("保存"),
       shortcut: "Ctrl+S",
       run: () => {
         if (state.activeId) void manager.saveDocument(state.activeId);
@@ -1324,7 +1348,7 @@ export function App() {
     },
     {
       id: "file.saveAs",
-      title: "另存为…",
+      title: t("另存为…"),
       shortcut: "Ctrl+Shift+S",
       run: () => {
         if (active) void manager.saveDocumentAs(active.id);
@@ -1332,50 +1356,73 @@ export function App() {
     },
     {
       id: "file.close",
-      title: "关闭当前标签",
+      title: t("关闭当前标签"),
       shortcut: "Ctrl+W",
       run: () => {
         if (active) void manager.closeDocument(active.id);
       },
     },
-    { id: "file.exportHtml", title: "导出 HTML…", run: () => void exportHtmlActive() },
-    { id: "file.exportPdf", title: "导出 PDF…", run: () => void exportPdfActive() },
-    { id: "file.exportSvg", title: "导出图表 SVG…", run: () => void exportSvgActive() },
-    { id: "view.find", title: "查找替换", shortcut: "Ctrl+F", run: () => setSearchSignal((value) => value + 1) },
+    { id: "file.exportHtml", title: t("导出 HTML…"), run: () => void exportHtmlActive() },
+    { id: "file.exportPdf", title: t("导出 PDF…"), run: () => void exportPdfActive() },
+    { id: "file.exportSvg", title: t("导出图表 SVG…"), run: () => void exportSvgActive() },
+    {
+      id: "view.find",
+      title: t("查找替换"),
+      shortcut: "Ctrl+F",
+      run: () => setSearchSignal((value) => value + 1),
+    },
     {
       id: "diff.toggle",
-      title: diffEnabled ? "隐藏改动" : "显示改动",
+      title: diffEnabled ? t("隐藏改动") : t("显示改动"),
       shortcut: "Ctrl+Shift+D",
       run: () => updateDiffOption(activeId, { enabled: !diffEnabled }),
     },
     {
       id: "diff.mode.full",
-      title: "差异视图：全文标注",
+      title: t("差异视图：全文标注"),
       run: () => updateDiffOption(activeId, { mode: "full" }),
     },
     {
       id: "diff.mode.collapse",
-      title: "差异视图：折叠未改动",
+      title: t("差异视图：折叠未改动"),
       run: () => updateDiffOption(activeId, { mode: "collapse" }),
     },
     {
       id: "diff.mode.fragments",
-      title: "差异视图：仅改动片段",
+      title: t("差异视图：仅改动片段"),
       run: () => updateDiffOption(activeId, { mode: "fragments" }),
     },
-    { id: "view.settings", title: "打开设置…", shortcut: "Ctrl+,", run: () => setSettingsOpen(true) },
-    { id: "latex.compile", title: "编译 LaTeX", shortcut: "Ctrl+B", run: () => setCompileSignal((value) => value + 1) },
-    { id: "update.check", title: "检查更新", run: () => void checkUpdate() },
-    { id: "view.mode.wysiwyg", title: "视图模式：所见即所得", run: () => manager.setMode("wysiwyg") },
-    { id: "view.mode.source", title: "视图模式：源码", run: () => manager.setMode("source") },
-    { id: "view.mode.split", title: "视图模式：分栏", run: () => manager.setMode("split") },
-    { id: "view.mode.preview", title: "视图模式：预览", run: () => manager.setMode("preview") },
-    { id: "view.mode.git", title: "视图模式：Git 差异", run: () => manager.setMode("git") },
+    {
+      id: "view.settings",
+      title: t("打开设置…"),
+      shortcut: "Ctrl+,",
+      run: () => setSettingsOpen(true),
+    },
+    {
+      id: "latex.compile",
+      title: t("编译 LaTeX"),
+      shortcut: "Ctrl+B",
+      run: () => setCompileSignal((value) => value + 1),
+    },
+    { id: "update.check", title: t("检查更新"), run: () => void checkUpdate() },
+    {
+      id: "view.mode.wysiwyg",
+      title: t("视图模式：所见即所得"),
+      run: () => manager.setMode("wysiwyg"),
+    },
+    { id: "view.mode.source", title: t("视图模式：源码"), run: () => manager.setMode("source") },
+    { id: "view.mode.split", title: t("视图模式：分栏"), run: () => manager.setMode("split") },
+    {
+      id: "view.mode.preview",
+      title: t("视图模式：预览"),
+      run: () => manager.setMode("preview"),
+    },
+    { id: "view.mode.git", title: t("视图模式：Git 差异"), run: () => manager.setMode("git") },
     ...(import.meta.env.DEV
       ? [
           {
             id: "view.performance",
-            title: "切换性能浮层",
+            title: t("切换性能浮层"),
             run: () => setPerfVisible((visible) => !visible),
           },
         ]
@@ -1446,8 +1493,8 @@ export function App() {
           type="button"
           className={workspace.visible ? "icon-button sidebar-toggle active" : "icon-button sidebar-toggle"}
           aria-pressed={workspace.visible}
-          aria-label={workspace.visible ? "折叠工作区" : "展开工作区"}
-          title={workspace.visible ? "折叠工作区" : "展开工作区"}
+          aria-label={workspace.visible ? t("折叠工作区") : t("展开工作区")}
+          title={workspace.visible ? t("折叠工作区") : t("展开工作区")}
           onClick={() => workspaces.setVisible(!workspace.visible)}
         >
           <Icon name={workspace.visible ? "sidebar-close" : "sidebar-open"} />
@@ -1456,8 +1503,8 @@ export function App() {
         <button
           type="button"
           className="icon-button toolbar-icon"
-          aria-label="新建"
-          title="新建（Ctrl+N）"
+          aria-label={t("新建")}
+          title={t("新建（Ctrl+N）")}
           onClick={() => manager.newDocument()}
         >
           <Icon name="file-plus" />
@@ -1465,8 +1512,8 @@ export function App() {
         <button
           type="button"
           className="icon-button toolbar-icon"
-          aria-label="打开"
-          title="打开（Ctrl+O）"
+          aria-label={t("打开")}
+          title={t("打开（Ctrl+O）")}
           onClick={() => void manager.openFiles()}
         >
           <Icon name="folder-open" />
@@ -1474,8 +1521,8 @@ export function App() {
         <button
           type="button"
           className="icon-button toolbar-icon"
-          aria-label="保存"
-          title="保存（Ctrl+S）"
+          aria-label={t("保存")}
+          title={t("保存（Ctrl+S）")}
           onClick={() => void manager.saveDocument(state.activeId ?? "")}
           disabled={!active}
         >
@@ -1484,8 +1531,8 @@ export function App() {
         <button
           type="button"
           className="icon-button toolbar-icon"
-          aria-label="另存为"
-          title="另存为（Ctrl+Shift+S）"
+          aria-label={t("另存为")}
+          title={t("另存为（Ctrl+Shift+S）")}
           onClick={() => active && void manager.saveDocumentAs(active.id)}
           disabled={!active}
         >
@@ -1494,22 +1541,22 @@ export function App() {
         <button
           type="button"
           className="icon-button toolbar-icon"
-          aria-label="命令面板"
-          title="命令面板（Ctrl+Shift+P）"
+          aria-label={t("命令面板")}
+          title={t("命令面板（Ctrl+Shift+P）")}
           onClick={() => setPaletteOpen(true)}
         >
           <Icon name="terminal" />
         </button>
         <span className="toolbar-divider" aria-hidden="true" />
-        <div className="mode-switch" role="group" aria-label="视图模式">
+        <div className="mode-switch" role="group" aria-label={t("视图模式")}>
           {(Object.keys(MODE_LABELS) as EditorMode[]).map((mode) => (
             <button
               key={mode}
               type="button"
               className={state.mode === mode ? "mode-button active" : "mode-button"}
               aria-pressed={state.mode === mode}
-              aria-label={MODE_LABELS[mode]}
-              title={MODE_LABELS[mode]}
+              aria-label={t(MODE_LABELS[mode]!)}
+              title={t(MODE_LABELS[mode]!)}
               onClick={() => manager.setMode(mode)}
               disabled={
                 !active ||
@@ -1526,8 +1573,21 @@ export function App() {
         <button
           type="button"
           className="icon-button toolbar-icon"
-          aria-label="设置"
-          title="设置（Ctrl+,）"
+          aria-label={locale === "zh" ? "切换到英文界面" : "Switch to Chinese"}
+          title={locale === "zh" ? "Switch to English" : "切换为中文"}
+          onClick={() => {
+            void settingsStore.update({
+              appearance: { language: locale === "zh" ? "en" : "zh" },
+            });
+          }}
+        >
+          <Icon name="languages" />
+        </button>
+        <button
+          type="button"
+          className="icon-button toolbar-icon"
+          aria-label={t("设置")}
+          title={t("设置（Ctrl+,）")}
           onClick={() => setSettingsOpen(true)}
         >
           <Icon name="settings" />
@@ -1554,7 +1614,7 @@ export function App() {
               className="resizer sidebar-resizer"
               role="separator"
               aria-orientation="vertical"
-              aria-label="调整侧栏宽度"
+              aria-label={t("调整侧栏宽度")}
               onPointerDown={beginSidebarResize}
             />
           </>
@@ -1562,13 +1622,18 @@ export function App() {
 
         <div className="editor-area">
           <div className="tabstrip" ref={tabstripRef}>
-        <div className="tabstrip-items" role="tablist" aria-label="打开的文档" ref={tabItemsRef}>
+        <div
+          className="tabstrip-items"
+          role="tablist"
+          aria-label={t("打开的文档")}
+          ref={tabItemsRef}
+        >
           {state.documents.map((doc) => (
             <div
               key={doc.id}
               className={doc.id === state.activeId ? "tab-item active" : "tab-item"}
               draggable
-              title={`${doc.path ?? doc.name}（拖拽排序，中键关闭）`}
+              title={t("{0}（拖拽排序，中键关闭）", doc.path ?? doc.name)}
               onMouseDown={(event) => {
                 // 阻止中键在标签上触发自动滚动。
                 if (event.button === 1) event.preventDefault();
@@ -1605,14 +1670,14 @@ export function App() {
                 className="tab"
                 onClick={() => manager.setActive(doc.id)}
               >
-                {doc.dirty && <span className="tab-dot" aria-label="未保存" />}
+                {doc.dirty && <span className="tab-dot" aria-label={t("未保存")} />}
                 <span className="tab-name">{doc.name}</span>
               </button>
               <button
                 type="button"
                 className="tab-close"
-                aria-label={`关闭 ${doc.name}`}
-                title={`关闭 ${doc.name}`}
+                aria-label={t("关闭 {0}", doc.name)}
+                title={t("关闭 {0}", doc.name)}
                 onClick={(event) => {
                   event.stopPropagation();
                   void manager.closeDocument(doc.id);
@@ -1622,15 +1687,17 @@ export function App() {
               </button>
             </div>
           ))}
-          {state.documents.length === 0 && <span className="tabstrip-empty">未打开文档</span>}
+          {state.documents.length === 0 && (
+            <span className="tabstrip-empty">{t("未打开文档")}</span>
+          )}
         </div>
         {tabsOverflow && (
           <button
             ref={tabMenuButtonRef}
             type="button"
             className="tab-overflow-button"
-            aria-label="全部标签"
-            title="全部标签"
+            aria-label={t("全部标签")}
+            title={t("全部标签")}
             aria-expanded={tabMenu !== null}
             onClick={(event) => {
               if (tabMenu) {
@@ -1649,7 +1716,12 @@ export function App() {
       {tabMenu && (
         <>
           <div className="tab-menu-backdrop" onClick={() => setTabMenu(null)} />
-          <div className="tab-menu" role="menu" aria-label="全部标签" style={{ top: tabMenu.top, right: tabMenu.right }}>
+          <div
+            className="tab-menu"
+            role="menu"
+            aria-label={t("全部标签")}
+            style={{ top: tabMenu.top, right: tabMenu.right }}
+          >
             {state.documents.map((doc) => (
               <button
                 key={doc.id}
@@ -1662,9 +1734,11 @@ export function App() {
                   setTabMenu(null);
                 }}
               >
-                {doc.dirty && <span className="tab-dot" aria-label="未保存" />}
+                {doc.dirty && <span className="tab-dot" aria-label={t("未保存")} />}
                 <span className="tab-menu-name">{doc.name}</span>
-                {doc.id === state.activeId && <span className="tab-menu-mark">当前</span>}
+                {doc.id === state.activeId && (
+                  <span className="tab-menu-mark">{t("当前")}</span>
+                )}
               </button>
             ))}
           </div>
@@ -1676,7 +1750,7 @@ export function App() {
           <span className="banner-text">
             {conflict.message}
             {conflict.diskMtimeMs !== undefined && conflict.localMtimeMs !== undefined
-              ? `（本地修改于 ${formatTime(conflict.localMtimeMs)}）`
+              ? t("（本地修改于 {0}）", formatTime(conflict.localMtimeMs))
               : ""}
           </span>
           <button
@@ -1684,14 +1758,14 @@ export function App() {
             className="button small"
             onClick={() => void manager.reloadFromDisk(conflict.documentId)}
           >
-            重新加载
+            {t("重新加载")}
           </button>
           <button
             type="button"
             className="button small"
             onClick={() => void manager.overwriteFromDisk(conflict.documentId)}
           >
-            覆盖保存
+            {t("覆盖保存")}
           </button>
           <button
             type="button"
@@ -1701,10 +1775,10 @@ export function App() {
               void manager.saveDocumentAs(conflict.documentId);
             }}
           >
-            另存为
+            {t("另存为")}
           </button>
           <button type="button" className="button small ghost" onClick={() => manager.dismissConflict()}>
-            忽略
+            {t("忽略")}
           </button>
         </div>
       )}
@@ -1713,27 +1787,29 @@ export function App() {
         <div className={`banner banner-${state.notice.kind}`} role={state.notice.kind === "error" ? "alert" : "status"}>
           <span className="banner-text">{state.notice.message}</span>
           <button type="button" className="button small ghost" onClick={() => manager.dismissNotice()}>
-            关闭
+            {t("关闭")}
           </button>
         </div>
       )}
 
       {diffEnabled && diffState.status === "error" && (
         <div className="banner banner-warning" role="status">
-          <span className="banner-text">读取差异基线失败：{diffState.message ?? "未知错误"}</span>
+          <span className="banner-text">
+            {t("读取差异基线失败：{0}", diffState.message ?? t("未知错误"))}
+          </span>
           <button
             type="button"
             className="button small"
             onClick={() => setDiffRefresh((value) => value + 1)}
           >
-            重试
+            {t("重试")}
           </button>
           <button
             type="button"
             className="button small ghost"
             onClick={() => updateDiffOption(activeId, { base: "lastSave" })}
           >
-            改用上次保存
+            {t("改用上次保存")}
           </button>
         </div>
       )}
@@ -1743,7 +1819,7 @@ export function App() {
             <section
               className="pane wysiwyg-pane"
               hidden={state.mode !== "wysiwyg"}
-              aria-label="所见即所得编辑"
+              aria-label={t("所见即所得编辑")}
             >
               <WysiwygPane
                 document={active}
@@ -1760,7 +1836,7 @@ export function App() {
               hidden={
                 state.mode === "preview" || state.mode === "wysiwyg" || state.mode === "git"
               }
-              aria-label="源码编辑"
+              aria-label={t("源码编辑")}
             >
               <SourcePane
                 document={active}
@@ -1782,7 +1858,7 @@ export function App() {
                 className="resizer split-resizer"
                 role="separator"
                 aria-orientation="vertical"
-                aria-label="调整分栏宽度"
+                aria-label={t("调整分栏宽度")}
                 onPointerDown={beginSplitResize}
               />
             )}
@@ -1791,7 +1867,7 @@ export function App() {
               hidden={
                 state.mode === "source" || state.mode === "wysiwyg" || state.mode === "git"
               }
-              aria-label="渲染预览"
+              aria-label={t("渲染预览")}
             >
               <PreviewPane
                 document={active}
@@ -1809,7 +1885,7 @@ export function App() {
             <section
               className="pane git-pane"
               hidden={state.mode !== "git"}
-              aria-label="Git 差异"
+              aria-label={t("Git 差异")}
             >
               <GitPane
                 key={active.id}
@@ -1821,47 +1897,47 @@ export function App() {
         ) : (
           <main className="empty-state">
             <PandaMark size={64} className="brand-mark-large" />
-            <h1>打开一个文档开始编辑</h1>
-            <p>源码与渲染结果实时同步，保存时保留原文件编码与换行符。</p>
+            <h1>{t("打开一个文档开始编辑")}</h1>
+            <p>{t("源码与渲染结果实时同步，保存时保留原文件编码与换行符。")}</p>
             <div className="empty-actions">
               <button type="button" className="button primary" onClick={() => manager.newDocument()}>
-                新建文档
+                {t("新建文档")}
               </button>
               <button type="button" className="button" onClick={() => void manager.openFiles()}>
-                打开文件
+                {t("打开文件")}
               </button>
             </div>
             <div className="welcome-shortcuts">
               <div className="welcome-shortcut">
                 <kbd>Ctrl+Shift+P</kbd>
-                <span>命令面板</span>
+                <span>{t("命令面板")}</span>
               </div>
               <div className="welcome-shortcut">
                 <kbd>Ctrl+O</kbd>
-                <span>打开文件</span>
+                <span>{t("打开文件")}</span>
               </div>
               <div className="welcome-shortcut">
                 <kbd>Ctrl+S</kbd>
-                <span>保存</span>
+                <span>{t("保存")}</span>
               </div>
               <div className="welcome-shortcut">
                 <kbd>Ctrl+F</kbd>
-                <span>查找</span>
+                <span>{t("查找")}</span>
               </div>
             </div>
             {recent.length > 0 && (
               <div className="recent">
                 <div className="recent-header">
-                  <h2>最近文件</h2>
+                  <h2>{t("最近文件")}</h2>
                   <button
                     type="button"
                     className="button small ghost"
-                    aria-label="删除所有最近文件"
+                    aria-label={t("删除所有最近文件")}
                     onClick={() => {
                       void window.panda.recent.clear().then(setRecent);
                     }}
                   >
-                    删除所有
+                    {t("删除所有")}
                   </button>
                 </div>
                 <ul>
@@ -1878,8 +1954,8 @@ export function App() {
                       <button
                         type="button"
                         className="icon-button recent-remove"
-                        aria-label={`从最近文件移除 ${entry.name}`}
-                        title="从最近文件移除"
+                        aria-label={t("从最近文件移除 {0}", entry.name)}
+                        title={t("从最近文件移除")}
                         onClick={() => {
                           void window.panda.recent.remove({ path: entry.path }).then(setRecent);
                         }}
@@ -1905,14 +1981,14 @@ export function App() {
       </div>
 
       <footer className="statusbar">
-        <span className="statusbar-name">{active?.path ?? "就绪"}</span>
+        <span className="statusbar-name">{active?.path ?? t("就绪")}</span>
         {active && (
           <span className="statusbar-meta">
-            {ENCODING_LABELS[active.encoding] ?? active.encoding}
+            {t(ENCODING_LABELS[active.encoding] ?? active.encoding)}
             {" · "}
             {active.eol.toUpperCase()}
             {active.bom ? " · BOM" : ""}
-            {active.readOnly ? " · 只读" : ""}
+            {active.readOnly ? t(" · 只读") : ""}
             {" · "}
             {active.format}
           </span>
@@ -1922,16 +1998,18 @@ export function App() {
           <span className="statusbar-meta">
             {formatSize(active.size)}
             {" · "}
-            {state.mode === "wysiwyg" ? "所见即所得" : `行 ${cursor.line}，列 ${cursor.column}`}
-            {active.dirty ? " · 未保存" : " · 已保存"}
+            {state.mode === "wysiwyg"
+              ? t("所见即所得")
+              : t("行 {0}，列 {1}", cursor.line, cursor.column)}
+            {active.dirty ? t(" · 未保存") : t(" · 已保存")}
           </span>
         )}
         <span className="statusbar-meta">
           {workspace.roots.length === 0
-            ? "无工作区"
+            ? t("无工作区")
             : workspace.roots.length === 1
-              ? (workspace.roots[0]?.root.name ?? "无工作区")
-              : `${workspace.roots.length} 个工作区`}
+              ? (workspace.roots[0]?.root.name ?? t("无工作区"))
+              : t("{0} 个工作区", workspace.roots.length)}
         </span>
         <DiffControls
           enabled={diffEnabled}
@@ -1961,11 +2039,11 @@ export function App() {
           <button
             type="button"
             className={problemsOpen ? "statusbar-button active" : "statusbar-button"}
-            aria-label="问题面板"
+            aria-label={t("问题面板")}
             aria-expanded={problemsOpen}
             onClick={() => setProblemsOpen((value) => !value)}
           >
-            错误 {errorCount} · 警告 {warningCount}
+            {t("错误 {0} · 警告 {1}", errorCount, warningCount)}
           </button>
         )}
       </footer>

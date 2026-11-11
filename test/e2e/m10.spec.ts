@@ -114,7 +114,7 @@ test("M10：扩展诊断汇入问题面板并可按行跳转", async () => {
     await page.getByRole("button", { name: "打开", exact: true }).click();
     await expect(page.locator(".tab-name")).toHaveText("sample.pdoc");
 
-    const statusButton = page.locator(".statusbar-button");
+    const statusButton = page.getByRole("button", { name: "问题面板" });
     await expect(statusButton).toContainText("警告 1", { timeout: 15_000 });
     await statusButton.click();
 

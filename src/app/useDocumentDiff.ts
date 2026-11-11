@@ -7,6 +7,7 @@ import {
 } from "../diff/compute";
 import type { DiffBase, GitBaselineReason } from "../shared/diff";
 import { describeError, getErrorCode } from "../shared/errors";
+import { getLocale, t } from "../i18n";
 
 export interface DiffViewState {
   status: "off" | "loading" | "stale" | "ready" | "error";
@@ -103,7 +104,7 @@ export function useDocumentDiff({
         base,
         diff: null,
         oldText: null,
-        message: "文件超过 2 MB，已跳过差异对比",
+        message: t("文件超过 2 MB，已跳过差异对比"),
       }));
       return;
     }
@@ -115,7 +116,7 @@ export function useDocumentDiff({
         base,
         diff: null,
         oldText: null,
-        message: "请输入提交引用，例如 HEAD~3、main 或 commit id",
+        message: t("请输入提交引用，例如 HEAD~3、main 或 commit id"),
       }));
       return;
     }
@@ -140,7 +141,7 @@ export function useDocumentDiff({
               ...current,
               status: "error",
               base,
-              message: "该编码不支持与 Git 基线对比，请改用「上次保存」",
+              message: t("该编码不支持与 Git 基线对比，请改用「上次保存」"),
             }));
             return;
           }
@@ -148,7 +149,7 @@ export function useDocumentDiff({
           if (base === "lastSave" || !target.path) {
             if (base !== "lastSave") {
               // 未保存的文档没有 Git 路径，直接退化为快照对比。
-              fallbackHintRef.current = "未保存的文档没有 Git 路径，已改用上次保存";
+              fallbackHintRef.current = t("未保存的文档没有 Git 路径，已改用上次保存");
               onFallbackRef.current();
               return;
             }
@@ -163,7 +164,7 @@ export function useDocumentDiff({
             // 等待期间切换了文档或基线时，后续结果一律丢弃。
             if (cancelled) return;
             if (!result.inRepo) {
-              fallbackHintRef.current = "未检测到 Git 仓库，已改用上次保存";
+              fallbackHintRef.current = t("未检测到 Git 仓库，已改用上次保存");
               onFallbackRef.current();
               return;
             }
@@ -176,7 +177,7 @@ export function useDocumentDiff({
                 baseLabel: result.baseLabel,
                 oldText: null,
                 diff: null,
-                message: `无法解析提交「${ref.trim()}」，请检查引用是否存在`,
+                message: t("无法解析提交「{0}」，请检查引用是否存在", ref.trim()),
               }));
               return;
             }
@@ -197,7 +198,7 @@ export function useDocumentDiff({
               baseLabel,
               oldText: null,
               diff: null,
-              message: "LFS 指针文件不支持差异对比",
+              message: t("LFS 指针文件不支持差异对比"),
             }));
             return;
           }
@@ -211,8 +212,8 @@ export function useDocumentDiff({
           if (base === "lastSave" && fallbackHintRef.current) {
             notices.push(fallbackHintRef.current);
           }
-          if (reason === "no-head") notices.push("空仓库：按全文新增展示");
-          if (diff.wordDiffSkipped) notices.push("文件较大：仅显示块级差异");
+          if (reason === "no-head") notices.push(t("空仓库：按全文新增展示"));
+          if (diff.wordDiffSkipped) notices.push(t("文件较大：仅显示块级差异"));
           setState((current) => ({
             status: "ready",
             base,
@@ -221,19 +222,23 @@ export function useDocumentDiff({
             baseLabel,
             oldText: oldText ?? "",
             diff,
-            message: notices.length > 0 ? notices.join("；") : null,
+            message:
+              notices.length > 0
+                ? notices.join(getLocale() === "zh" ? "；" : "; ")
+                : null,
           }));
         } catch (error) {
           if (cancelled) return;
           const code = getErrorCode(error);
           if (code === "E_GIT_MISSING") {
-            fallbackHintRef.current =
-              "未找到 Git，已改用上次保存；可在 设置 → 改动对比 指定 Git 路径或填写 wsl git";
+            fallbackHintRef.current = t(
+              "未找到 Git，已改用上次保存；可在 设置 → 改动对比 指定 Git 路径或填写 wsl git",
+            );
             onFallbackRef.current();
             return;
           }
           if (code === "E_GIT_NOT_REPO") {
-            fallbackHintRef.current = "未检测到 Git 仓库，已改用上次保存";
+            fallbackHintRef.current = t("未检测到 Git 仓库，已改用上次保存");
             onFallbackRef.current();
             return;
           }
@@ -310,7 +315,7 @@ export function diffLineMarkers(diff: LineDiff | null) {
 
 /** 改动列表用的摘要文本。 */
 export function describeHunk(hunk: DiffHunk): string {
-  if (hunk.kind === "add") return `新增 ${hunk.newCount} 行`;
-  if (hunk.kind === "delete") return `删除 ${hunk.oldCount} 行`;
-  return `修改 ${hunk.newCount} 行`;
+  if (hunk.kind === "add") return t("新增 {0} 行", hunk.newCount);
+  if (hunk.kind === "delete") return t("删除 {0} 行", hunk.oldCount);
+  return t("修改 {0} 行", hunk.newCount);
 }

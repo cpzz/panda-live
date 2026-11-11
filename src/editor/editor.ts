@@ -28,6 +28,7 @@ import {
   setSearch,
 } from "./search";
 import type { SearchOptions } from "../services/search";
+import { t } from "../i18n";
 
 export interface PandaEditorOptions {
   parent: HTMLElement;
@@ -117,20 +118,20 @@ export class PandaEditor {
     const toolbar = document.createElement("div");
     toolbar.className = "table-toolbar";
     toolbar.setAttribute("role", "toolbar");
-    toolbar.setAttribute("aria-label", "表格操作");
+    toolbar.setAttribute("aria-label", t("表格操作"));
     toolbar.hidden = true;
 
     const actions: Array<{ label: string; title: string; command: Command }> = [
-      { label: "↑行", title: "在上方插入行", command: addRowBefore },
-      { label: "↓行", title: "在下方插入行", command: addRowAfter },
-      { label: "←列", title: "在左侧插入列", command: addColumnBefore },
-      { label: "→列", title: "在右侧插入列", command: addColumnAfter },
-      { label: "删行", title: "删除行", command: deleteRow },
-      { label: "删列", title: "删除列", command: deleteColumn },
-      { label: "左", title: "左对齐", command: setColumnAlign("left") },
-      { label: "中", title: "居中", command: setColumnAlign("center") },
-      { label: "右", title: "右对齐", command: setColumnAlign("right") },
-      { label: "删表", title: "删除表格", command: deleteTable },
+      { label: t("↑行"), title: t("在上方插入行"), command: addRowBefore },
+      { label: t("↓行"), title: t("在下方插入行"), command: addRowAfter },
+      { label: t("←列"), title: t("在左侧插入列"), command: addColumnBefore },
+      { label: t("→列"), title: t("在右侧插入列"), command: addColumnAfter },
+      { label: t("删行"), title: t("删除行"), command: deleteRow },
+      { label: t("删列"), title: t("删除列"), command: deleteColumn },
+      { label: t("左"), title: t("左对齐"), command: setColumnAlign("left") },
+      { label: t("中"), title: t("居中"), command: setColumnAlign("center") },
+      { label: t("右"), title: t("右对齐"), command: setColumnAlign("right") },
+      { label: t("删表"), title: t("删除表格"), command: deleteTable },
     ];
 
     for (const action of actions) {

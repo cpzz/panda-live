@@ -1,3 +1,4 @@
+import type { Settings } from "../../src/shared/settings";
 import type { DraftService } from "../services/draft-service";
 import type { SessionService } from "../services/session-service";
 import type { SettingsService } from "../services/settings-service";
@@ -7,13 +8,24 @@ export interface StorageHandlerOptions {
   settings: SettingsService;
   session: SessionService;
   drafts: DraftService;
+  /** 设置写入后同步主进程语言与原生菜单。 */
+  onSettingsChanged?(settings: Settings): void;
 }
 
 /** 设置、会话、最近文件与草稿通道。见 doc/design.md §13.1、§12.4。 */
-export function registerStorageHandlers({ settings, session, drafts }: StorageHandlerOptions): void {
+export function registerStorageHandlers({
+  settings,
+  session,
+  drafts,
+  onSettingsChanged,
+}: StorageHandlerOptions): void {
   handle("settings:get", () => settings.get());
 
-  handle("settings:update", (request) => settings.update(request.settings));
+  handle("settings:update", async (request) => {
+    const next = await settings.update(request.settings);
+    onSettingsChanged?.(next);
+    return next;
+  });
 
   handle("session:load", () => session.load());
 

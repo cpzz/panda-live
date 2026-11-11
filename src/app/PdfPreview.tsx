@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
+import { t } from "../i18n";
 import { onThemeChange, resolveTheme, type AppTheme } from "../services/theme";
 
 interface PageSlot {
@@ -107,7 +108,7 @@ export function PdfPreview({ pdfKey }: { pdfKey: string }) {
       canvas.height = Math.floor(viewport.height);
       canvas.style.width = "100%";
       canvas.style.display = "block";
-      canvas.setAttribute("aria-label", `第 ${pageNumber} 页`);
+      canvas.setAttribute("aria-label", t("第 {0} 页", pageNumber));
       const context = canvas.getContext("2d");
       if (!context) return;
       const task = page.render({ canvasContext: context, viewport, canvas });
@@ -178,14 +179,14 @@ export function PdfPreview({ pdfKey }: { pdfKey: string }) {
   if (error) {
     return (
       <div className="preview-pane">
-        <p className="placeholder">PDF 加载失败：{error}</p>
+        <p className="placeholder">{t("PDF 加载失败：{0}", error)}</p>
       </div>
     );
   }
 
   return (
     <div className={`pdf-viewer${invert ? " pdf-invert" : ""}`} ref={scrollRef}>
-      {progress === 0 && <p className="placeholder">正在加载 PDF…</p>}
+      {progress === 0 && <p className="placeholder">{t("正在加载 PDF…")}</p>}
       <div className="pdf-pages" ref={pagesRef}>
         {slots.map((slot) => (
           <div

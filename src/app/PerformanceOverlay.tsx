@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { t } from "../i18n";
 import { diagramCacheStats } from "../render/diagram";
 
 interface Metrics {
@@ -87,25 +88,21 @@ export function PerformanceOverlay({ onClose }: { onClose(): void }) {
   const hitRate = cacheTotal > 0 ? `${Math.round((metrics.cacheHits / cacheTotal) * 100)}%` : "—";
 
   return (
-    <aside className="perf-overlay" aria-label="性能浮层">
+    <aside className="perf-overlay" aria-label={t("性能浮层")}>
       <header className="perf-overlay-head">
-        <span>性能</span>
+        <span>{t("性能")}</span>
         <button type="button" className="button small ghost" onClick={onClose}>
-          关闭
+          {t("关闭")}
         </button>
       </header>
       <dl className="perf-overlay-grid">
         <dt>FPS</dt>
         <dd>{metrics.fps.toFixed(0)}</dd>
-        <dt>长任务</dt>
-        <dd>
-          {metrics.longTasks} 次 / {Math.round(metrics.longTaskMs)} ms
-        </dd>
-        <dt>图表缓存</dt>
-        <dd>
-          {hitRate}（{metrics.cacheEntries} 项）
-        </dd>
-        <dt>JS 堆</dt>
+        <dt>{t("长任务")}</dt>
+        <dd>{t("{0} 次 / {1} ms", metrics.longTasks, Math.round(metrics.longTaskMs))}</dd>
+        <dt>{t("图表缓存")}</dt>
+        <dd>{t("{0}（{1} 项）", hitRate, metrics.cacheEntries)}</dd>
+        <dt>{t("JS 堆")}</dt>
         <dd>{metrics.heapMb === null ? "—" : `${metrics.heapMb.toFixed(1)} MB`}</dd>
       </dl>
     </aside>

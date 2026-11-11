@@ -1,5 +1,6 @@
 import { Schema, type DOMOutputSpec, type NodeSpec } from "prosemirror-model";
 import { tableNodes } from "prosemirror-tables";
+import { t } from "../i18n";
 
 /** ProseMirror JSON 片段；格式适配器与扩展 provider 的公共交换格式。见 doc/design.md §7.6.3。 */
 export interface PMJsonMark {
@@ -123,7 +124,11 @@ const nodes: Record<string, NodeSpec> = {
     toDOM: (node) => [
       "div",
       { class: "diagram-placeholder", "data-kind": String(node.attrs.kind ?? "") },
-      ["span", { class: "diagram-label" }, `${String(node.attrs.kind ?? "")}（双击编辑源码）`],
+      [
+        "span",
+        { class: "diagram-label" },
+        t("{0}（双击编辑源码）", String(node.attrs.kind ?? "")),
+      ],
       ["pre", { class: "diagram-source" }, String(node.attrs.source ?? "")],
     ],
   },

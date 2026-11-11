@@ -1,0 +1,20 @@
+{
+  "文件": "File",
+  "编辑": "Edit",
+  "视图": "View",
+  "导出 HTML…": "Export HTML…",
+  "导出 PDF…": "Export PDF…",
+  "导出图表 SVG…": "Export Diagram SVG…",
+  "退出": "Quit",
+  "撤销": "Undo",
+  "重做": "Redo",
+  "剪切": "Cut",
+  "复制": "Copy",
+  "粘贴": "Paste",
+  "全选": "Select All",
+  "重新加载": "Reload",
+  "开发者工具": "Developer Tools",
+  "实际大小": "Actual Size",
+  "放大": "Zoom In",
+  "缩小": "Zoom Out"
+}

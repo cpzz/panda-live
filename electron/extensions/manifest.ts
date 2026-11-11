@@ -5,6 +5,7 @@ import {
   type ExtensionManifest,
   type FormatCapabilities,
 } from "../../src/shared/extensions";
+import { t } from "../../src/i18n";
 
 const ID_PATTERN = /^[a-z0-9][a-z0-9-]*\.[a-z0-9][a-z0-9-]*$/;
 const PROVIDER_ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
@@ -133,54 +134,54 @@ export function validateManifest(raw: unknown, appVersion: string): ManifestVali
   const errors: string[] = [];
 
   if (!ID_PATTERN.test(data.id)) {
-    errors.push(`id 必须为 <publisher>.<name> 形式：${data.id}`);
+    errors.push(t("id 必须为 <publisher>.<name> 形式：{0}", data.id));
   }
   if (!semver.valid(data.version)) {
-    errors.push(`版本号不是合法 semver：${data.version}`);
+    errors.push(t("版本号不是合法 semver：{0}", data.version));
   }
   if (!semver.validRange(data.engines.panda)) {
-    errors.push(`engines.panda 不是合法 semver 范围：${data.engines.panda}`);
+    errors.push(t("engines.panda 不是合法 semver 范围：{0}", data.engines.panda));
   } else if (!semver.satisfies(appVersion, data.engines.panda)) {
-    errors.push(`engines.panda=${data.engines.panda} 不匹配应用版本 ${appVersion}`);
+    errors.push(t("engines.panda={0} 不匹配应用版本 {1}", data.engines.panda, appVersion));
   }
   for (const permission of data.permissions) {
     if (!(ALLOWED_PERMISSIONS as readonly string[]).includes(permission)) {
-      errors.push(`未知权限：${permission}`);
+      errors.push(t("未知权限：{0}", permission));
     }
   }
   if (data.main !== undefined && !isSafeEntry(data.main)) {
-    errors.push(`main 必须是扩展目录内的相对路径：${data.main}`);
+    errors.push(t("main 必须是扩展目录内的相对路径：{0}", data.main));
   }
   if (data.contributes.formats.length > 0 && !data.main) {
-    errors.push("声明格式贡献时必须提供 main 入口");
+    errors.push(t("声明格式贡献时必须提供 main 入口"));
   }
 
   const languageIds = new Set<string>();
   for (const language of data.contributes.languages) {
-    if (!PROVIDER_ID_PATTERN.test(language.id)) errors.push(`语言 id 不合法：${language.id}`);
-    if (languageIds.has(language.id)) errors.push(`重复的语言 id：${language.id}`);
+    if (!PROVIDER_ID_PATTERN.test(language.id)) errors.push(t("语言 id 不合法：{0}", language.id));
+    if (languageIds.has(language.id)) errors.push(t("重复的语言 id：{0}", language.id));
     languageIds.add(language.id);
     for (const extension of language.extensions) {
-      if (!extension.startsWith(".")) errors.push(`语言扩展名必须以点开头：${extension}`);
+      if (!extension.startsWith(".")) errors.push(t("语言扩展名必须以点开头：{0}", extension));
     }
   }
 
   const formatIds = new Set<string>();
   for (const format of data.contributes.formats) {
-    if (!PROVIDER_ID_PATTERN.test(format.id)) errors.push(`格式 id 不合法：${format.id}`);
-    if (formatIds.has(format.id)) errors.push(`重复的格式 id：${format.id}`);
+    if (!PROVIDER_ID_PATTERN.test(format.id)) errors.push(t("格式 id 不合法：{0}", format.id));
+    if (formatIds.has(format.id)) errors.push(t("重复的格式 id：{0}", format.id));
     formatIds.add(format.id);
     for (const extension of format.extensions) {
-      if (!extension.startsWith(".")) errors.push(`格式扩展名必须以点开头：${extension}`);
+      if (!extension.startsWith(".")) errors.push(t("格式扩展名必须以点开头：{0}", extension));
     }
     if (format.language && !languageIds.has(format.language)) {
-      errors.push(`格式 ${format.id} 引用了未声明的语言：${format.language}`);
+      errors.push(t("格式 {0} 引用了未声明的语言：{1}", format.id, format.language));
     }
   }
 
   const commandIds = new Set<string>();
   for (const command of data.contributes.commands) {
-    if (commandIds.has(command.id)) errors.push(`重复的命令 id：${command.id}`);
+    if (commandIds.has(command.id)) errors.push(t("重复的命令 id：{0}", command.id));
     commandIds.add(command.id);
   }
 
@@ -189,7 +190,7 @@ export function validateManifest(raw: unknown, appVersion: string): ManifestVali
     if (kind === "onStartup") continue;
     if (kind === "onFormat" && value && formatIds.has(value)) continue;
     if (kind === "onCommand" && value && commandIds.has(value)) continue;
-    errors.push(`未知激活事件：${event}`);
+    errors.push(t("未知激活事件：{0}", event));
   }
 
   if (errors.length > 0) return { manifest: null, errors };

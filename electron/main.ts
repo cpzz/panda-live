@@ -24,8 +24,10 @@ import { TexCompiler } from "./tex/compiler";
 import { detectEngines } from "./tex/engine";
 import { cleanupCompileDirs } from "./tex/pdf-cache";
 import { APP_OPEN_PATH_CHANNEL, FS_CHANGED_CHANNEL } from "../src/shared/events";
+import { resolveLocale, setLocale, t } from "../src/i18n";
 import type { SessionState } from "../src/shared/ipc";
 import { MENU_COMMAND_CHANNEL, type MenuCommand } from "../src/shared/menu";
+import type { Settings } from "../src/shared/settings";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL;
@@ -78,52 +80,58 @@ function sendCommand(command: MenuCommand): void {
 function buildMenu(): void {
   const template: MenuItemConstructorOptions[] = [
     {
-      label: "文件",
+      label: t("文件"),
       submenu: [
         {
           id: "export-html",
-          label: "导出 HTML…",
+          label: t("导出 HTML…"),
           click: () => sendCommand("file.exportHtml"),
         },
         {
           id: "export-pdf",
-          label: "导出 PDF…",
+          label: t("导出 PDF…"),
           click: () => sendCommand("file.exportPdf"),
         },
         {
           id: "export-svg",
-          label: "导出图表 SVG…",
+          label: t("导出图表 SVG…"),
           click: () => sendCommand("file.exportSvg"),
         },
         { type: "separator" },
-        { role: "quit", label: "退出" },
+        { role: "quit", label: t("退出") },
       ],
     },
     {
-      label: "编辑",
+      label: t("编辑"),
       submenu: [
-        { role: "undo", label: "撤销" },
-        { role: "redo", label: "重做" },
+        { role: "undo", label: t("撤销") },
+        { role: "redo", label: t("重做") },
         { type: "separator" },
-        { role: "cut", label: "剪切" },
-        { role: "copy", label: "复制" },
-        { role: "paste", label: "粘贴" },
-        { role: "selectAll", label: "全选" },
+        { role: "cut", label: t("剪切") },
+        { role: "copy", label: t("复制") },
+        { role: "paste", label: t("粘贴") },
+        { role: "selectAll", label: t("全选") },
       ],
     },
     {
-      label: "视图",
+      label: t("视图"),
       submenu: [
-        { role: "reload", label: "重新加载" },
-        { role: "toggleDevTools", label: "开发者工具" },
+        { role: "reload", label: t("重新加载") },
+        { role: "toggleDevTools", label: t("开发者工具") },
         { type: "separator" },
-        { role: "resetZoom", label: "实际大小" },
-        { role: "zoomIn", label: "放大" },
-        { role: "zoomOut", label: "缩小" },
+        { role: "resetZoom", label: t("实际大小") },
+        { role: "zoomIn", label: t("放大") },
+        { role: "zoomOut", label: t("缩小") },
       ],
     },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
+/** 主进程语言与设置保持同步；设置变更后重建原生菜单。 */
+function applyLanguage(settingsValue: Settings): void {
+  setLocale(resolveLocale(settingsValue.appearance.language, app.getLocale()));
+  buildMenu();
 }
 
 function createWindow(bounds?: SessionState["window"]): void {
@@ -203,6 +211,7 @@ async function bootstrap(): Promise<void> {
   });
   workspaces = workspaceService;
   await settings.load();
+  applyLanguage(settings.get());
 
   const appRoot = path.join(__dirname, "..");
   const builtRunner = path.join(__dirname, "host-runner.cjs");
@@ -230,7 +239,12 @@ async function bootstrap(): Promise<void> {
   registerFileHandlers({ files, getWindow: () => mainWindow });
   registerWorkspaceHandlers({ files, workspaces: workspaceService, getWindow: () => mainWindow });
   registerGitHandlers({ files, git: new GitService(), settings });
-  registerStorageHandlers({ settings, session, drafts });
+  registerStorageHandlers({
+    settings,
+    session,
+    drafts,
+    onSettingsChanged: (next) => applyLanguage(next),
+  });
   registerExtensionHandlers({ extensions: extensionService, getWindow: () => mainWindow });
   handle("app:pendingOpenPaths", () => pendingOpenPaths.splice(0));
   handle("update:check", () =>

@@ -1,7 +1,17 @@
 import { diffLines, diffWordsWithSpace } from "diff";
 import { renderMarkdownToHtml } from "../formats/markdown/preview";
+import { getLocale, t } from "../i18n";
 import type { DiffViewMode } from "../shared/diff";
 import type { DiffHunk, LineDiff, WordSegment } from "./compute";
+
+/** 列表分隔符：中文用全角，英文用半角。 */
+function listSeparator(): string {
+  return getLocale() === "zh" ? "；" : "; ";
+}
+
+function partSeparator(): string {
+  return getLocale() === "zh" ? "、" : ", ";
+}
 
 export interface PreviewDiffModel {
   /** 基线文本；删除幽灵块与词级比较使用。 */
@@ -157,9 +167,9 @@ export function clearPreviewDiff(host: HTMLElement): void {
 }
 
 function describeHunk(hunk: DiffHunk): string {
-  if (hunk.kind === "add") return `新增 ${hunk.newCount} 行`;
-  if (hunk.kind === "delete") return `删除 ${hunk.oldCount} 行`;
-  return `修改 ${hunk.newCount} 行`;
+  if (hunk.kind === "add") return t("新增 {0} 行", hunk.newCount);
+  if (hunk.kind === "delete") return t("删除 {0} 行", hunk.oldCount);
+  return t("修改 {0} 行", hunk.newCount);
 }
 
 /** 悬浮提示中的源码摘要：压平空白并截断，避免超长行撑爆 tooltip。 */
@@ -184,7 +194,7 @@ function markBlocks(host: HTMLElement, diff: LineDiff): void {
     unit.classList.add(`diff-${kind}`);
     // 悬停提示改动规模与对应源码行，便于确认黄线到底改了什么。见 §21.8.4。
     if (matched.length > 0) {
-      const summary = [...new Set(matched.map(describeHunk))].join("；");
+      const summary = [...new Set(matched.map(describeHunk))].join(listSeparator());
       const details = matched
         .slice(0, 2)
         .map((hunk) =>
@@ -335,7 +345,7 @@ function decorateRow(oldRow: HTMLElement, newRow: HTMLElement): void {
   if (sameText && !marked) {
     // 渲染文本完全相同：只是源码格式变化，给出明确标签而不是只有黄线。
     newRow.classList.add("diff-format-only");
-    newRow.title = `${newRow.title ? `${newRow.title}\n` : ""}仅格式变化：渲染内容与改动前相同`;
+    newRow.title = `${newRow.title ? `${newRow.title}\n` : ""}${t("仅格式变化：渲染内容与改动前相同")}`;
     return;
   }
 
@@ -659,17 +669,17 @@ async function appendGhosts(
     const wrapper = document.createElement("div");
     wrapper.className = "diff-ghost";
     wrapper.dataset["diffGhost"] = "true";
-    wrapper.setAttribute("aria-label", "已删除的内容");
+    wrapper.setAttribute("aria-label", t("已删除的内容"));
     wrapper.innerHTML = html;
 
     const label = document.createElement("div");
     label.className = "diff-ghost-label";
     const text = document.createElement("span");
-    text.textContent = "已删除";
+    text.textContent = t("已删除");
     const copy = document.createElement("button");
     copy.type = "button";
     copy.className = "button small ghost";
-    copy.textContent = "复制原文";
+    copy.textContent = t("复制原文");
     copy.addEventListener("click", () => {
       void navigator.clipboard?.writeText(hunk.oldText);
     });
@@ -745,9 +755,12 @@ function appendInvisibleNotice(host: HTMLElement, model: PreviewDiffModel): void
   const notice = document.createElement("div");
   notice.className = "diff-notice";
   const parts: string[] = [];
-  if (frontmatterChanged) parts.push("元数据（frontmatter）");
-  if (hasReferenceDefinitionChange(model.diff)) parts.push("引用定义");
-  notice.textContent = `${parts.join("、")}有改动，属于不可见内容，切换到源码查看。`;
+  if (frontmatterChanged) parts.push(t("元数据（frontmatter）"));
+  if (hasReferenceDefinitionChange(model.diff)) parts.push(t("引用定义"));
+  notice.textContent = t(
+    "{0}有改动，属于不可见内容，切换到源码查看。",
+    parts.join(partSeparator()),
+  );
   host.prepend(notice);
 }
 
@@ -791,7 +804,7 @@ function applyCollapseMode(host: HTMLElement, contextBlocks: number): void {
     bar.className = "diff-collapse-bar";
     bar.setAttribute("role", "button");
     bar.tabIndex = 0;
-    bar.textContent = `… ${hidden.length} 个未改动块 …`;
+    bar.textContent = t("… {0} 个未改动块 …", hidden.length);
     const expand = (): void => {
       for (const element of hidden) {
         element.classList.remove("diff-hidden");
@@ -820,7 +833,7 @@ interface FragmentGroup {
 }
 
 function collectHeadingBreadcrumb(headings: Array<{ level: number; text: string }>): string {
-  return headings.map((heading) => heading.text).join(" › ") || "文档开头";
+  return headings.map((heading) => heading.text).join(" › ") || t("文档开头");
 }
 
 /** 仅改动片段：把连续改动块包成卡片并隐藏其余内容。 */
@@ -850,7 +863,7 @@ function applyFragmentsMode(host: HTMLElement): void {
   const cards: HTMLElement[] = groups.map((group, index) => {
     const card = document.createElement("section");
     card.className = "diff-fragment-card";
-    card.setAttribute("aria-label", `改动片段 ${index + 1}`);
+    card.setAttribute("aria-label", t("改动片段 {0}", index + 1));
 
     const header = document.createElement("div");
     header.className = "diff-fragment-header";
@@ -859,21 +872,21 @@ function applyFragmentsMode(host: HTMLElement): void {
     breadcrumb.textContent = group.breadcrumb;
     const count = document.createElement("span");
     count.className = "diff-fragment-count";
-    count.textContent = `第 ${index + 1} 处 / 共 ${groups.length} 处`;
+    count.textContent = t("第 {0} 处 / 共 {1} 处", index + 1, groups.length);
     const actions = document.createElement("span");
     actions.className = "diff-fragment-actions";
     const previous = document.createElement("button");
     previous.type = "button";
     previous.className = "button small ghost";
-    previous.textContent = "上一处";
+    previous.textContent = t("上一处");
     const next = document.createElement("button");
     next.type = "button";
     next.className = "button small ghost";
-    next.textContent = "下一处";
+    next.textContent = t("下一处");
     const back = document.createElement("button");
     back.type = "button";
     back.className = "button small ghost";
-    back.textContent = "返回全文";
+    back.textContent = t("返回全文");
     back.addEventListener("click", () => {
       host.dispatchEvent(
         new CustomEvent("panda-diff-mode", { bubbles: true, detail: { mode: "full" } }),
@@ -979,7 +992,7 @@ export async function applyPreviewDiff(
   if (rewrite) {
     const notice = document.createElement("div");
     notice.className = "diff-notice";
-    notice.textContent = "本次改动覆盖全文 40% 以上，仅显示块级标注。";
+    notice.textContent = t("本次改动覆盖全文 40% 以上，仅显示块级标注。");
     host.prepend(notice);
   }
   applyViewMode(host, model.mode);

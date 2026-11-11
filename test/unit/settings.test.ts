@@ -43,6 +43,15 @@ describe("设置合并", () => {
     ).toMatchObject({ lineWidth: 30, lineWidthUnit: "percent" });
   });
 
+  it("界面语言仅接受 zh / en / system", () => {
+    expect(mergeSettings(undefined).appearance.language).toBe("zh");
+    expect(mergeSettings({ appearance: { language: "fr" } }).appearance.language).toBe("zh");
+    expect(mergeSettings({ appearance: { language: "en" } }).appearance.language).toBe("en");
+    expect(mergeSettings({ appearance: { language: "system" } }).appearance.language).toBe(
+      "system",
+    );
+  });
+
   it("Git 命令为空时回落默认值，并保留自定义命令", () => {
     expect(mergeSettings({ git: { command: "   " } }).git.command).toBe("git");
     expect(mergeSettings({ git: { command: " wsl git " } }).git.command).toBe("wsl git");

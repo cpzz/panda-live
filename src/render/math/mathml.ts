@@ -1,4 +1,5 @@
 import DOMPurify from "dompurify";
+import { t } from "../../i18n";
 
 export type MathmlRenderResult =
   | { ok: true; html: string }
@@ -13,11 +14,11 @@ const MATHML_PROFILE = { USE_PROFILES: { mathMl: true } } as const;
 export function renderMathml(source: string): MathmlRenderResult {
   const parsed = new DOMParser().parseFromString(source, "application/xml");
   if (parsed.querySelector("parsererror")) {
-    return { ok: false, error: "MathML 不是合法的 XML 片段" };
+    return { ok: false, error: t("MathML 不是合法的 XML 片段") };
   }
   const html = DOMPurify.sanitize(source, MATHML_PROFILE);
   if (!/<math[\s>]/i.test(html)) {
-    return { ok: false, error: "内容不包含 <math> 元素" };
+    return { ok: false, error: t("内容不包含 <math> 元素") };
   }
   return { ok: true, html };
 }

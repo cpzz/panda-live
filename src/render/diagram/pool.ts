@@ -1,3 +1,4 @@
+import { t } from "../../i18n";
 import type { DiagramRenderer } from "./service";
 import type { RenderRequest, RenderResponse } from "./types";
 
@@ -142,7 +143,7 @@ export class IframeSandboxPool implements DiagramRenderer {
     iframe.className = "diagram-sandbox-frame";
     iframe.setAttribute("aria-hidden", "true");
     iframe.tabIndex = -1;
-    iframe.title = "图表渲染沙箱";
+    iframe.title = t("图表渲染沙箱");
     iframe.style.cssText =
       "position:fixed;left:-2000px;top:0;width:800px;height:600px;border:0;visibility:hidden;pointer-events:none";
 

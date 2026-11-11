@@ -1,4 +1,5 @@
 import { DiagramCache } from "./cache";
+import { t } from "../../i18n";
 import { sha256Hex } from "./hash";
 import { normalizeDiagramSource } from "./normalize";
 import { sanitizeDiagramSvg } from "./sanitize";
@@ -93,7 +94,7 @@ export class DiagramRenderService {
       }
       const svg = this.sanitize(response.svg);
       if (!svg) {
-        return { ok: false, error: "图表输出未通过安全消毒，已丢弃", code: "E_RENDER_FAILED" };
+        return { ok: false, error: t("图表输出未通过安全消毒，已丢弃"), code: "E_RENDER_FAILED" };
       }
       void this.cache.set(cacheKey, svg);
       return { ok: true, svg };
@@ -113,11 +114,11 @@ export class DiagramRenderService {
 
   private abortResult(controller: AbortController): DiagramResult {
     if (controller.signal.reason === "cancelled") {
-      return { ok: false, error: "渲染已取消", code: "E_CANCELLED" };
+      return { ok: false, error: t("渲染已取消"), code: "E_CANCELLED" };
     }
     return {
       ok: false,
-      error: `图表渲染超时（${Math.round(this.timeoutMs / 1000)} s），已重建渲染沙箱`,
+      error: t("图表渲染超时（{0} s），已重建渲染沙箱", Math.round(this.timeoutMs / 1000)),
       code: "E_RENDER_TIMEOUT",
     };
   }

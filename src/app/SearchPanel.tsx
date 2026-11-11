@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { buildSearchRegex, type SearchOptions } from "../services/search";
 import { DEFAULT_SEARCH_OPTIONS } from "../editor/search";
 import type { PandaEditor } from "../editor/editor";
+import { t } from "../i18n";
 import { Icon } from "./icons";
 
 interface SearchPanelProps {
@@ -65,17 +66,17 @@ export function SearchPanel({ editor, openSignal, onClose }: SearchPanelProps) {
         <input
           ref={inputRef}
           className="search-input"
-          placeholder="查找"
+          placeholder={t("查找")}
           value={term}
-          aria-label="查找内容"
+          aria-label={t("查找内容")}
           onChange={(event) => setTerm(event.target.value)}
         />
         <button
           type="button"
           className={options.caseSensitive ? "find-toggle active" : "find-toggle"}
-          aria-label="区分大小写"
+          aria-label={t("区分大小写")}
           aria-pressed={options.caseSensitive}
-          title="区分大小写"
+          title={t("区分大小写")}
           onClick={() => setOptions({ ...options, caseSensitive: !options.caseSensitive })}
         >
           Aa
@@ -83,9 +84,9 @@ export function SearchPanel({ editor, openSignal, onClose }: SearchPanelProps) {
         <button
           type="button"
           className={options.regex ? "find-toggle active" : "find-toggle"}
-          aria-label="正则"
+          aria-label={t("正则")}
           aria-pressed={options.regex}
-          title="使用正则表达式"
+          title={t("使用正则表达式")}
           onClick={() => setOptions({ ...options, regex: !options.regex })}
         >
           .*
@@ -93,21 +94,21 @@ export function SearchPanel({ editor, openSignal, onClose }: SearchPanelProps) {
         <button
           type="button"
           className={options.wholeWord ? "find-toggle active" : "find-toggle"}
-          aria-label="全词"
+          aria-label={t("全词")}
           aria-pressed={options.wholeWord}
-          title="全词匹配"
+          title={t("全词匹配")}
           onClick={() => setOptions({ ...options, wholeWord: !options.wholeWord })}
         >
           ab
         </button>
         <span className="search-count" aria-live="polite">
-          {regexInvalid ? "正则无效" : `${info.active} / ${info.total}`}
+          {regexInvalid ? t("正则无效") : `${info.active} / ${info.total}`}
         </span>
         <button
           type="button"
           className="find-icon"
-          aria-label="上一个"
-          title="上一个（Shift+Enter）"
+          aria-label={t("上一个")}
+          title={t("上一个（Shift+Enter）")}
           disabled={info.total === 0}
           onClick={() => editor && setInfo(editor.findNext(-1))}
         >
@@ -116,30 +117,30 @@ export function SearchPanel({ editor, openSignal, onClose }: SearchPanelProps) {
         <button
           type="button"
           className="find-icon"
-          aria-label="下一个"
-          title="下一个（Enter）"
+          aria-label={t("下一个")}
+          title={t("下一个（Enter）")}
           disabled={info.total === 0}
           onClick={() => editor && setInfo(editor.findNext(1))}
         >
           <Icon name="arrow-down" size={14} />
         </button>
-        <button type="button" className="find-icon" aria-label="关闭查找" title="关闭" onClick={close}>
+        <button type="button" className="find-icon" aria-label={t("关闭查找")} title={t("关闭")} onClick={close}>
           <Icon name="close" size={14} />
         </button>
       </div>
       <div className="search-row">
         <input
           className="search-input"
-          placeholder="替换为"
+          placeholder={t("替换为")}
           value={replacement}
-          aria-label="替换内容"
+          aria-label={t("替换内容")}
           onChange={(event) => setReplacement(event.target.value)}
         />
         <button
           type="button"
           className="find-icon"
-          aria-label="替换"
-          title="替换"
+          aria-label={t("替换")}
+          title={t("替换")}
           disabled={info.total === 0}
           onClick={() => {
             if (!editor) return;
@@ -152,8 +153,8 @@ export function SearchPanel({ editor, openSignal, onClose }: SearchPanelProps) {
         <button
           type="button"
           className="find-icon"
-          aria-label="全部替换"
-          title="全部替换"
+          aria-label={t("全部替换")}
+          title={t("全部替换")}
           disabled={info.total === 0}
           onClick={() => {
             if (!editor) return;

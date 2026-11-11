@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { LineDiff } from "../diff/compute";
 import { newLineMarkers, oldLineMarkers } from "../diff/markers";
+import { t } from "../i18n";
 import { SourceEditor, type SourceLanguage } from "../source/codemirror";
 
 export type SourceDiffMode = "diff" | "before" | "after";
@@ -62,18 +63,14 @@ export function SourceDiffPane({
   return (
     <div className={mode === "diff" ? "git-source-diff" : "git-source-diff single"}>
       {mode !== "after" && (
-        <section className="git-source-side git-source-old" aria-label="源文件">
-          <div className="git-source-label">
-            源文件 · {oldLabel}
-          </div>
+        <section className="git-source-side git-source-old" aria-label={t("源文件")}>
+          <div className="git-source-label">{t("源文件 · {0}", oldLabel)}</div>
           <div className="git-source-editor" ref={oldHostRef} />
         </section>
       )}
       {mode !== "before" && (
-        <section className="git-source-side git-source-new" aria-label="改动后">
-          <div className="git-source-label">
-            改动后 · {newLabel}
-          </div>
+        <section className="git-source-side git-source-new" aria-label={t("改动后")}>
+          <div className="git-source-label">{t("改动后 · {0}", newLabel)}</div>
           <div className="git-source-editor" ref={newHostRef} />
         </section>
       )}

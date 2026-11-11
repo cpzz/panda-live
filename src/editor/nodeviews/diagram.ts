@@ -6,6 +6,7 @@ import {
   onDiagramThemeChange,
 } from "../../render/diagram";
 import type { DiagramKind } from "../../render/diagram/types";
+import { t } from "../../i18n";
 import { problemStore } from "../../services/problem-store";
 
 const EDIT_COMMIT_DELAY_MS = 300;
@@ -54,7 +55,7 @@ export class DiagramNodeView implements NodeView {
     const sourceButton = document.createElement("button");
     sourceButton.type = "button";
     sourceButton.className = "button small ghost";
-    sourceButton.textContent = "查看源码";
+    sourceButton.textContent = t("查看源码");
     sourceButton.addEventListener("mousedown", (event) => event.preventDefault());
     sourceButton.addEventListener("click", () => this.startEditing());
     actions.append(sourceButton);
@@ -146,7 +147,7 @@ export class DiagramNodeView implements NodeView {
     this.body.replaceChildren();
     const placeholder = document.createElement("pre");
     placeholder.className = "diagram-placeholder-source";
-    placeholder.textContent = this.source || "（空图表）";
+    placeholder.textContent = this.source || t("（空图表）");
     this.body.append(placeholder);
   }
 
@@ -160,7 +161,7 @@ export class DiagramNodeView implements NodeView {
     this.body.replaceChildren();
     const pending = document.createElement("div");
     pending.className = "diagram-rendering";
-    pending.textContent = "正在渲染图表…";
+    pending.textContent = t("正在渲染图表…");
     this.body.append(pending);
 
     const result = await getDiagramService().render({
@@ -183,7 +184,9 @@ export class DiagramNodeView implements NodeView {
       return;
     }
 
-    if (result.code !== "E_CANCELLED") this.reportProblem(`图表渲染失败：${result.error}`);
+    if (result.code !== "E_CANCELLED") {
+      this.reportProblem(t("图表渲染失败：{0}", result.error));
+    }
     this.showError(result.error, result.code === "E_RENDER_TIMEOUT" || result.code === "E_RENDER_FAILED");
   }
 
@@ -204,13 +207,13 @@ export class DiagramNodeView implements NodeView {
     card.className = "diagram-error";
     const text = document.createElement("span");
     text.className = "diagram-error-text";
-    text.textContent = `图表渲染失败：${message}`;
+    text.textContent = t("图表渲染失败：{0}", message);
     card.append(text);
     if (retryable) {
       const retry = document.createElement("button");
       retry.type = "button";
       retry.className = "button small";
-      retry.textContent = "重试";
+      retry.textContent = t("重试");
       retry.addEventListener("mousedown", (event) => event.preventDefault());
       retry.addEventListener("click", () => {
         this.renderKey = null;

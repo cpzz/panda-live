@@ -41,6 +41,7 @@ import {
   type DecorationSet,
 } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
+import { t } from "../i18n";
 import { iniStreamParser } from "./ini-mode";
 
 export interface SelectionInfo {
@@ -100,7 +101,7 @@ class DiffGutterMarker extends GutterMarker {
     const span = document.createElement("span");
     span.className = `cm-diff-gutter-mark ${this.kind}`;
     span.textContent = this.kind === "add" ? "+" : this.kind === "change" ? "±" : "−";
-    span.title = this.kind === "add" ? "新增" : this.kind === "change" ? "修改" : "删除";
+    span.title = this.kind === "add" ? t("新增") : this.kind === "change" ? t("修改") : t("删除");
     return span;
   }
 }
@@ -271,21 +272,23 @@ const pandaHighlight = HighlightStyle.define([
   { tag: tags.invalid, color: "var(--danger)" },
 ]);
 
-const pandaPhrases = EditorState.phrases.of({
-  Find: "查找",
-  Replace: "替换",
-  next: "下一个",
-  previous: "上一个",
-  all: "全部",
-  "match case": "区分大小写",
-  regexp: "正则",
-  "by word": "全词",
-  replace: "替换",
-  "replace all": "全部替换",
-  close: "关闭",
-  "Go to line": "跳转到行",
-  go: "跳转",
-});
+function buildPhrases(): Record<string, string> {
+  return {
+    Find: t("查找"),
+    Replace: t("替换"),
+    next: t("下一个"),
+    previous: t("上一个"),
+    all: t("全部"),
+    "match case": t("区分大小写"),
+    regexp: t("正则"),
+    "by word": t("全词"),
+    replace: t("替换"),
+    "replace all": t("全部替换"),
+    close: t("关闭"),
+    "Go to line": t("跳转到行"),
+    go: t("跳转"),
+  };
+}
 
 const pandaTheme = EditorView.theme(
   {
@@ -343,7 +346,7 @@ function createState(
     doc,
     extensions: [
       basicSetup,
-      pandaPhrases,
+      EditorState.phrases.of(buildPhrases()),
       languageExtension(language),
       // 源码模式的查找替换复用 CodeMirror 搜索面板与匹配装饰（§11.5）。
       search({ top: true }),

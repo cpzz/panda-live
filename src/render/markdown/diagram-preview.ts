@@ -1,3 +1,4 @@
+import { t } from "../../i18n";
 import { currentDiagramTheme, getDiagramService } from "../diagram";
 import type { DiagramKind } from "../diagram/types";
 
@@ -42,7 +43,7 @@ export async function renderPreviewDiagrams(
     host.dataset.kind = kind;
     // 保留源码，主题切换时可重新渲染。
     host.dataset.source = code.textContent ?? "";
-    host.textContent = "正在渲染图表…";
+    host.textContent = t("正在渲染图表…");
     pre.replaceWith(host);
   }
 
@@ -61,7 +62,7 @@ export async function renderPreviewDiagrams(
       host.classList.add("diagram-svg-preview");
       host.innerHTML = result.svg;
     } else if (result.code !== "E_CANCELLED") {
-      host.textContent = `图表渲染失败：${result.error}`;
+      host.textContent = t("图表渲染失败：{0}", result.error);
       host.classList.add("preview-diagram-error");
     }
   }

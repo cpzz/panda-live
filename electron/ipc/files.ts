@@ -6,6 +6,7 @@ import {
   type SaveDialogOptions,
 } from "electron";
 import type { FileFilter } from "../../src/shared/ipc";
+import { t } from "../../src/i18n";
 import type { FileService } from "../services/file-service";
 import { handle } from "./router";
 
@@ -72,13 +73,15 @@ const CODE_EXTENSIONS = [
 
 const MARKDOWN_EXTENSIONS = ["md", "markdown", "mdown", "mkd", "qmd", "rmd", "mdx"];
 
-const MARKDOWN_FILTERS: FileFilter[] = [
-  { name: "所有支持的文件", extensions: [...MARKDOWN_EXTENSIONS, ...CODE_EXTENSIONS, "tex", "latex"] },
-  { name: "代码文件", extensions: CODE_EXTENSIONS },
-  { name: "Markdown", extensions: MARKDOWN_EXTENSIONS },
-  { name: "文本文件", extensions: ["txt", "log", "puml", "mmd"] },
-  { name: "所有文件", extensions: ["*"] },
-];
+function markdownFilters(): FileFilter[] {
+  return [
+    { name: t("所有支持的文件"), extensions: [...MARKDOWN_EXTENSIONS, ...CODE_EXTENSIONS, "tex", "latex"] },
+    { name: t("代码文件"), extensions: CODE_EXTENSIONS },
+    { name: "Markdown", extensions: MARKDOWN_EXTENSIONS },
+    { name: t("文本文件"), extensions: ["txt", "log", "puml", "mmd"] },
+    { name: t("所有文件"), extensions: ["*"] },
+  ];
+}
 
 export interface FileHandlerOptions {
   files: FileService;
@@ -90,7 +93,7 @@ export function registerFileHandlers({ files, getWindow }: FileHandlerOptions): 
   handle("dialog:openFiles", async (request) => {
     const options: OpenDialogOptions = {
       properties: ["openFile", "multiSelections"],
-      filters: request?.filters ?? MARKDOWN_FILTERS,
+      filters: request?.filters ?? markdownFilters(),
     };
     const window = getWindow();
     const result = window
@@ -103,7 +106,7 @@ export function registerFileHandlers({ files, getWindow }: FileHandlerOptions): 
   handle("dialog:saveAs", async (request) => {
     const options: SaveDialogOptions = {
       defaultPath: request.suggestedName,
-      filters: request.filters ?? MARKDOWN_FILTERS,
+      filters: request.filters ?? markdownFilters(),
     };
     const window = getWindow();
     const result = window
@@ -117,12 +120,12 @@ export function registerFileHandlers({ files, getWindow }: FileHandlerOptions): 
   handle("dialog:confirmClose", async (request) => {
     const options: MessageBoxOptions = {
       type: "warning",
-      buttons: ["保存", "不保存", "取消"],
+      buttons: [t("保存"), t("不保存"), t("取消")],
       defaultId: 0,
       cancelId: 2,
       noLink: true,
-      message: `是否保存对“${request.name}”的修改？`,
-      detail: "选择“不保存”将丢弃本次修改。",
+      message: t("是否保存对“{0}”的修改？", request.name),
+      detail: t("选择“不保存”将丢弃本次修改。"),
     };
     const window = getWindow();
     const result = window

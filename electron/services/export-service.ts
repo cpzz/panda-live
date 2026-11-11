@@ -3,6 +3,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { PandaError } from "../../src/shared/errors";
+import { t } from "../../src/i18n";
 import type { PdfExportResult } from "../../src/shared/ipc";
 
 /**
@@ -25,7 +26,7 @@ export class ExportService {
       ? await dialog.showSaveDialog(window, options)
       : await dialog.showSaveDialog(options);
     if (result.canceled || !result.filePath) {
-      throw new PandaError("E_CANCELLED", "已取消导出");
+      throw new PandaError("E_CANCELLED", t("已取消导出"));
     }
     const target = result.filePath;
 
@@ -54,7 +55,7 @@ export class ExportService {
     } catch (error) {
       throw new PandaError(
         "E_EXPORT_FAILED",
-        `PDF 导出失败：${error instanceof Error ? error.message : String(error)}`,
+        t("PDF 导出失败：{0}", error instanceof Error ? error.message : String(error)),
       );
     } finally {
       printer.destroy();

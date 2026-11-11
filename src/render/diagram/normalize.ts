@@ -1,3 +1,4 @@
+import { t } from "../../i18n";
 import type { DiagramKind } from "./types";
 import { MAX_DIAGRAM_SOURCE_LENGTH } from "./types";
 
@@ -18,7 +19,7 @@ export function normalizeDiagramSource(kind: DiagramKind, source: string): Norma
   if (source.length > MAX_DIAGRAM_SOURCE_LENGTH) {
     return {
       ok: false,
-      error: `图表源码超过 ${MAX_DIAGRAM_SOURCE_LENGTH / 1024} KB，已拒绝渲染`,
+      error: t("图表源码超过 {0} KB，已拒绝渲染", MAX_DIAGRAM_SOURCE_LENGTH / 1024),
       code: "E_PAYLOAD_INVALID",
     };
   }
@@ -30,20 +31,22 @@ export function normalizeDiagramSource(kind: DiagramKind, source: string): Norma
       if (PLANTUML_FORBIDDEN.test(line)) {
         return {
           ok: false,
-          error: `第 ${index + 1} 行：不允许 !include / !import，请将依赖内容内联`,
+          error: t("第 {0} 行：不允许 !include / !import，请将依赖内容内联", index + 1),
           code: "E_DIAGRAM_UNTRUSTED",
         };
       }
       if (REMOTE_URL.test(line)) {
         return {
           ok: false,
-          error: `第 ${index + 1} 行：不允许远程 URL 引用`,
+          error: t("第 {0} 行：不允许远程 URL 引用", index + 1),
           code: "E_DIAGRAM_UNTRUSTED",
         };
       }
     }
     const trimmed = lines.join("\n").trim();
-    if (!trimmed) return { ok: false, error: "图表源码为空", code: "E_DIAGRAM_EMPTY" };
+    if (!trimmed) {
+      return { ok: false, error: t("图表源码为空"), code: "E_DIAGRAM_EMPTY" };
+    }
     if (/^\s*@start/imu.test(trimmed)) return { ok: true, source: `${trimmed}\n` };
     return { ok: true, source: `@startuml\n${trimmed}\n@enduml\n` };
   }
@@ -53,18 +56,22 @@ export function normalizeDiagramSource(kind: DiagramKind, source: string): Norma
       if (MERMAID_CLICK_LINK.test(line)) {
         return {
           ok: false,
-          error: `第 ${index + 1} 行：不允许 click 外链`,
+          error: t("第 {0} 行：不允许 click 外链", index + 1),
           code: "E_DIAGRAM_UNTRUSTED",
         };
       }
     }
     const trimmed = lines.join("\n").trim();
-    if (!trimmed) return { ok: false, error: "图表源码为空", code: "E_DIAGRAM_EMPTY" };
+    if (!trimmed) {
+      return { ok: false, error: t("图表源码为空"), code: "E_DIAGRAM_EMPTY" };
+    }
     return { ok: true, source: `${trimmed}\n` };
   }
 
   // 扩展注册的 kind 由扩展自身校验；此处只做长度与空内容检查。
   const trimmed = source.trim();
-  if (!trimmed) return { ok: false, error: "图表源码为空", code: "E_DIAGRAM_EMPTY" };
+  if (!trimmed) {
+    return { ok: false, error: t("图表源码为空"), code: "E_DIAGRAM_EMPTY" };
+  }
   return { ok: true, source: trimmed };
 }

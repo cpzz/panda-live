@@ -1,4 +1,5 @@
 import type { Problem, ProblemSource } from "../services/problem-store";
+import { t } from "../i18n";
 import { Icon } from "./icons";
 
 const SOURCE_LABELS: Record<ProblemSource, string> = {
@@ -38,15 +39,15 @@ export function ProblemPanel({
   const items = sortProblems(problems);
 
   return (
-    <section className="problem-panel" aria-label="问题面板">
+    <section className="problem-panel" aria-label={t("问题面板")}>
       <div className="problem-panel-header">
-        <span className="problem-panel-title">问题</span>
-        <span className="problem-panel-count">共 {items.length} 条</span>
+        <span className="problem-panel-title">{t("问题")}</span>
+        <span className="problem-panel-count">{t("共 {0} 条", items.length)}</span>
         <button
           type="button"
           className="icon-button"
-          aria-label="关闭问题面板"
-          title="关闭"
+          aria-label={t("关闭问题面板")}
+          title={t("关闭")}
           onClick={onClose}
         >
           <Icon name="close" />
@@ -61,20 +62,20 @@ export function ProblemPanel({
               className={`problem-row ${problem.severity}`}
               onClick={() => onSelect(problem)}
             >
-              <span className="problem-severity">{SEVERITY_LABELS[problem.severity]}</span>
+              <span className="problem-severity">{t(SEVERITY_LABELS[problem.severity])}</span>
               <span className="problem-message">{problem.message}</span>
               {problem.line !== undefined && (
                 <span className="problem-line">
-                  行 {problem.line}
-                  {problem.column !== undefined ? `，列 ${problem.column}` : ""}
+                  {t("行 {0}", problem.line)}
+                  {problem.column !== undefined ? t("，列 {0}", problem.column) : ""}
                 </span>
               )}
-              <span className="problem-source">{SOURCE_LABELS[problem.source]}</span>
+              <span className="problem-source">{t(SOURCE_LABELS[problem.source])}</span>
             </button>
           ))}
         </div>
       ) : (
-        <p className="sidebar-empty">当前文档无诊断</p>
+        <p className="sidebar-empty">{t("当前文档无诊断")}</p>
       )}
     </section>
   );

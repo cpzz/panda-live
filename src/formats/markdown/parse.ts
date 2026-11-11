@@ -4,6 +4,7 @@ import remarkMath from "remark-math";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
 import type { PMJson } from "../../editor/schema";
+import { t } from "../../i18n";
 import type { Diagnostic } from "../types";
 import { mdastToPmJson, type MdNode } from "./mapping";
 import { expandMyst } from "./myst";
@@ -32,7 +33,10 @@ export function parseMarkdown(source: string): MarkdownParseResult {
   } catch (error) {
     diagnostics.push({
       severity: "error",
-      message: `Markdown 解析失败：${error instanceof Error ? error.message : String(error)}`,
+      message: t(
+        "Markdown 解析失败：{0}",
+        error instanceof Error ? error.message : String(error),
+      ),
       code: "E_PARSE_FAILED",
     });
     return {

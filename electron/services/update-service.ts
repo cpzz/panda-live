@@ -1,5 +1,6 @@
 import { net } from "electron";
 import semver from "semver";
+import { t } from "../../src/i18n";
 import type { UpdateStatus } from "../../src/shared/ipc";
 
 /**
@@ -17,7 +18,7 @@ export class UpdateService {
       return {
         status: "not-configured",
         currentVersion: this.currentVersion,
-        message: "未配置更新源（可通过环境变量 PANDA_UPDATE_FEED 指定版本清单地址）",
+        message: t("未配置更新源（可通过环境变量 PANDA_UPDATE_FEED 指定版本清单地址）"),
       };
     }
     try {
@@ -27,7 +28,7 @@ export class UpdateService {
       const latest = typeof (data as { version?: unknown }).version === "string"
         ? (data as { version: string }).version
         : "";
-      if (!semver.valid(latest)) throw new Error("更新源缺少合法 version 字段");
+      if (!semver.valid(latest)) throw new Error(t("更新源缺少合法 version 字段"));
       if (semver.gt(latest, this.currentVersion)) {
         return { status: "available", currentVersion: this.currentVersion, latestVersion: latest };
       }

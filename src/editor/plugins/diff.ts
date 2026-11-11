@@ -2,6 +2,7 @@ import type { Node as PMNode } from "prosemirror-model";
 import { Plugin, PluginKey } from "prosemirror-state";
 import { Decoration, DecorationSet } from "prosemirror-view";
 import type { WysiwygDiffModel, WysiwygGhost } from "../../diff/wysiwyg";
+import { t } from "../../i18n";
 
 /** 存储装饰集；文档变化时按位置映射，等新模型到达后再重建。 */
 export const wysiwygDiffKey = new PluginKey<DecorationSet>("pandaWysiwygDiff");
@@ -16,16 +17,16 @@ function ghostNode(ghost: WysiwygGhost): HTMLElement {
   wrapper.className = "diff-ghost pm-diff-ghost";
   wrapper.dataset["diffGhost"] = "true";
   wrapper.contentEditable = "false";
-  wrapper.setAttribute("aria-label", "已删除的内容");
+  wrapper.setAttribute("aria-label", t("已删除的内容"));
 
   const label = document.createElement("div");
   label.className = "diff-ghost-label";
   const text = document.createElement("span");
-  text.textContent = "已删除";
+  text.textContent = t("已删除");
   const copy = document.createElement("button");
   copy.type = "button";
   copy.className = "button small ghost";
-  copy.textContent = "复制原文";
+  copy.textContent = t("复制原文");
   copy.addEventListener("mousedown", (event) => event.preventDefault());
   copy.addEventListener("click", () => {
     void navigator.clipboard?.writeText(ghost.text);

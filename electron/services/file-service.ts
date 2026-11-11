@@ -2,6 +2,7 @@ import { promises as fs } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 import { PandaError } from "../../src/shared/errors";
+import { t } from "../../src/i18n";
 import type {
   DirEntry,
   FileRef,
@@ -33,14 +34,14 @@ function mapIoError(error: unknown, target: string): PandaError {
   const code = (error as NodeJS.ErrnoException | undefined)?.code;
   switch (code) {
     case "ENOENT":
-      return new PandaError("E_FILE_NOT_FOUND", `文件不存在：${target}`);
+      return new PandaError("E_FILE_NOT_FOUND", t("文件不存在：{0}", target));
     case "EACCES":
     case "EPERM":
-      return new PandaError("E_PERMISSION_DENIED", `无访问权限：${target}`);
+      return new PandaError("E_PERMISSION_DENIED", t("无访问权限：{0}", target));
     default:
       return new PandaError(
         "E_INTERNAL",
-        `文件操作失败：${(error as Error | undefined)?.message ?? String(error)}`,
+        t("文件操作失败：{0}", (error as Error | undefined)?.message ?? String(error)),
       );
   }
 }
@@ -83,7 +84,7 @@ export class FileService {
       throw mapIoError(error, absolute);
     });
     if (!stats.isDirectory()) {
-      throw new PandaError("E_FILE_NOT_FOUND", `不是目录：${absolute}`);
+      throw new PandaError("E_FILE_NOT_FOUND", t("不是目录：{0}", absolute));
     }
     const rootId = createHash("sha256").update(realDir).digest("hex").slice(0, 16);
     this.roots.set(rootId, realDir);
@@ -132,7 +133,7 @@ export class FileService {
   async renameEntry(target: string, newName: string): Promise<FileRef> {
     // 只接受纯文件名，防止借重命名越权到其他目录。见 doc/design.md §13.5。
     if (path.isAbsolute(newName) || /[\\/]/.test(newName) || newName.includes("..")) {
-      throw new PandaError("E_PAYLOAD_INVALID", `文件名不合法：${newName}`);
+      throw new PandaError("E_PAYLOAD_INVALID", t("文件名不合法：{0}", newName));
     }
     const resolved = await this.resolveAllowed(target);
     const destination = path.join(path.dirname(resolved), newName);
@@ -161,7 +162,7 @@ export class FileService {
   private makeRef(target: string): FileRef {
     const rootId = [...this.roots.entries()].find(([, root]) => isPathInside(root, target))?.[0];
     if (!rootId) {
-      throw new PandaError("E_PATH_OUTSIDE_ROOT", `路径不在允许范围内：${target}`);
+      throw new PandaError("E_PATH_OUTSIDE_ROOT", t("路径不在允许范围内：{0}", target));
     }
     return { path: target, name: path.basename(target), rootId };
   }
@@ -196,7 +197,7 @@ export class FileService {
     try {
       const stats = await fs.stat(target);
       if (!stats.isFile()) {
-        throw new PandaError("E_FILE_NOT_FOUND", `不是文件：${target}`);
+        throw new PandaError("E_FILE_NOT_FOUND", t("不是文件：{0}", target));
       }
       const bytes = await fs.readFile(target);
       const mime = BINARY_MIME[path.extname(target).toLowerCase()] ?? "application/octet-stream";
@@ -213,7 +214,7 @@ export class FileService {
     try {
       const stats = await fs.stat(target);
       if (!stats.isFile()) {
-        throw new PandaError("E_FILE_NOT_FOUND", `不是文件：${target}`);
+        throw new PandaError("E_FILE_NOT_FOUND", t("不是文件：{0}", target));
       }
       bytes = await fs.readFile(target);
       mtimeMs = stats.mtimeMs;
@@ -241,7 +242,7 @@ export class FileService {
     try {
       const stats = await fs.stat(target);
       if (!stats.isFile()) {
-        throw new PandaError("E_FILE_NOT_FOUND", `不是文件：${target}`);
+        throw new PandaError("E_FILE_NOT_FOUND", t("不是文件：{0}", target));
       }
       existing = await fs.readFile(target);
       existingStat = stats;
@@ -252,15 +253,15 @@ export class FileService {
     }
 
     if (existing && request.baseHash && sha256Hex(existing) !== request.baseHash) {
-      throw new PandaError("E_FILE_CHANGED", "文件已被外部修改");
+      throw new PandaError("E_FILE_CHANGED", t("文件已被外部修改"));
     }
     if (!existing && request.baseHash) {
-      throw new PandaError("E_FILE_CHANGED", "文件已被外部删除或移动");
+      throw new PandaError("E_FILE_CHANGED", t("文件已被外部删除或移动"));
     }
 
     const decodedExisting = existing ? decodeText(existing) : null;
     if (decodedExisting?.readOnly) {
-      throw new PandaError("E_ENCODING_UNSUPPORTED", `不支持写回编码：${decodedExisting.encoding}`);
+      throw new PandaError("E_ENCODING_UNSUPPORTED", t("不支持写回编码：{0}", decodedExisting.encoding));
     }
 
     const bytes = encodeText(
@@ -309,7 +310,7 @@ export class FileService {
 
     const allowed = [...this.roots.values()].some((root) => isPathInside(root, target));
     if (!allowed) {
-      throw new PandaError("E_PATH_OUTSIDE_ROOT", `路径不在允许范围内：${absolute}`);
+      throw new PandaError("E_PATH_OUTSIDE_ROOT", t("路径不在允许范围内：{0}", absolute));
     }
     return target;
   }

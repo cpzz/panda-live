@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { t } from "../i18n";
 
 export interface CommandItem {
   id: string;
@@ -61,14 +62,14 @@ export function CommandPalette({
         className="palette"
         role="dialog"
         aria-modal="true"
-        aria-label="命令面板"
+        aria-label={t("命令面板")}
         onClick={(event) => event.stopPropagation()}
       >
         <input
           autoFocus
           className="palette-input"
-          placeholder="输入命令名称或标识…"
-          aria-label="命令搜索"
+          placeholder={t("输入命令名称或标识…")}
+          aria-label={t("命令搜索")}
           value={query}
           onChange={(event) => {
             setQuery(event.target.value);
@@ -103,7 +104,7 @@ export function CommandPalette({
               {command.shortcut && <span className="palette-key">{command.shortcut}</span>}
             </button>
           ))}
-          {filtered.length === 0 && <p className="palette-empty">无匹配命令</p>}
+          {filtered.length === 0 && <p className="palette-empty">{t("无匹配命令")}</p>}
         </div>
       </div>
     </div>

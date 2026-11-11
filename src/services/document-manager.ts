@@ -1,4 +1,5 @@
 import { describeError, getErrorCode, PandaError } from "../shared/errors";
+import { t } from "../i18n";
 import type {
   EditorMode,
   Eol,
@@ -209,18 +210,18 @@ export class DocumentManager {
     if (mode === this.state.mode) return;
     const active = this.findDocument(this.state.activeId ?? "");
     if (mode === "wysiwyg" && active && active.format !== "markdown") {
-      this.notify("error", "该格式不支持所见即所得编辑，请使用源码模式");
+      this.notify("error", t("该格式不支持所见即所得编辑，请使用源码模式"));
       return;
     }
     if ((mode === "preview" || mode === "split") && active && !supportsPreview(active.format)) {
-      this.notify("error", "该格式没有渲染预览，请使用源码模式");
+      this.notify("error", t("该格式没有渲染预览，请使用源码模式"));
       return;
     }
     const firstSwitch = !this.modeSwitchNoticeShown;
     this.modeSwitchNoticeShown = true;
     this.commit({ mode });
     if (firstSwitch) {
-      this.notify("info", "撤销历史不跨模式共享，已为目标模式建立新的撤销基线");
+      this.notify("info", t("撤销历史不跨模式共享，已为目标模式建立新的撤销基线"));
     }
   }
 
@@ -323,12 +324,12 @@ export class DocumentManager {
       return;
     }
     if (doc.readOnly) {
-      this.notify("error", "该文档以只读方式打开，请使用“另存为”保存副本");
+      this.notify("error", t("该文档以只读方式打开，请使用“另存为”保存副本"));
       return;
     }
     if (doc.content === doc.savedContent) {
       this.patchDocument(id, () => ({ dirty: false }));
-      if (!silent) this.notify("info", "没有需要保存的修改");
+      if (!silent) this.notify("info", t("没有需要保存的修改"));
       return;
     }
 
@@ -350,7 +351,7 @@ export class DocumentManager {
         eol: this.saveEol === "preserve" ? doc.eol : this.saveEol,
       }));
       await this.dropDraft(id);
-      if (!silent) this.notify("info", "已保存");
+      if (!silent) this.notify("info", t("已保存"));
     } catch (error) {
       if (getErrorCode(error) === "E_FILE_CHANGED") {
         this.commit({ conflict: { documentId: id, message: describeError(error) } });
@@ -490,7 +491,7 @@ export class DocumentManager {
     const doc = this.state.documents.find((item) => item.path === filePath);
     if (!doc) return;
     if (doc.dirty) {
-      this.notify("error", "文件已在磁盘删除，标签保留未保存内容；请另存为");
+      this.notify("error", t("文件已在磁盘删除，标签保留未保存内容；请另存为"));
       this.patchDocument(doc.id, () => ({ readOnly: true }));
       return;
     }
@@ -527,7 +528,7 @@ export class DocumentManager {
       this.commit({ mode: session.mode });
     }
     if (session.documents.length > 0 && this.state.documents.length < session.documents.length) {
-      this.notify("info", "部分标签对应的文件已不存在，已跳过恢复");
+      this.notify("info", t("部分标签对应的文件已不存在，已跳过恢复"));
     }
   }
 
@@ -621,12 +622,12 @@ export class DocumentManager {
       const stats = await window.panda.fs.stat({ path: ref.path });
       const policy = decideOpenPolicy(stats.size);
       if (policy.reject) {
-        throw new PandaError("E_FILE_TOO_LARGE", `文件超过 50 MB，拒绝打开：${ref.name}`);
+        throw new PandaError("E_FILE_TOO_LARGE", t("文件超过 50 MB，拒绝打开：{0}", ref.name));
       }
       if (
         policy.confirm &&
         !window.confirm(
-          `文件约 ${(stats.size / (1024 * 1024)).toFixed(1)} MB，打开可能较慢，是否继续？`,
+          t("文件约 {0} MB，打开可能较慢，是否继续？", (stats.size / (1024 * 1024)).toFixed(1)),
         )
       ) {
         return;
@@ -676,15 +677,15 @@ export class DocumentManager {
               : "source",
       });
       if (blockLimit) {
-        this.notify("info", "文档顶层块超过 8000，已默认切换到源码模式");
+        this.notify("info", t("文档顶层块超过 8000，已默认切换到源码模式"));
       } else if (policy.preferSource) {
-        this.notify("info", "文件较大，已默认切换到源码模式");
+        this.notify("info", t("文件较大，已默认切换到源码模式"));
       }
       if (!options.silentRecent) {
         await window.panda.recent.add({ path: ref.path }).catch(() => undefined);
       }
       if (data.readOnly) {
-        this.notify("info", `编码 ${data.encoding} 暂不支持写回，已以只读方式打开`);
+        this.notify("info", t("编码 {0} 暂不支持写回，已以只读方式打开", data.encoding));
       }
       this.scheduleSessionSave();
     } catch (error) {
@@ -698,12 +699,12 @@ export class DocumentManager {
         this.commit({
           conflict: {
             documentId: doc.id,
-            message: "文件已被删除或移动，本地仍有未保存修改",
+            message: t("文件已被删除或移动，本地仍有未保存修改"),
             localMtimeMs: doc.mtimeMs,
           },
         });
       } else {
-        this.notify("error", "文件已被删除或移动，标签内容仍保留为只读");
+        this.notify("error", t("文件已被删除或移动，标签内容仍保留为只读"));
         this.patchDocument(doc.id, () => ({ readOnly: true }));
       }
       return;
@@ -726,12 +727,12 @@ export class DocumentManager {
           size: data.size,
           revision: current.revision + 1,
         }));
-        this.notify("info", "文件已在外部修改，已重新加载");
+        this.notify("info", t("文件已在外部修改，已重新加载"));
       } else {
         this.commit({
           conflict: {
             documentId: doc.id,
-            message: `文件已被外部修改（磁盘 ${formatTime(data.mtimeMs)}）`,
+            message: t("文件已被外部修改（磁盘 {0}）", formatTime(data.mtimeMs)),
             diskMtimeMs: data.mtimeMs,
             localMtimeMs: doc.mtimeMs,
           },

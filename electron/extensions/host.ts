@@ -1,4 +1,5 @@
 import { utilityProcess, type UtilityProcess } from "electron";
+import { t } from "../../src/i18n";
 
 const ACTIVATION_TIMEOUT_MS = 5_000;
 const CALL_TIMEOUT_MS = 10_000;
@@ -46,14 +47,16 @@ export class ExtensionHost {
   async activate(request: ActivateRequest): Promise<void> {
     const child = await this.ensureChild();
     if (this.activation) {
-      this.activation.reject(new Error("E_EXTENSION_ACTIVATION_FAILED: 新的激活请求已开始"));
+      this.activation.reject(
+        new Error(`E_EXTENSION_ACTIVATION_FAILED: ${t("新的激活请求已开始")}`),
+      );
       this.activation = null;
     }
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.activation = null;
         this.dispose();
-        reject(new Error("E_EXTENSION_ACTIVATION_FAILED: 激活超时（5 s）"));
+        reject(new Error(`E_EXTENSION_ACTIVATION_FAILED: ${t("激活超时（5 s）")}`));
       }, ACTIVATION_TIMEOUT_MS);
       this.activation = { resolve, reject, timer };
       child.postMessage({
@@ -69,13 +72,13 @@ export class ExtensionHost {
 
   async call(method: "parse" | "serialize" | "preview" | "command", payload: unknown, extensionId: string): Promise<unknown> {
     if (!this.child || this.activeExtensionId !== extensionId) {
-      throw new Error("E_EXTENSION_ACTIVATION_FAILED: 扩展未激活");
+      throw new Error(`E_EXTENSION_ACTIVATION_FAILED: ${t("扩展未激活")}`);
     }
     const requestId = this.nextRequestId++;
     return new Promise<unknown>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(requestId);
-        reject(new Error("E_EXTENSION_ACTIVATION_FAILED: 调用超时（10 s）"));
+        reject(new Error(`E_EXTENSION_ACTIVATION_FAILED: ${t("调用超时（10 s）")}`));
       }, CALL_TIMEOUT_MS);
       this.pending.set(requestId, { resolve, reject, timer });
       this.child?.postMessage({ type: "call", requestId, method, payload });
@@ -85,17 +88,17 @@ export class ExtensionHost {
   dispose(): void {
     if (this.ready) {
       clearTimeout(this.ready.timer);
-      this.ready.reject(new Error("E_EXTENSION_CRASHED: 扩展宿主已停止"));
+      this.ready.reject(new Error(`E_EXTENSION_CRASHED: ${t("扩展宿主已停止")}`));
       this.ready = null;
     }
     if (this.activation) {
       clearTimeout(this.activation.timer);
-      this.activation.reject(new Error("E_EXTENSION_CRASHED: 扩展宿主已停止"));
+      this.activation.reject(new Error(`E_EXTENSION_CRASHED: ${t("扩展宿主已停止")}`));
       this.activation = null;
     }
     for (const [id, pending] of this.pending) {
       clearTimeout(pending.timer);
-      pending.reject(new Error("E_EXTENSION_CRASHED: 扩展宿主已停止"));
+      pending.reject(new Error(`E_EXTENSION_CRASHED: ${t("扩展宿主已停止")}`));
       this.pending.delete(id);
     }
     if (this.child) {
@@ -113,14 +116,14 @@ export class ExtensionHost {
     child.on("message", (message: unknown) => this.handleMessage(message));
     child.on("exit", (code: number) => {
       this.onLog(`[extension-host] exit ${code}`);
-      this.failAll(new Error("E_EXTENSION_CRASHED: 扩展宿主进程已退出"));
+      this.failAll(new Error(`E_EXTENSION_CRASHED: ${t("扩展宿主进程已退出")}`));
     });
     this.child = child;
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.ready = null;
         this.dispose();
-        reject(new Error("E_EXTENSION_ACTIVATION_FAILED: 扩展宿主启动超时"));
+        reject(new Error(`E_EXTENSION_ACTIVATION_FAILED: ${t("扩展宿主启动超时")}`));
       }, ACTIVATION_TIMEOUT_MS);
       this.ready = { resolve, reject, timer };
     });
@@ -157,7 +160,7 @@ export class ExtensionHost {
         if (this.activation) {
           clearTimeout(this.activation.timer);
           this.activation.reject(
-            new Error(`E_EXTENSION_ACTIVATION_FAILED: ${data.message ?? "扩展激活失败"}`),
+            new Error(`E_EXTENSION_ACTIVATION_FAILED: ${data.message ?? t("扩展激活失败")}`),
           );
           this.activation = null;
         }
@@ -176,7 +179,7 @@ export class ExtensionHost {
         if (!pending) return;
         clearTimeout(pending.timer);
         this.pending.delete(data.requestId as number);
-        pending.reject(new Error(`E_EXTENSION_ACTIVATION_FAILED: ${data.message ?? "扩展调用失败"}`));
+        pending.reject(new Error(`E_EXTENSION_ACTIVATION_FAILED: ${data.message ?? t("扩展调用失败")}`));
         return;
       }
       case "log": {

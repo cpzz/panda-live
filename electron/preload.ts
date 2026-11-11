@@ -2,11 +2,12 @@ import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from "ele
 import { APP_OPEN_PATH_CHANNEL, FS_CHANGED_CHANNEL } from "../src/shared/events";
 import { isMenuCommand, MENU_COMMAND_CHANNEL } from "../src/shared/menu";
 import type { FsChangedEvent, IpcEnvelope, PandaApi } from "../src/shared/ipc";
+import { t } from "../src/i18n";
 
 async function invoke<T>(channel: string, request: unknown): Promise<T> {
   const response = (await ipcRenderer.invoke(channel, request)) as IpcEnvelope<T>;
   if (!response || typeof response !== "object") {
-    throw new Error("E_INTERNAL: IPC 响应格式无效");
+    throw new Error(`E_INTERNAL: ${t("IPC 响应格式无效")}`);
   }
   if (!response.ok) {
     // contextBridge 只保留 Error.message，把错误码编码进消息。

@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import JSZip from "jszip";
 import semver from "semver";
 import { PandaError } from "../../src/shared/errors";
+import { t } from "../../src/i18n";
 import { validateManifest, type ManifestValidation } from "./manifest";
 
 const MAX_PACKAGE_BYTES = 50 * 1024 * 1024;
@@ -36,12 +37,12 @@ export async function installPackage(
   let total = 0;
   for (const file of files) {
     if (!isSafePackagePath(file.name)) {
-      throw new PandaError("E_EXTENSION_INVALID", `安装包包含非法路径：${file.name}`);
+      throw new PandaError("E_EXTENSION_INVALID", t("安装包包含非法路径：{0}", file.name));
     }
     const content = await file.async("uint8array");
     total += content.byteLength;
     if (total > MAX_PACKAGE_BYTES) {
-      throw new PandaError("E_EXTENSION_INVALID", "解压后总大小超过 50 MB");
+      throw new PandaError("E_EXTENSION_INVALID", t("解压后总大小超过 50 MB"));
     }
   }
 
@@ -53,7 +54,7 @@ export async function installPackage(
       return parts.length === 2 && parts[0] !== "" && parts[1] === "extension.json";
     });
   if (!manifestEntry) {
-    throw new PandaError("E_EXTENSION_INVALID", "安装包缺少 extension.json");
+    throw new PandaError("E_EXTENSION_INVALID", t("安装包缺少 extension.json"));
   }
   const manifestRaw = JSON.parse(await manifestEntry.async("string")) as unknown;
   const validation = validateManifest(manifestRaw, appVersion);
@@ -62,12 +63,12 @@ export async function installPackage(
   }
   const manifest = validation.manifest;
   if (!manifest.main) {
-    throw new PandaError("E_EXTENSION_INVALID", "扩展缺少 main 入口");
+    throw new PandaError("E_EXTENSION_INVALID", t("扩展缺少 main 入口"));
   }
   const prefix = manifestEntry.name.slice(0, manifestEntry.name.length - "extension.json".length);
   const mainEntry = files.find((file) => file.name === `${prefix}${manifest.main}`);
   if (!mainEntry) {
-    throw new PandaError("E_EXTENSION_INVALID", `入口文件不存在：${manifest.main}`);
+    throw new PandaError("E_EXTENSION_INVALID", t("入口文件不存在：{0}", manifest.main));
   }
 
   const targetDir = path.join(extensionsRoot, manifest.id);
@@ -76,7 +77,7 @@ export async function installPackage(
     if (!semver.valid(existing) || !semver.gt(manifest.version, existing)) {
       throw new PandaError(
         "E_EXTENSION_INCOMPATIBLE",
-        `已安装版本 ${existing} 不低于 ${manifest.version}，拒绝安装`,
+        t("已安装版本 {0} 不低于 {1}，拒绝安装", existing, manifest.version),
       );
     }
   }

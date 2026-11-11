@@ -5,6 +5,7 @@ import { renderMarkdownToHtml } from "../formats/markdown/preview";
 import type { DocumentState } from "../services/document-manager";
 import type { DiffViewMode, GitBaselineReason } from "../shared/diff";
 import { describeError } from "../shared/errors";
+import { getLocale, t } from "../i18n";
 import { sourceLanguageForFormat } from "../source/language";
 import { Icon } from "./icons";
 import { RenderedMarkdown } from "./RenderedMarkdown";
@@ -78,12 +79,12 @@ export function GitPane({
     const markdown = document.format === "markdown";
     if (!document.path) {
       setStatus("error");
-      setMessage("请先保存文档：Git 差异需要文件路径");
+      setMessage(t("请先保存文档：Git 差异需要文件路径"));
       return;
     }
     if (document.encoding !== "utf-8" && document.encoding !== "utf-8-bom") {
       setStatus("error");
-      setMessage("该编码不支持与 Git 基线对比，请改用 UTF-8 文件");
+      setMessage(t("该编码不支持与 Git 基线对比，请改用 UTF-8 文件"));
       return;
     }
     const path = document.path;
@@ -91,7 +92,7 @@ export function GitPane({
     const nextRef = compareMode === "buffer" ? null : bRef;
     if (oldRef.trim().length === 0 || (nextRef !== null && nextRef.trim().length === 0)) {
       setStatus("error");
-      setMessage("请输入提交引用，例如 HEAD、HEAD~3、分支名或 commit id");
+      setMessage(t("请输入提交引用，例如 HEAD、HEAD~3、分支名或 commit id"));
       return;
     }
 
@@ -111,13 +112,13 @@ export function GitPane({
               newText: "",
             });
             if (!result.inRepo) {
-              throw new Error("未检测到 Git 仓库，请检查设置 → 改动对比 中的 Git 命令");
+              throw new Error(t("未检测到 Git 仓库，请检查设置 → 改动对比 中的 Git 命令"));
             }
             if (result.reason === "invalid-ref") {
-              throw new Error(`无法解析提交「${ref.trim()}」`);
+              throw new Error(t("无法解析提交「{0}」", ref.trim()));
             }
             if (result.reason === "lfs") {
-              throw new Error("LFS 指针文件不支持差异对比");
+              throw new Error(t("LFS 指针文件不支持差异对比"));
             }
             return {
               text: result.oldText ?? "",
@@ -138,12 +139,18 @@ export function GitPane({
             oldText = source.text;
             newText = document.content;
             oldLabel = singleRef.trim();
-            newLabel = "当前";
+            newLabel = t("当前");
             if (source.missing) {
               notes.push(
                 source.reason === "untracked"
-                  ? `该文件尚未被 Git 跟踪（新文件或还未 git add），${oldLabel} 中还没有基线；提交后即可正常对比。当前按全文新增显示`
-                  : `提交「${oldLabel}」中不存在该文件的当前路径（可能已重命名/移动，或添加时间晚于该提交）。当前按全文新增显示`,
+                  ? t(
+                      "该文件尚未被 Git 跟踪（新文件或还未 git add），{0} 中还没有基线；提交后即可正常对比。当前按全文新增显示",
+                      oldLabel,
+                    )
+                  : t(
+                      "提交「{0}」中不存在该文件的当前路径（可能已重命名/移动，或添加时间晚于该提交）。当前按全文新增显示",
+                      oldLabel,
+                    ),
               );
             }
           } else {
@@ -158,15 +165,15 @@ export function GitPane({
             if (left.missing) {
               notes.push(
                 left.reason === "untracked"
-                  ? `文件尚未被 Git 跟踪，「${oldLabel}」中按空文本处理`
-                  : `提交「${oldLabel}」中不存在该文件，按空文本处理`,
+                  ? t("文件尚未被 Git 跟踪，「{0}」中按空文本处理", oldLabel)
+                  : t("提交「{0}」中不存在该文件，按空文本处理", oldLabel),
               );
             }
             if (right.missing) {
               notes.push(
                 right.reason === "untracked"
-                  ? `文件尚未被 Git 跟踪，「${newLabel}」中按全文删除显示`
-                  : `提交「${newLabel}」中不存在该文件，按全文删除显示`,
+                  ? t("文件尚未被 Git 跟踪，「{0}」中按全文删除显示", newLabel)
+                  : t("提交「{0}」中不存在该文件，按全文删除显示", newLabel),
               );
             }
           }
@@ -179,7 +186,9 @@ export function GitPane({
             : ["", ""];
           if (cancelled) return;
           setLabels({ old: oldLabel, next: newLabel });
-          setNote(notes.length > 0 ? notes.join("；") : null);
+          setNote(
+            notes.length > 0 ? notes.join(getLocale() === "zh" ? "；" : "; ") : null,
+          );
           setResult({ oldText, newText });
           setHtml(rendered);
           setOldHtml(renderedOld);
@@ -223,10 +232,12 @@ export function GitPane({
           className="git-icon-button"
           title={
             compareMode === "buffer"
-              ? "当前 ⇄ 提交（点击切换为提交 ⇄ 提交）"
-              : "提交 ⇄ 提交（点击切换为当前 ⇄ 提交）"
+              ? t("当前 ⇄ 提交（点击切换为提交 ⇄ 提交）")
+              : t("提交 ⇄ 提交（点击切换为当前 ⇄ 提交）")
           }
-          aria-label={compareMode === "buffer" ? "切换到提交 ⇄ 提交" : "切换到当前 ⇄ 提交"}
+          aria-label={
+            compareMode === "buffer" ? t("切换到提交 ⇄ 提交") : t("切换到当前 ⇄ 提交")
+          }
           aria-pressed={compareMode === "refs"}
           onClick={() => setCompareMode((mode) => (mode === "buffer" ? "refs" : "buffer"))}
         >
@@ -243,8 +254,8 @@ export function GitPane({
           >
             <input
               className="git-diff-input"
-              aria-label="对比提交"
-              title="支持 HEAD、HEAD~n、分支、tag 与 commit id"
+              aria-label={t("对比提交")}
+              title={t("支持 HEAD、HEAD~n、分支、tag 与 commit id")}
               placeholder="HEAD / HEAD~3 / commit id"
               value={singleDraft}
               onChange={(event) => setSingleDraft(event.target.value)}
@@ -252,8 +263,8 @@ export function GitPane({
             <button
               type="submit"
               className="git-icon-button"
-              title="读取并对比"
-              aria-label="读取并对比"
+              title={t("读取并对比")}
+              aria-label={t("读取并对比")}
             >
               <Icon name="refresh" size={14} />
             </button>
@@ -269,39 +280,39 @@ export function GitPane({
           >
             <input
               className="git-diff-input"
-              aria-label="提交 A（旧）"
-              title="支持 HEAD、HEAD~n、分支、tag 与 commit id"
-              placeholder="提交 A（旧）"
+              aria-label={t("提交 A（旧）")}
+              title={t("支持 HEAD、HEAD~n、分支、tag 与 commit id")}
+              placeholder={t("提交 A（旧）")}
               value={aDraft}
               onChange={(event) => setADraft(event.target.value)}
             />
             <span className="git-diff-side">⇄</span>
             <input
               className="git-diff-input"
-              aria-label="提交 B（新）"
-              title="支持 HEAD、HEAD~n、分支、tag 与 commit id"
-              placeholder="提交 B（新）"
+              aria-label={t("提交 B（新）")}
+              title={t("支持 HEAD、HEAD~n、分支、tag 与 commit id")}
+              placeholder={t("提交 B（新）")}
               value={bDraft}
               onChange={(event) => setBDraft(event.target.value)}
             />
             <button
               type="submit"
               className="git-icon-button"
-              title="读取并对比"
-              aria-label="读取并对比"
+              title={t("读取并对比")}
+              aria-label={t("读取并对比")}
             >
               <Icon name="refresh" size={14} />
             </button>
           </form>
         )}
 
-        <div className="git-source-switch" role="group" aria-label="显示内容">
+        <div className="git-source-switch" role="group" aria-label={t("显示内容")}>
           <button
             type="button"
             className={sourceMode === "diff" ? "git-icon-button active" : "git-icon-button"}
             aria-pressed={sourceMode === "diff"}
-            aria-label="对比"
-            title="对比：显示改动前后差异"
+            aria-label={t("对比")}
+            title={t("对比：显示改动前后差异")}
             onClick={() => setSourceMode("diff")}
           >
             <Icon name="compare" size={14} />
@@ -310,8 +321,8 @@ export function GitPane({
             type="button"
             className={sourceMode === "before" ? "git-icon-button active" : "git-icon-button"}
             aria-pressed={sourceMode === "before"}
-            aria-label="源文件"
-            title="源文件：显示改动前内容"
+            aria-label={t("源文件")}
+            title={t("源文件：显示改动前内容")}
             onClick={() => setSourceMode("before")}
           >
             <Icon name="fileBefore" size={14} />
@@ -320,36 +331,36 @@ export function GitPane({
             type="button"
             className={sourceMode === "after" ? "git-icon-button active" : "git-icon-button"}
             aria-pressed={sourceMode === "after"}
-            aria-label="改动后"
-            title="改动后：显示改动后内容"
+            aria-label={t("改动后")}
+            title={t("改动后：显示改动后内容")}
             onClick={() => setSourceMode("after")}
           >
             <Icon name="fileAfter" size={14} />
           </button>
         </div>
 
-        {status === "loading" && <span className="git-diff-state">读取中…</span>}
+        {status === "loading" && <span className="git-diff-state">{t("读取中…")}</span>}
         {status === "ready" && sourceMode === "diff" && isMarkdown && (
           <select
             className="git-diff-view"
-            aria-label="差异视图粒度"
-            title="差异视图粒度"
+            aria-label={t("差异视图粒度")}
+            title={t("差异视图粒度")}
             value={viewMode}
             onChange={(event) => setViewMode(event.target.value as DiffViewMode)}
           >
-            <option value="fragments">仅改动片段</option>
-            <option value="collapse">折叠未改动</option>
-            <option value="full">全文标注</option>
+            <option value="fragments">{t("仅改动片段")}</option>
+            <option value="collapse">{t("折叠未改动")}</option>
+            <option value="full">{t("全文标注")}</option>
           </select>
         )}
         {sourceMode === "diff" && (
-          <div className="git-diff-flags" role="group" aria-label="Git 忽略参数">
+          <div className="git-diff-flags" role="group" aria-label={t("Git 忽略参数")}>
             <button
               type="button"
               className={ignoreWhitespace ? "git-icon-button active" : "git-icon-button"}
               aria-pressed={ignoreWhitespace}
-              aria-label="忽略空白"
-              title="忽略空白变化（git diff -w）"
+              aria-label={t("忽略空白")}
+              title={t("忽略空白变化（git diff -w）")}
               onClick={() => setIgnoreWhitespace((value) => !value)}
             >
               <Icon name="whitespace" size={14} />
@@ -358,8 +369,8 @@ export function GitPane({
               type="button"
               className={ignoreBlankLines ? "git-icon-button active" : "git-icon-button"}
               aria-pressed={ignoreBlankLines}
-              aria-label="忽略空行"
-              title="忽略只涉及空行的变化（git diff --ignore-blank-lines）"
+              aria-label={t("忽略空行")}
+              title={t("忽略只涉及空行的变化（git diff --ignore-blank-lines）")}
               onClick={() => setIgnoreBlankLines((value) => !value)}
             >
               <Icon name="blankLines" size={14} />
@@ -368,8 +379,8 @@ export function GitPane({
               type="button"
               className={ignoreCrAtEol ? "git-icon-button active" : "git-icon-button"}
               aria-pressed={ignoreCrAtEol}
-              aria-label="忽略行尾 CR"
-              title="忽略行尾 CR（git diff --ignore-cr-at-eol）"
+              aria-label={t("忽略行尾 CR")}
+              title={t("忽略行尾 CR（git diff --ignore-cr-at-eol）")}
               onClick={() => setIgnoreCrAtEol((value) => !value)}
             >
               <Icon name="carriageReturn" size={14} />
@@ -380,22 +391,25 @@ export function GitPane({
 
       {status === "error" && (
         <div className="banner banner-warning" role="alert">
-          <span className="banner-text">{message ?? "读取 Git 差异失败"}</span>
+          <span className="banner-text">{message ?? t("读取 Git 差异失败")}</span>
         </div>
       )}
       {note && status === "ready" && <div className="diff-notice">{note}</div>}
       {status === "ready" && sourceMode === "diff" && formatOnlyCount > 0 && (
         <div className="diff-notice">
-          有 {formatOnlyCount} 处改动仅涉及空白、缩进或 Markdown 标记，渲染结果与原文相同；黄色竖线表示这些源码行发生了变化。
+          {t(
+            "有 {0} 处改动仅涉及空白、缩进或 Markdown 标记，渲染结果与原文相同；黄色竖线表示这些源码行发生了变化。",
+            formatOnlyCount,
+          )}
         </div>
       )}
 
       <div className={isMarkdown ? "git-diff-scroll" : "git-diff-scroll git-diff-source"}>
         {status === "ready" && !isMarkdown ? (
           sourceMode === "diff" && baseDiff && baseDiff.hunks.length === 0 ? (
-            <p className="placeholder">「{labels.old}」与「{labels.next}」没有差异。</p>
+            <p className="placeholder">{t("「{0}」与「{1}」没有差异。", labels.old, labels.next)}</p>
           ) : sourceMode !== "diff" && sourceEmpty ? (
-            <p className="placeholder">该提交中没有可显示的文件内容。</p>
+            <p className="placeholder">{t("该提交中没有可显示的文件内容。")}</p>
           ) : (
             <SourceDiffPane
               oldText={result?.oldText ?? ""}
@@ -409,7 +423,7 @@ export function GitPane({
           )
         ) : status === "ready" && sourceMode !== "diff" ? (
           sourceEmpty ? (
-            <p className="placeholder">该提交中没有可显示的文件内容。</p>
+            <p className="placeholder">{t("该提交中没有可显示的文件内容。")}</p>
           ) : (
             <RenderedMarkdown
               html={sourceMode === "before" ? oldHtml : html}
@@ -431,12 +445,12 @@ export function GitPane({
         ) : (
           <p className="placeholder">
             {status === "loading"
-              ? "正在读取提交…"
+              ? t("正在读取提交…")
               : status === "error"
-                ? "请调整提交引用或 Git 配置后重试。"
+                ? t("请调整提交引用或 Git 配置后重试。")
                 : status === "ready"
-                  ? `「${labels.old}」与「${labels.next}」没有差异。`
-                  : "选择提交后显示 Git 差异。"}
+                  ? t("「{0}」与「{1}」没有差异。", labels.old, labels.next)
+                  : t("选择提交后显示 Git 差异。")}
           </p>
         )}
       </div>

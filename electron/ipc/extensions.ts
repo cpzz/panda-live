@@ -1,4 +1,5 @@
 import { dialog, type BrowserWindow } from "electron";
+import { t } from "../../src/i18n";
 import type { ExtensionService } from "../services/extension-service";
 import { handle } from "./router";
 
@@ -19,13 +20,13 @@ export function registerExtensionHandlers({ extensions, getWindow }: ExtensionHa
     const window = getWindow();
     const options = {
       properties: ["openFile" as const],
-      filters: [{ name: "Panda 扩展", extensions: ["panda"] }],
+      filters: [{ name: t("Panda 扩展"), extensions: ["panda"] }],
     };
     const result = window
       ? await dialog.showOpenDialog(window, options)
       : await dialog.showOpenDialog(options);
     if (result.canceled || !result.filePaths[0]) {
-      throw new Error("E_CANCELLED: 已取消安装");
+      throw new Error(`E_CANCELLED: ${t("已取消安装")}`);
     }
     return extensions.install(result.filePaths[0]);
   });

@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { PandaError } from "../../src/shared/errors";
+import { t } from "../../src/i18n";
 import type { CompileRequest, CompileResult, EngineInfo } from "../../src/shared/ipc";
 import type { FileService } from "../services/file-service";
 import { sha256Hex } from "../services/text-codec";
@@ -35,11 +36,11 @@ export class TexCompiler {
   async compile(request: CompileRequest): Promise<CompileResult> {
     const engine = this.engines()[0];
     if (!engine) {
-      throw new PandaError("E_ENGINE_MISSING", "未找到 TeX 引擎（Tectonic / latexmk / xelatex）");
+      throw new PandaError("E_ENGINE_MISSING", t("未找到 TeX 引擎（Tectonic / latexmk / xelatex）"));
     }
     const root = await this.files.assertAllowed(request.rootPath);
     if (!/\.(tex|latex)$/i.test(root)) {
-      throw new PandaError("E_COMPILE_FAILED", "编译根文件必须是 .tex");
+      throw new PandaError("E_COMPILE_FAILED", t("编译根文件必须是 .tex"));
     }
 
     // 以「源码 + 引擎」作为缓存键；命中时直接复用上次的 PDF，避免每次打开都重新编译。
@@ -70,14 +71,14 @@ export class TexCompiler {
     const diagnostics = parseLatexLog(run.output, root);
     if (run.cancelled) {
       await this.cleanup(jobDir);
-      throw new PandaError("E_CANCELLED", "编译已取消");
+      throw new PandaError("E_CANCELLED", t("编译已取消"));
     }
     if (run.timedOut) {
       await this.cleanup(jobDir);
       return {
         ok: false,
         diagnostics: [
-          { severity: "error", message: "编译超时", file: root },
+          { severity: "error", message: t("编译超时"), file: root },
           ...diagnostics,
         ],
       };
@@ -92,7 +93,7 @@ export class TexCompiler {
         diagnostics:
           diagnostics.length > 0
             ? diagnostics
-            : [{ severity: "error", message: "编译失败，详见引擎日志", file: root }],
+            : [{ severity: "error", message: t("编译失败，详见引擎日志"), file: root }],
       };
     }
 

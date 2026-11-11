@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import path from "node:path";
 import { PandaError } from "../../src/shared/errors";
+import { t } from "../../src/i18n";
 import type { GitBaselineReason, GitDiffBase, GitDiffResult } from "../../src/shared/diff";
 
 /** Git 命令统一超时；超时后不阻塞编辑。见 doc/design.md §21.3。 */
@@ -97,17 +98,20 @@ function runGit(args: string[], cwd: string, git: GitCommand): Promise<GitOutput
           reject(
             new PandaError(
               "E_GIT_MISSING",
-              `未找到 Git 命令「${git.label}」：请在设置 → 改动对比 指定 Git 路径，或填写 wsl git`,
+              t(
+                "未找到 Git 命令「{0}」：请在设置 → 改动对比 指定 Git 路径，或填写 wsl git",
+                git.label,
+              ),
             ),
           );
           return;
         }
         if (details.killed || details.code === "ETIMEDOUT") {
-          reject(new PandaError("E_GIT_TIMEOUT", "Git 命令超时（5 s）"));
+          reject(new PandaError("E_GIT_TIMEOUT", t("Git 命令超时（5 s）")));
           return;
         }
         if (details.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER") {
-          reject(new PandaError("E_GIT_TOO_LARGE", "Git 基线文本超过大小上限"));
+          reject(new PandaError("E_GIT_TOO_LARGE", t("Git 基线文本超过大小上限")));
           return;
         }
         // 其余错误交给调用方判断（例如路径不在基线中）。
@@ -145,7 +149,7 @@ export class GitService {
     const requested = (ref ?? "").trim();
     const command = parseGitCommand(commandLine);
     const baseLabel =
-      base === "head" ? "HEAD" : base === "index" ? "暂存区" : displayRef(requested);
+      base === "head" ? "HEAD" : base === "index" ? t("暂存区") : displayRef(requested);
     const absolute = path.resolve(filePath);
     const directory = path.dirname(absolute);
     const repoRoot = await this.resolveRepoRoot(directory, command);
@@ -176,7 +180,7 @@ export class GitService {
       if (error instanceof PandaError) throw error;
       const text = errorText(error);
       if (text.includes("too large") || text.includes("maxbuffer")) {
-        throw new PandaError("E_GIT_TOO_LARGE", "Git 基线文本超过大小上限");
+        throw new PandaError("E_GIT_TOO_LARGE", t("Git 基线文本超过大小上限"));
       }
       let reason: GitBaselineReason;
       if (text.includes("not a valid object name")) {

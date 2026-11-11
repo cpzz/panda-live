@@ -2,6 +2,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { shell } from "electron";
 import { PandaError } from "../../src/shared/errors";
+import { t } from "../../src/i18n";
 import type {
   ExtensionCommandInfo,
   ExtensionFormatInfo,
@@ -125,7 +126,7 @@ export class ExtensionService {
     const result = await installPackage(archivePath, this.userRoot, this.appVersion);
     await this.scan();
     const entry = this.entries.get(result.id);
-    if (!entry) throw new PandaError("E_EXTENSION_INVALID", "安装后未能读取扩展清单");
+    if (!entry) throw new PandaError("E_EXTENSION_INVALID", t("安装后未能读取扩展清单"));
     return (await this.list()).find((item) => item.id === result.id) ??
       {
         id: entry.id,
@@ -140,7 +141,7 @@ export class ExtensionService {
 
   async enable(id: string): Promise<void> {
     const entry = this.entries.get(id);
-    if (!entry?.manifest) throw new PandaError("E_EXTENSION_INVALID", `扩展不可用：${id}`);
+    if (!entry?.manifest) throw new PandaError("E_EXTENSION_INVALID", t("扩展不可用：{0}", id));
     this.enabled.add(id);
     await this.persistState();
   }
@@ -153,8 +154,8 @@ export class ExtensionService {
 
   async uninstall(id: string): Promise<void> {
     const entry = this.entries.get(id);
-    if (!entry) throw new PandaError("E_EXTENSION_INVALID", `扩展不存在：${id}`);
-    if (entry.builtin) throw new PandaError("E_EXTENSION_INVALID", "内置扩展不可卸载");
+    if (!entry) throw new PandaError("E_EXTENSION_INVALID", t("扩展不存在：{0}", id));
+    if (entry.builtin) throw new PandaError("E_EXTENSION_INVALID", t("内置扩展不可卸载"));
     this.enabled.delete(id);
     if (this.host.currentExtension === id) this.host.dispose();
     await fs.rm(entry.dir, { recursive: true, force: true });
@@ -164,7 +165,7 @@ export class ExtensionService {
 
   async openFolder(id?: string): Promise<void> {
     const target = id ? this.entries.get(id)?.dir : this.userRoot;
-    if (!target) throw new PandaError("E_EXTENSION_INVALID", `扩展不存在：${id}`);
+    if (!target) throw new PandaError("E_EXTENSION_INVALID", t("扩展不存在：{0}", id ?? ""));
     await fs.mkdir(target, { recursive: true });
     await shell.openPath(target);
   }
@@ -242,7 +243,7 @@ export class ExtensionService {
         this.enabled.has(entry.id) &&
         entry.manifest.contributes.commands.some((command) => command.id === id),
     );
-    if (!owner) throw new PandaError("E_EXTENSION_INVALID", `未找到启用的命令：${id}`);
+    if (!owner) throw new PandaError("E_EXTENSION_INVALID", t("未找到启用的命令：{0}", id));
     await this.prepare(owner.id);
     return this.host.call("command", { id, args }, owner.id).catch((error: unknown) => {
       this.recordFailure(owner.id, error);
@@ -264,13 +265,13 @@ export class ExtensionService {
   private async prepare(extensionId: string): Promise<InstalledEntry> {
     const entry = this.entries.get(extensionId);
     if (!entry?.manifest) {
-      throw new PandaError("E_EXTENSION_INVALID", `扩展不存在或清单无效：${extensionId}`);
+      throw new PandaError("E_EXTENSION_INVALID", t("扩展不存在或清单无效：{0}", extensionId));
     }
     if (!this.enabled.has(extensionId)) {
-      throw new PandaError("E_EXTENSION_INVALID", `扩展未启用：${extensionId}`);
+      throw new PandaError("E_EXTENSION_INVALID", t("扩展未启用：{0}", extensionId));
     }
     if (!entry.manifest.main) {
-      throw new PandaError("E_EXTENSION_INVALID", `扩展缺少 main 入口：${extensionId}`);
+      throw new PandaError("E_EXTENSION_INVALID", t("扩展缺少 main 入口：{0}", extensionId));
     }
     if (this.host.currentExtension === extensionId) return entry;
 

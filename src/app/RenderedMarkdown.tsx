@@ -4,6 +4,7 @@ import { renderPreviewDiagrams } from "../render/markdown/diagram-preview";
 import { highlightCodeBlocks } from "../render/code-highlight";
 import { onThemeChange, resolveTheme, type AppTheme } from "../services/theme";
 import type { DiffViewMode } from "../shared/diff";
+import { t } from "../i18n";
 import { resolveRelativePath } from "../utils/paths";
 
 export interface RenderedMarkdownProps {
@@ -52,11 +53,14 @@ export function RenderedMarkdown({
           const wrapper = globalThis.document.createElement("div");
           wrapper.className = "big-image-placeholder";
           const label = globalThis.document.createElement("span");
-          label.textContent = `图片较大（${(stats.size / (1024 * 1024)).toFixed(1)} MB），未自动加载`;
+          label.textContent = t(
+            "图片较大（{0} MB），未自动加载",
+            (stats.size / (1024 * 1024)).toFixed(1),
+          );
           const button = globalThis.document.createElement("button");
           button.type = "button";
           button.className = "button small";
-          button.textContent = "加载图片";
+          button.textContent = t("加载图片");
           button.addEventListener("click", () => {
             void window.panda.fs.readBase64({ path: resolved }).then((file) => {
               const loaded = globalThis.document.createElement("img");

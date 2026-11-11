@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { DiffBase, DiffViewMode } from "../shared/diff";
+import { t } from "../i18n";
 import { Icon } from "./icons";
 import type { DiffViewState } from "./useDocumentDiff";
 
@@ -103,22 +104,26 @@ export function DiffControls({
         type="button"
         className={enabled ? "statusbar-button diff-toggle active" : "statusbar-button diff-toggle"}
         aria-pressed={enabled}
-        title={dirty ? "显示改动（包含未保存修改）" : "显示改动（Ctrl+Shift+D）"}
+        title={dirty ? t("显示改动（包含未保存修改）") : t("显示改动（Ctrl+Shift+D）")}
         onClick={onToggle}
         disabled={disabled}
       >
         <span className="diff-sign" aria-hidden="true">
           ±
         </span>
-        <span className="diff-label">显示改动</span>
-        {enabled && dirty && <span className="diff-dirty-dot" aria-label="包含未保存修改" />}
+        <span className="diff-label">{t("显示改动")}</span>
+        {enabled && dirty && <span className="diff-dirty-dot" aria-label={t("包含未保存修改")} />}
       </button>
 
       {enabled && (
         <select
           className="diff-base"
-          aria-label="对比基线"
-          title={state.inRepo ? "对比基线" : "未检测到 Git 仓库或 Git 命令，HEAD/暂存区/指定提交不可用"}
+          aria-label={t("对比基线")}
+          title={
+            state.inRepo
+              ? t("对比基线")
+              : t("未检测到 Git 仓库或 Git 命令，HEAD/暂存区/指定提交不可用")
+          }
           value={state.base}
           onChange={(event) => onBaseChange(event.target.value as DiffBase)}
         >
@@ -126,12 +131,12 @@ export function DiffControls({
             HEAD
           </option>
           <option value="index" disabled={!state.inRepo}>
-            暂存区
+            {t("暂存区")}
           </option>
           <option value="commit" disabled={!state.inRepo}>
-            指定提交…
+            {t("指定提交…")}
           </option>
-          <option value="lastSave">上次保存</option>
+          <option value="lastSave">{t("上次保存")}</option>
         </select>
       )}
 
@@ -146,35 +151,38 @@ export function DiffControls({
           <input
             ref={refInputRef}
             className="diff-ref-input"
-            aria-label="提交引用"
+            aria-label={t("提交引用")}
             placeholder="HEAD~3 / main / commit id"
             value={refDraft}
             disabled={!state.inRepo}
             onChange={(event) => setRefDraft(event.target.value)}
           />
           <button type="submit" className="statusbar-button" disabled={!state.inRepo}>
-            对比
+            {t("对比")}
           </button>
         </form>
       )}
 
-      {loading && <span className="statusbar-meta">对比中…</span>}
+      {loading && <span className="statusbar-meta">{t("对比中…")}</span>}
       {stale && (
         <button
           type="button"
           className="statusbar-button diff-stale"
-          title="连续输入已暂停刷新，点击立即重算"
+          title={t("连续输入已暂停刷新，点击立即重算")}
           onClick={onRefresh}
         >
-          改动待刷新
+          {t("改动待刷新")}
         </button>
       )}
       {failed && (
-        <span className="statusbar-meta diff-unavailable" title={state.message ?? "基线不可用"}>
-          不可用
+        <span
+          className="statusbar-meta diff-unavailable"
+          title={state.message ?? t("基线不可用")}
+        >
+          {t("不可用")}
         </span>
       )}
-      {ready && items.length === 0 && <span className="statusbar-meta">无改动</span>}
+      {ready && items.length === 0 && <span className="statusbar-meta">{t("无改动")}</span>}
       {ready && state.message && (
         <span className="statusbar-meta diff-note" title={state.message}>
           {state.message}
@@ -187,7 +195,7 @@ export function DiffControls({
             type="button"
             className={listOpen ? "statusbar-button diff-count active" : "statusbar-button diff-count"}
             aria-expanded={listOpen}
-            title="改动列表"
+            title={t("改动列表")}
             onClick={() => setListOpen((open) => !open)}
           >
             <span className="diff-add">+{addedUnits}</span>
@@ -196,8 +204,8 @@ export function DiffControls({
           <button
             type="button"
             className="statusbar-button diff-nav"
-            aria-label="上一处改动"
-            title="上一处改动（Shift+F7）"
+            aria-label={t("上一处改动")}
+            title={t("上一处改动（Shift+F7）")}
             onClick={onPrev}
           >
             <Icon name="chevron-up" size={12} />
@@ -205,8 +213,8 @@ export function DiffControls({
           <button
             type="button"
             className="statusbar-button diff-nav"
-            aria-label="下一处改动"
-            title="下一处改动（F7）"
+            aria-label={t("下一处改动")}
+            title={t("下一处改动（F7）")}
             onClick={onNext}
           >
             <Icon name="chevron-down" size={12} />
@@ -217,32 +225,34 @@ export function DiffControls({
       {listOpen && hasChanges && (
         <>
           <div className="diff-list-backdrop" onClick={() => setListOpen(false)} />
-          <div className="diff-list" role="dialog" aria-label="改动列表">
+          <div className="diff-list" role="dialog" aria-label={t("改动列表")}>
             <div className="diff-list-header">
               <span>
-                {currentIndex >= 0 ? `第 ${currentIndex + 1} 处 / 共 ${items.length} 处` : `共 ${items.length} 处`}
+                {currentIndex >= 0
+                  ? t("第 {0} 处 / 共 {1} 处", currentIndex + 1, items.length)
+                  : t("共 {0} 处", items.length)}
               </span>
               {modeAvailable ? (
                 <select
                   className="diff-mode-select"
-                  aria-label="差异视图粒度"
-                  title="差异视图粒度"
+                  aria-label={t("差异视图粒度")}
+                  title={t("差异视图粒度")}
                   value={mode}
                   onChange={(event) => {
                     onModeChange(event.target.value as DiffViewMode);
                     setListOpen(false);
                   }}
                 >
-                  <option value="full">全文标注</option>
-                  <option value="collapse">折叠未改动</option>
-                  <option value="fragments">仅改动片段</option>
+                  <option value="full">{t("全文标注")}</option>
+                  <option value="collapse">{t("折叠未改动")}</option>
+                  <option value="fragments">{t("仅改动片段")}</option>
                 </select>
               ) : (
                 <span
                   className="statusbar-meta"
-                  title="所见即所得为编辑态，无法隐藏可编辑内容；粒度仅适用于预览"
+                  title={t("所见即所得为编辑态，无法隐藏可编辑内容；粒度仅适用于预览")}
                 >
-                  全文标注
+                  {t("全文标注")}
                 </span>
               )}
             </div>
@@ -264,8 +274,8 @@ export function DiffControls({
                     <span className={`diff-list-kind ${item.kind}`} aria-hidden="true">
                       {item.kind === "add" ? "+" : item.kind === "delete" ? "−" : "±"}
                     </span>
-                    <span className="diff-list-line" title={`第 ${item.line} 行`}>
-                      {item.breadcrumb || `第 ${item.line} 行`}
+                    <span className="diff-list-line" title={t("第 {0} 行", item.line)}>
+                      {item.breadcrumb || t("第 {0} 行", item.line)}
                     </span>
                     <span className="diff-list-label">{item.label}</span>
                   </button>

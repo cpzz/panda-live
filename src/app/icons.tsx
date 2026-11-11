@@ -245,6 +245,17 @@ const ICONS = {
       <path d="m11 10-4 4 4 4" />
     </>
   ),
+  /** 界面语言切换：字母 A 与「文」的通用语言图标。 */
+  languages: (
+    <>
+      <path d="m5 8 6 6" />
+      <path d="m4 14 6-6 2-3" />
+      <path d="M2 5h12" />
+      <path d="M7 2h1" />
+      <path d="m22 22-5-10-5 10" />
+      <path d="M14 18h6" />
+    </>
+  ),
 } satisfies Record<string, ReactNode>;
 
 export type IconName = keyof typeof ICONS;
