@@ -5,8 +5,10 @@ import { renderMarkdownToHtml } from "../formats/markdown/preview";
 import type { DocumentState } from "../services/document-manager";
 import type { DiffViewMode, GitBaselineReason } from "../shared/diff";
 import { describeError } from "../shared/errors";
+import { sourceLanguageForFormat } from "../source/language";
 import { Icon } from "./icons";
 import { RenderedMarkdown } from "./RenderedMarkdown";
+import { SourceDiffPane } from "./SourceDiffPane";
 
 type CompareMode = "buffer" | "refs";
 type Status = "idle" | "loading" | "ready" | "error";
@@ -47,6 +49,8 @@ export function GitPane({
   const [sourceMode, setSourceMode] = useState<"diff" | "before" | "after">("diff");
   const [html, setHtml] = useState("");
   const [oldHtml, setOldHtml] = useState("");
+  // Markdown 走渲染态差异，其他格式走并排源码差异。见 §21.15。
+  const isMarkdown = document.format === "markdown";
 
   const baseDiff = useMemo<LineDiff | null>(() => {
     if (!result) return null;
@@ -63,19 +67,15 @@ export function GitPane({
     return { oldText: result.oldText, newText: result.newText, diff: baseDiff, mode: viewMode };
   }, [result, baseDiff, viewMode]);
   const formatOnlyCount = useMemo(() => {
-    if (!baseDiff) return 0;
+    if (!baseDiff || !isMarkdown) return 0;
     return baseDiff.hunks.filter(
       (hunk) => normalizeFormatText(hunk.oldText) === normalizeFormatText(hunk.newText),
     ).length;
-  }, [baseDiff]);
+  }, [baseDiff, isMarkdown]);
 
   useEffect(() => {
     if (!active) return;
-    if (document.format !== "markdown") {
-      setStatus("error");
-      setMessage("Git 差异视图只支持 Markdown 渲染");
-      return;
-    }
+    const markdown = document.format === "markdown";
     if (!document.path) {
       setStatus("error");
       setMessage("请先保存文档：Git 差异需要文件路径");
@@ -171,10 +171,12 @@ export function GitPane({
             }
           }
 
-          const [rendered, renderedOld] = await Promise.all([
-            renderMarkdownToHtml(newText, { annotateSource: true }),
-            renderMarkdownToHtml(oldText, { annotateSource: true }),
-          ]);
+          const [rendered, renderedOld] = markdown
+            ? await Promise.all([
+                renderMarkdownToHtml(newText, { annotateSource: true }),
+                renderMarkdownToHtml(oldText, { annotateSource: true }),
+              ])
+            : ["", ""];
           if (cancelled) return;
           setLabels({ old: oldLabel, next: newLabel });
           setNote(notes.length > 0 ? notes.join("；") : null);
@@ -327,7 +329,7 @@ export function GitPane({
         </div>
 
         {status === "loading" && <span className="git-diff-state">读取中…</span>}
-        {status === "ready" && sourceMode === "diff" && (
+        {status === "ready" && sourceMode === "diff" && isMarkdown && (
           <select
             className="git-diff-view"
             aria-label="差异视图粒度"
@@ -388,8 +390,24 @@ export function GitPane({
         </div>
       )}
 
-      <div className="git-diff-scroll">
-        {status === "ready" && sourceMode !== "diff" ? (
+      <div className={isMarkdown ? "git-diff-scroll" : "git-diff-scroll git-diff-source"}>
+        {status === "ready" && !isMarkdown ? (
+          sourceMode === "diff" && baseDiff && baseDiff.hunks.length === 0 ? (
+            <p className="placeholder">「{labels.old}」与「{labels.next}」没有差异。</p>
+          ) : sourceMode !== "diff" && sourceEmpty ? (
+            <p className="placeholder">该提交中没有可显示的文件内容。</p>
+          ) : (
+            <SourceDiffPane
+              oldText={result?.oldText ?? ""}
+              newText={result?.newText ?? ""}
+              diff={sourceMode === "diff" ? baseDiff : null}
+              language={sourceLanguageForFormat(document.format)}
+              mode={sourceMode}
+              oldLabel={labels.old}
+              newLabel={labels.next}
+            />
+          )
+        ) : status === "ready" && sourceMode !== "diff" ? (
           sourceEmpty ? (
             <p className="placeholder">该提交中没有可显示的文件内容。</p>
           ) : (
@@ -418,7 +436,7 @@ export function GitPane({
                 ? "请调整提交引用或 Git 配置后重试。"
                 : status === "ready"
                   ? `「${labels.old}」与「${labels.next}」没有差异。`
-                  : "选择提交后显示渲染后的 Git 差异。"}
+                  : "选择提交后显示 Git 差异。"}
           </p>
         )}
       </div>

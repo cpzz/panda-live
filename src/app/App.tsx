@@ -15,6 +15,7 @@ import {
 import { settingsStore } from "../services/settings-store";
 import { WorkspaceStore } from "../services/workspace-store";
 import { SourceEditor, type DiffLineMarker, type SelectionInfo, type SourceLanguage } from "../source/codemirror";
+import { sourceLanguageForFormat } from "../source/language";
 import { renderMathml } from "../render/math/mathml";
 import {
   currentDiagramTheme,
@@ -57,39 +58,6 @@ const MODE_ICONS: Record<EditorMode, IconName> = {
   preview: "eye",
   git: "git",
 };
-
-/** 源码编辑器支持高亮的语言标识，与 SourceLanguage 保持一致。 */
-const SOURCE_LANGUAGES = new Set<string>([
-  "markdown",
-  "xml",
-  "cpp",
-  "java",
-  "javascript",
-  "json",
-  "yaml",
-  "html",
-  "css",
-  "python",
-  "sql",
-  "php",
-  "rust",
-  "csharp",
-  "go",
-  "ruby",
-  "kotlin",
-  "swift",
-  "r",
-  "scala",
-  "shell",
-  "dart",
-  "lua",
-  "perl",
-  "objectivec",
-  "stex",
-  "ini",
-  "toml",
-  "plain",
-]);
 
 /** 具有渲染预览的内置格式；扩展格式由扩展自身提供预览。 */
 const PREVIEW_FORMATS = new Set(["markdown", "latex", "mathml", "plantuml", "mermaid"]);
@@ -170,10 +138,7 @@ function SourcePane({
   const [gotoOpen, setGotoOpen] = useState(false);
   const [gotoValue, setGotoValue] = useState("");
 
-  const language: SourceLanguage = (() => {
-    const syntax = getFormatEntry(document.format)?.syntax ?? "plain";
-    return SOURCE_LANGUAGES.has(syntax as SourceLanguage) ? (syntax as SourceLanguage) : "plain";
-  })();
+  const language: SourceLanguage = sourceLanguageForFormat(document.format);
 
   useEffect(() => {
     return () => {
@@ -1549,7 +1514,6 @@ export function App() {
               disabled={
                 !active ||
                 (mode === "wysiwyg" && active.format !== "markdown") ||
-                (mode === "git" && active.format !== "markdown") ||
                 ((mode === "split" || mode === "preview") &&
                   !formatSupportsPreview(active.format))
               }
