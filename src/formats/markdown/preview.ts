@@ -69,10 +69,11 @@ const baseProcessor = unified()
   .use(remarkGfm)
   .use(remarkFrontmatter, ["yaml"])
   .use(remarkMath)
-  // 允许原始 HTML 进入 hast（含内嵌 MathML），输出前由 DOMPurify 白名单过滤。
+  // 允许原始 HTML 进入 hast 并原样输出（含内嵌 MathML、`<a id>` 锚点），
+  // 输出前由 DOMPurify 白名单过滤，因此不会引入脚本或事件属性。
   .use(remarkRehype, { allowDangerousHtml: true })
   .use(rehypeKatex)
-  .use(rehypeStringify);
+  .use(rehypeStringify, { allowDangerousHtml: true });
 
 const annotatedProcessor = unified()
   .use(remarkParse)
@@ -82,7 +83,7 @@ const annotatedProcessor = unified()
   .use(remarkRehype, { allowDangerousHtml: true })
   .use(rehypeKatex)
   .use(rehypeSourceLines)
-  .use(rehypeStringify);
+  .use(rehypeStringify, { allowDangerousHtml: true });
 
 export interface RenderMarkdownOptions {
   /** 为块级元素附加 `data-src-line` / `data-src-end-line`，供差异装饰定位。 */
@@ -101,6 +102,8 @@ export async function renderMarkdownToHtml(
   const file = await processor.process(markdown);
   return DOMPurify.sanitize(String(file), {
     USE_PROFILES: { html: true, mathMl: true, svg: true },
+    FORBID_TAGS: ["script", "style", "iframe", "object", "embed", "form", "base"],
+    FORBID_ATTR: ["srcdoc"],
     ADD_ATTR: ["target", "data-src-line", "data-src-end-line"],
   });
 }

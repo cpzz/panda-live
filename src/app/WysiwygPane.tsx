@@ -53,6 +53,32 @@ export function WysiwygPane({
     };
   }, []);
 
+  // 页内目录：点击 `#anchor` 链接时滚动到对应的原始 HTML 锚点。
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    const onClick = (event: MouseEvent): void => {
+      if (event.defaultPrevented) return;
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const link = target.closest("a[href]");
+      if (!(link instanceof HTMLAnchorElement)) return;
+      const href = link.getAttribute("href") ?? "";
+      if (!href.startsWith("#")) return;
+      event.preventDefault();
+      const raw = href.slice(1);
+      let id = raw;
+      try {
+        id = decodeURIComponent(raw);
+      } catch {
+        // 非法百分号编码时按原值匹配。
+      }
+      if (id) editorRef.current?.scrollToAnchorId(id);
+    };
+    host.addEventListener("click", onClick);
+    return () => host.removeEventListener("click", onClick);
+  }, []);
+
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;

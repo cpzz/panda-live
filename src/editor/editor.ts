@@ -218,6 +218,36 @@ export class PandaEditor {
     this.scrollToPosition(target + 1);
   }
 
+  /**
+   * 滚动到页内锚点：优先匹配标题 id，其次匹配原始 HTML 锚点（`<a id="…">`）。
+   * 用于 Markdown 目录跳转；WYSIWYG 不保留锚点元素，因此按节点 raw 属性匹配。
+   */
+  scrollToAnchorId(id: string): boolean {
+    let target: number | null = null;
+    this.view.state.doc.descendants((node, pos) => {
+      if (target !== null) return false;
+      // 标题自带 id（与大纲一致），可直接作为锚点目标。
+      if (node.type.name === "heading") {
+        if (String(node.attrs.id ?? "") !== id) return true;
+        target = pos;
+        return false;
+      }
+      if (node.type.name !== "html_block" && node.type.name !== "html_inline") return true;
+      const raw = String(node.attrs.raw ?? "");
+      const match = /\bid\s*=\s*(["'])(.*?)\1/iu.exec(raw);
+      if (!match || match[2] !== id) return true;
+      target = pos;
+      return false;
+    });
+    if (target === null) return false;
+    const dom = this.view.nodeDOM(target);
+    if (!(dom instanceof HTMLElement)) return false;
+    dom.scrollIntoView({ block: "center", behavior: "smooth" });
+    dom.classList.add("anchor-target");
+    window.setTimeout(() => dom.classList.remove("anchor-target"), 900);
+    return true;
+  }
+
   /** 应用或清除差异装饰；传 null 清除。见 doc/design.md §21.5。 */
   setDiffModel(model: WysiwygDiffModel | null): void {
     this.view.dispatch(this.view.state.tr.setMeta(wysiwygDiffKey, model));

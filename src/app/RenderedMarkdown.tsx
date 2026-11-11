@@ -7,6 +7,32 @@ import type { DiffViewMode } from "../shared/diff";
 import { t } from "../i18n";
 import { resolveRelativePath } from "../utils/paths";
 
+/**
+ * 页内锚点跳转：`[标题](#id)` 滚动到对应元素并短暂高亮。
+ * 找不到目标时返回 false，交给浏览器默认行为。
+ */
+function scrollToAnchor(host: HTMLElement, hash: string): boolean {
+  const raw = hash.replace(/^#/, "");
+  if (!raw) {
+    host.scrollIntoView({ block: "start", behavior: "smooth" });
+    return true;
+  }
+  let id = raw;
+  try {
+    id = decodeURIComponent(raw);
+  } catch {
+    // 非法百分号编码时按原值匹配。
+  }
+  const target =
+    [...host.querySelectorAll<HTMLElement>("[id]")].find((element) => element.id === id) ??
+    globalThis.document.getElementById(id);
+  if (!target) return false;
+  target.scrollIntoView({ block: "start", behavior: "smooth" });
+  target.classList.add("anchor-target");
+  window.setTimeout(() => target.classList.remove("anchor-target"), 900);
+  return true;
+}
+
 export interface RenderedMarkdownProps {
   html: string;
   /** 用于相对图片路径解析；null 表示不解析。 */
@@ -96,6 +122,25 @@ export function RenderedMarkdown({
       cancelled = true;
     };
   }, [html, sourceKey, theme, diff]);
+
+  // 页内目录：拦截 `#anchor` 链接，避免 Electron 修改 URL，改为容器内平滑滚动。
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    const onClick = (event: MouseEvent): void => {
+      if (event.defaultPrevented || event.button !== 0) return;
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const link = target.closest("a[href]");
+      if (!(link instanceof HTMLAnchorElement)) return;
+      const href = link.getAttribute("href") ?? "";
+      if (!href.startsWith("#")) return;
+      if (scrollToAnchor(host, href)) event.preventDefault();
+    };
+    host.addEventListener("click", onClick);
+    return () => host.removeEventListener("click", onClick);
+  }, [html]);
 
   // 片段视图的「返回全文」通过 DOM 事件通知上层切换粒度。
   useEffect(() => {
