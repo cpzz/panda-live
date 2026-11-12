@@ -5,7 +5,57 @@ import { highlightCodeBlocks } from "../render/code-highlight";
 import { onThemeChange, resolveTheme, type AppTheme } from "../services/theme";
 import type { DiffViewMode } from "../shared/diff";
 import { t } from "../i18n";
+import { copyText } from "../utils/clipboard";
 import { resolveRelativePath } from "../utils/paths";
+
+/** 复制按钮图标：与全局线性图标（Lucide）风格一致。 */
+const COPY_ICON =
+  '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>';
+const CHECK_ICON =
+  '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>';
+
+/** 移除现有复制按钮（重渲染增强前清理）。 */
+function removeCopyButtons(host: HTMLElement): void {
+  for (const existing of [...host.querySelectorAll(".preview-copy")]) existing.remove();
+}
+
+/**
+ * 代码块复制按钮：悬停显示在右上角，复制代码内容；差异视图自带「复制原文」，不重复提供。
+ * 按钮挂在 pre 外层 .code-block 包装上，避免随代码横向滚动。
+ */
+function attachCopyButtons(host: HTMLElement, withDiff: boolean): void {
+  if (withDiff) return;
+  for (const pre of [...host.querySelectorAll("pre")]) {
+    const code = pre.querySelector("code");
+    if (!code) continue;
+    let wrapper = pre.parentElement;
+    if (!wrapper || !wrapper.classList.contains("code-block")) {
+      wrapper = globalThis.document.createElement("div");
+      wrapper.className = "code-block";
+      pre.replaceWith(wrapper);
+      wrapper.append(pre);
+    }
+    const button = globalThis.document.createElement("button");
+    button.type = "button";
+    button.className = "preview-copy";
+    button.setAttribute("aria-label", t("复制代码"));
+    button.title = t("复制代码");
+    button.innerHTML = COPY_ICON;
+    button.addEventListener("click", () => {
+      void copyText(code.innerText.replace(/\n$/, "")).then((copied) => {
+        button.innerHTML = copied ? CHECK_ICON : COPY_ICON;
+        button.classList.toggle("copied", copied);
+        button.title = copied ? t("已复制") : t("复制失败");
+        window.setTimeout(() => {
+          button.innerHTML = COPY_ICON;
+          button.classList.remove("copied");
+          button.title = t("复制代码");
+        }, 1200);
+      });
+    });
+    wrapper.append(button);
+  }
+}
 
 /**
  * 页内锚点跳转：`[标题](#id)` 滚动到对应元素并短暂高亮。
@@ -104,12 +154,13 @@ export function RenderedMarkdown({
     };
   }, [html, filePath]);
 
-  // 预览增强：图表围栏替换为 SVG，代码块高亮，最后应用差异装饰。见 §10.3、§14.2、§21.5。
+  // 预览增强：图表围栏替换为 SVG，代码块高亮，再应用差异装饰与复制按钮。见 §10.3、§14.2、§21.5。
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
     // 先还原上一次的装饰（尤其是被逐行改写的代码块），避免重高亮读到删除行。
     clearPreviewDiff(host);
+    removeCopyButtons(host);
     let cancelled = false;
     void (async () => {
       await renderPreviewDiagrams(host, sourceKey, () => cancelled);
@@ -117,6 +168,8 @@ export function RenderedMarkdown({
       await highlightCodeBlocks(host, theme);
       if (cancelled) return;
       await applyPreviewDiff(host, diff, () => cancelled);
+      if (cancelled) return;
+      attachCopyButtons(host, Boolean(diff));
     })();
     return () => {
       cancelled = true;

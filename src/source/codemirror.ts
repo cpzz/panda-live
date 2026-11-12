@@ -5,7 +5,7 @@ import { html } from "@codemirror/lang-html";
 import { java } from "@codemirror/lang-java";
 import { javascript } from "@codemirror/lang-javascript";
 import { json } from "@codemirror/lang-json";
-import { markdown } from "@codemirror/lang-markdown";
+import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { php } from "@codemirror/lang-php";
 import { python } from "@codemirror/lang-python";
 import { rust } from "@codemirror/lang-rust";
@@ -22,7 +22,17 @@ import { shell } from "@codemirror/legacy-modes/mode/shell";
 import { stex } from "@codemirror/legacy-modes/mode/stex";
 import { swift } from "@codemirror/legacy-modes/mode/swift";
 import { toml } from "@codemirror/legacy-modes/mode/toml";
-import { HighlightStyle, StreamLanguage, indentUnit, syntaxHighlighting } from "@codemirror/language";
+import {
+  HighlightStyle,
+  StreamLanguage,
+  codeFolding,
+  foldGutter,
+  foldKeymap,
+  foldService,
+  indentUnit,
+  syntaxHighlighting,
+  syntaxTree,
+} from "@codemirror/language";
 import { closeSearchPanel, openSearchPanel, search } from "@codemirror/search";
 import {
   EditorState,
@@ -30,6 +40,7 @@ import {
   RangeSetBuilder,
   StateEffect,
   StateField,
+  countColumn,
   type Extension,
   type Text,
 } from "@codemirror/state";
@@ -38,6 +49,7 @@ import {
   EditorView,
   GutterMarker,
   gutter,
+  keymap,
   type DecorationSet,
 } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
@@ -171,7 +183,7 @@ const diffExtension: Extension = [
 function languageExtension(language: SourceLanguage): Extension {
   switch (language) {
     case "markdown":
-      return markdown();
+      return [markdown(), markdownFolding];
     case "xml":
       return xml();
     case "html":
@@ -196,41 +208,77 @@ function languageExtension(language: SourceLanguage): Extension {
       return php();
     case "rust":
       return rust();
-    // 其余主流语言复用 CodeMirror 5 的流式解析模式。
+    // 其余主流语言复用 CodeMirror 5 的流式解析模式；没有语法树折叠属性，按缩进兜底折叠。
     case "csharp":
-      return StreamLanguage.define(csharp);
+      return [StreamLanguage.define(csharp), indentFoldFallback];
     case "go":
-      return StreamLanguage.define(go);
+      return [StreamLanguage.define(go), indentFoldFallback];
     case "ruby":
-      return StreamLanguage.define(ruby);
+      return [StreamLanguage.define(ruby), indentFoldFallback];
     case "kotlin":
-      return StreamLanguage.define(kotlin);
+      return [StreamLanguage.define(kotlin), indentFoldFallback];
     case "swift":
-      return StreamLanguage.define(swift);
+      return [StreamLanguage.define(swift), indentFoldFallback];
     case "r":
-      return StreamLanguage.define(r);
+      return [StreamLanguage.define(r), indentFoldFallback];
     case "scala":
-      return StreamLanguage.define(scala);
+      return [StreamLanguage.define(scala), indentFoldFallback];
     case "shell":
-      return StreamLanguage.define(shell);
+      return [StreamLanguage.define(shell), indentFoldFallback];
     case "dart":
-      return StreamLanguage.define(dart);
+      return [StreamLanguage.define(dart), indentFoldFallback];
     case "lua":
-      return StreamLanguage.define(lua);
+      return [StreamLanguage.define(lua), indentFoldFallback];
     case "perl":
-      return StreamLanguage.define(perl);
+      return [StreamLanguage.define(perl), indentFoldFallback];
     case "objectivec":
-      return StreamLanguage.define(objectiveC);
+      return [StreamLanguage.define(objectiveC), indentFoldFallback];
     case "stex":
-      return StreamLanguage.define(stex);
+      return [StreamLanguage.define(stex), indentFoldFallback];
     case "ini":
-      return StreamLanguage.define(iniStreamParser);
+      return [StreamLanguage.define(iniStreamParser), indentFoldFallback];
     case "toml":
-      return StreamLanguage.define(toml);
+      return [StreamLanguage.define(toml), indentFoldFallback];
     default:
       return [];
   }
 }
+
+/**
+ * Markdown 围栏代码块折叠：隐藏两行 ``` 之间的内容，保留开闭围栏。见 doc/design.md §11.4。
+ * lang-markdown 自带 Table 折叠但不覆盖 FencedCode，这里通过 foldService 补齐。
+ */
+const markdownFolding: Extension = markdownLanguage.data.of({
+  foldService: (state: EditorState, from: number): { from: number; to: number } | null => {
+    const node = syntaxTree(state).resolveInner(from, -1);
+    for (let current: typeof node | null = node; current; current = current.parent) {
+      if (current.name === "FencedCode") {
+        const first = state.doc.lineAt(current.from);
+        const last = state.doc.lineAt(current.to);
+        if (first.number >= last.number) return null;
+        return { from: first.to, to: last.from };
+      }
+    }
+    return null;
+  },
+});
+
+/** 缩进折叠兜底：当前行缩进更小时，把后续更深层缩进的连续行折叠起来。 */
+const indentFoldFallback: Extension = foldService.of(
+  (state: EditorState, from: number): { from: number; to: number } | null => {
+    const line = state.doc.lineAt(from);
+    if (!line.text.trim()) return null;
+    const base = countColumn(line.text, state.tabSize);
+    let last = line.number;
+    for (let number = line.number + 1; number <= state.doc.lines; number += 1) {
+      const current = state.doc.line(number);
+      if (!current.text.trim()) continue;
+      if (countColumn(current.text, state.tabSize) > base) last = number;
+      else break;
+    }
+    return last > line.number ? { from: line.to, to: state.doc.line(last).to } : null;
+  },
+);
 
 export interface SourceEditorOptions {
   parent: HTMLElement;
@@ -287,6 +335,8 @@ function buildPhrases(): Record<string, string> {
     close: t("关闭"),
     "Go to line": t("跳转到行"),
     go: t("跳转"),
+    "Fold line": t("折叠"),
+    "Unfold line": t("展开"),
   };
 }
 
@@ -329,10 +379,37 @@ const pandaTheme = EditorView.theme(
       backgroundColor: "transparent",
       color: "var(--muted)",
       border: "none",
+      padding: "0 6px",
+      borderRadius: "3px",
+      cursor: "pointer",
+    },
+    ".cm-foldGutter .cm-fold-marker": {
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      width: "14px",
+      height: "100%",
+      color: "var(--editor-gutter-fg)",
+      opacity: "0.6",
+      cursor: "pointer",
+    },
+    ".cm-foldGutter .cm-gutterElement:hover .cm-fold-marker": {
+      opacity: "1",
+      color: "var(--accent)",
+    },
+    ".cm-foldGutter .cm-fold-marker svg": {
+      transition: "transform 100ms ease",
+    },
+    ".cm-foldGutter .cm-fold-marker.closed svg": {
+      transform: "rotate(-90deg)",
     },
   },
   { dark: prefersDark },
 );
+
+/** 折叠箭头：与全局线性图标风格一致，折叠态由 CSS 旋转 -90°。 */
+const FOLD_CHEVRON =
+  '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>';
 
 function createState(
   doc: string,
@@ -348,6 +425,18 @@ function createState(
       basicSetup,
       EditorState.phrases.of(buildPhrases()),
       languageExtension(language),
+      // 语法折叠：VS Code 风格 chevron 箭头 + 键位（Ctrl+Shift+[ / ] 等）。见 doc/design.md §11.4。
+      codeFolding(),
+      foldGutter({
+        markerDOM: (open) => {
+          const marker = document.createElement("span");
+          marker.className = open ? "cm-fold-marker open" : "cm-fold-marker closed";
+          marker.innerHTML = FOLD_CHEVRON;
+          marker.setAttribute("aria-hidden", "true");
+          return marker;
+        },
+      }),
+      keymap.of(foldKeymap),
       // 源码模式的查找替换复用 CodeMirror 搜索面板与匹配装饰（§11.5）。
       search({ top: true }),
       EditorView.lineWrapping,

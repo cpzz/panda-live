@@ -80,6 +80,45 @@
   line-height: 1.6;
 }
 
+/* 复制按钮的外层包装：按钮固定于代码块右上角，不随横向滚动移动。 */
+.markdown-body .code-block {
+  position: relative;
+}
+
+.preview-copy {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--muted);
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 120ms ease, color 120ms ease;
+}
+
+.markdown-body .code-block:hover .preview-copy,
+.preview-copy:focus-visible,
+.preview-copy.copied {
+  opacity: 1;
+}
+
+.preview-copy:hover {
+  color: var(--fg);
+}
+
+.preview-copy.copied {
+  color: var(--accent);
+}
+
 .markdown-body pre code {
   padding: 0;
   border: 0;
