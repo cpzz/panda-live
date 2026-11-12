@@ -14,10 +14,8 @@ export interface Settings {
     theme: "system" | "light" | "dark";
     /** 编辑器正文字号（px） */
     fontSize: number;
-    /** 正文内容宽度；单位由 `lineWidthUnit` 决定。 */
+    /** 正文内容宽度，占渲染面板宽度的百分比（30–300）。 */
     lineWidth: number;
-    /** 内容宽度单位：像素或占面板宽度的百分比。 */
-    lineWidthUnit: "px" | "percent";
     /** 界面语言；默认中文，可切换英文或跟随系统。 */
     language: LanguagePreference;
   };
@@ -50,7 +48,7 @@ export const SETTINGS_SCHEMA_VERSION = 1;
 
 export const DEFAULT_SETTINGS: Settings = {
   schemaVersion: SETTINGS_SCHEMA_VERSION,
-  appearance: { theme: "system", fontSize: 15, lineWidth: 860, lineWidthUnit: "px", language: "zh" },
+  appearance: { theme: "system", fontSize: 15, lineWidth: 100, language: "zh" },
   editor: { autoSave: true, tabSize: 2, showLineNumbers: true, eol: "preserve" },
   diff: { defaultOn: false },
   git: { command: "git" },
@@ -89,22 +87,17 @@ export function mergeSettings(raw: unknown): Settings {
     ...source,
     schemaVersion: SETTINGS_SCHEMA_VERSION,
     appearance: (() => {
-      const lineWidthUnit = pickEnum(
-        appearance.lineWidthUnit,
-        ["px", "percent"] as const,
-        DEFAULT_SETTINGS.appearance.lineWidthUnit,
-      );
+      const rest = { ...appearance };
+      delete rest.lineWidthUnit;
+      // 旧版按像素保存的宽度无法直接换算为百分比，统一回退到 100%。
+      const legacyPx = appearance.lineWidthUnit === "px";
       return {
-        ...appearance,
+        ...rest,
         theme: pickEnum(appearance.theme, ["system", "light", "dark"] as const, "system"),
         fontSize: pickNumber(appearance.fontSize, DEFAULT_SETTINGS.appearance.fontSize, 12, 28),
-        lineWidthUnit,
-        lineWidth: pickNumber(
-          appearance.lineWidth,
-          lineWidthUnit === "percent" ? 80 : DEFAULT_SETTINGS.appearance.lineWidth,
-          lineWidthUnit === "percent" ? 30 : 480,
-          lineWidthUnit === "percent" ? 100 : 1600,
-        ),
+        lineWidth: legacyPx
+          ? DEFAULT_SETTINGS.appearance.lineWidth
+          : pickNumber(appearance.lineWidth, DEFAULT_SETTINGS.appearance.lineWidth, 30, 300),
         language: pickEnum(
           appearance.language,
           ["system", "zh", "en"] as const,

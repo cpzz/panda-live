@@ -683,6 +683,34 @@ export function App() {
     return resolved;
   }, [settings.appearance.language]);
 
+  // 内容宽度：状态栏滑块、Ctrl+滚轮与 Ctrl +/- 统一按百分比调整。
+  const widthPercent = settings.appearance.lineWidth;
+  const [widthDraft, setWidthDraft] = useState(widthPercent);
+  const widthDraftRef = useRef(widthDraft);
+  widthDraftRef.current = widthDraft;
+  const widthTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const applyContentWidth = (value: number, immediate = false): void => {
+    const next = Math.min(300, Math.max(30, Math.round(value / 5) * 5));
+    setWidthDraft(next);
+    if (widthTimerRef.current) clearTimeout(widthTimerRef.current);
+    const commit = (): void => {
+      void settingsStore.update({ appearance: { lineWidth: next } });
+    };
+    if (immediate) commit();
+    else widthTimerRef.current = setTimeout(commit, 180);
+  };
+  const applyContentWidthRef = useRef(applyContentWidth);
+  applyContentWidthRef.current = applyContentWidth;
+  useEffect(() => {
+    setWidthDraft(widthPercent);
+  }, [widthPercent]);
+  useEffect(
+    () => () => {
+      if (widthTimerRef.current) clearTimeout(widthTimerRef.current);
+    },
+    [],
+  );
+
   const [cursor, setCursor] = useState<SelectionInfo>({ line: 1, column: 1 });
   const [searchSignal, setSearchSignal] = useState(0);
   const [compileSignal, setCompileSignal] = useState(0);
@@ -1264,6 +1292,21 @@ export function App() {
       if (!(event.ctrlKey || event.metaKey)) return;
       const key = event.key.toLowerCase();
       if (key === "p" && event.shiftKey) return;
+      if (key === "=" || key === "+") {
+        event.preventDefault();
+        applyContentWidthRef.current(widthDraftRef.current + 10);
+        return;
+      }
+      if (key === "-" || key === "_") {
+        event.preventDefault();
+        applyContentWidthRef.current(widthDraftRef.current - 10);
+        return;
+      }
+      if (key === "0") {
+        event.preventDefault();
+        applyContentWidthRef.current(100, true);
+        return;
+      }
       if (key === "n" && !event.shiftKey) {
         event.preventDefault();
         void manager.runMenuCommand("file.new");
@@ -1290,6 +1333,20 @@ export function App() {
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [manager, workspaces]);
+
+  // Ctrl/Cmd + 滚轮调整内容宽度（缩放渲染内容）。
+  useEffect(() => {
+    const app = appRef.current;
+    if (!app) return;
+    const onWheel = (event: WheelEvent): void => {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      event.preventDefault();
+      const step = event.deltaY < 0 ? 5 : -5;
+      applyContentWidthRef.current(widthDraftRef.current + step);
+    };
+    app.addEventListener("wheel", onWheel, { passive: false });
+    return () => app.removeEventListener("wheel", onWheel);
+  }, []);
 
   // 改动导航：Ctrl+Shift+D 开关，F7 / Shift+F7 在改动间循环。见 §21.8.8。
   useEffect(() => {
@@ -2011,6 +2068,19 @@ export function App() {
               ? (workspace.roots[0]?.root.name ?? t("无工作区"))
               : t("{0} 个工作区", workspace.roots.length)}
         </span>
+        <label className="statusbar-width" title={t("内容宽度")}>
+          <input
+            type="range"
+            className="statusbar-width-range"
+            min={30}
+            max={300}
+            step={5}
+            value={widthDraft}
+            aria-label={t("内容宽度")}
+            onChange={(event) => applyContentWidth(Number(event.target.value))}
+          />
+          <span className="statusbar-meta statusbar-width-value">{widthDraft}%</span>
+        </label>
         <DiffControls
           enabled={diffEnabled}
           state={diffState}

@@ -100,30 +100,17 @@ export function SettingsDialog({
               <span className="settings-inline">
                 <input
                   type="number"
-                  min={draft.appearance.lineWidthUnit === "percent" ? 30 : 480}
-                  max={draft.appearance.lineWidthUnit === "percent" ? 100 : 1600}
-                  step={draft.appearance.lineWidthUnit === "percent" ? 5 : 20}
+                  min={30}
+                  max={300}
+                  step={5}
                   value={draft.appearance.lineWidth}
                   onChange={(event) => patch("appearance", { lineWidth: Number(event.target.value) })}
                 />
-                <select
-                  aria-label={t("内容宽度单位")}
-                  value={draft.appearance.lineWidthUnit}
-                  onChange={(event) => {
-                    const unit = event.target.value as "px" | "percent";
-                    patch("appearance", {
-                      lineWidthUnit: unit,
-                      lineWidth: unit === "percent" ? 80 : 860,
-                    });
-                  }}
-                >
-                  <option value="px">px</option>
-                  <option value="percent">%</option>
-                </select>
+                <span className="settings-suffix">%</span>
               </span>
             </label>
             <p className="settings-note">
-              {t("百分比按当前渲染面板宽度计算；超宽表格与代码块会在内容区内部出现水平滚动条。")}
+              {t("按当前渲染面板宽度的百分比计算；超过 100% 时内容会加宽并出现水平滚动条，超宽表格与代码块也会在内容区内部滚动。")}
             </p>
           </section>
 

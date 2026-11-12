@@ -761,7 +761,7 @@ button {
 }
 
 .git-diff-body {
-  max-width: min(var(--prose-max-width), 100%);
+  max-width: none;
   margin: 0 auto;
 }
 
@@ -994,6 +994,26 @@ button {
   padding: 0 2px;
   color: var(--statusbar-muted);
   white-space: nowrap;
+}
+
+/* 状态栏内容宽度滑块：数值即渲染内容的百分比宽度。 */
+.statusbar-width {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.statusbar-width-range {
+  width: 84px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--statusbar-fg);
+  cursor: pointer;
+}
+
+.statusbar-width-value {
+  min-width: 36px;
+  text-align: right;
 }
 
 .statusbar-button {
@@ -2121,6 +2141,11 @@ body.resizing * {
 
 .settings-inline select {
   width: auto;
+}
+
+.settings-suffix {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .settings-row input[type="text"],

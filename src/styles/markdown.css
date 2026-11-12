@@ -1,6 +1,7 @@
 .markdown-body {
-  /* 百分比按面板宽度计算；px 值也不会超过可用宽度。 */
-  max-width: min(var(--prose-max-width, 860px), 100%);
+  /* 按面板宽度百分比布局；超过 100% 时内容加宽并由面板横向滚动。 */
+  width: var(--prose-max-width, 100%);
+  max-width: none;
   margin: 0 auto;
   color: var(--fg);
   font-size: var(--prose-font-size, 15px);
@@ -183,7 +184,6 @@
 
 /* WYSIWYG 编辑器（ProseMirror） */
 .prose-editor {
-  max-width: var(--prose-max-width, 860px);
   min-height: 100%;
   padding: 32px 40px 96px;
   outline: none;

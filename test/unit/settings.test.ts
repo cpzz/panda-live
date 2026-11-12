@@ -16,7 +16,7 @@ describe("设置合并", () => {
     });
     expect(merged.appearance.theme).toBe("system");
     expect(merged.appearance.fontSize).toBe(28);
-    expect(merged.appearance.lineWidth).toBe(480);
+    expect(merged.appearance.lineWidth).toBe(100);
     expect(merged.editor.autoSave).toBe(true);
     expect(merged.editor.tabSize).toBe(1);
     expect(merged.editor.eol).toBe("preserve");
@@ -30,17 +30,18 @@ describe("设置合并", () => {
     expect(merged.appearance.theme).toBe("light");
   });
 
-  it("内容宽度支持像素与百分比，并按单位校正范围", () => {
-    expect(mergeSettings({ appearance: { lineWidth: 900 } }).appearance).toMatchObject({
-      lineWidth: 900,
-      lineWidthUnit: "px",
+  it("内容宽度为百分比并校正范围，旧版像素配置回退为 100%", () => {
+    expect(mergeSettings({ appearance: { lineWidth: 120 } }).appearance).toMatchObject({
+      lineWidth: 120,
     });
+    expect(mergeSettings({ appearance: { lineWidth: 320 } }).appearance.lineWidth).toBe(300);
+    expect(mergeSettings({ appearance: { lineWidth: 10 } }).appearance.lineWidth).toBe(30);
     expect(
-      mergeSettings({ appearance: { lineWidthUnit: "percent", lineWidth: 120 } }).appearance,
-    ).toMatchObject({ lineWidth: 100, lineWidthUnit: "percent" });
+      mergeSettings({ appearance: { lineWidth: 860, lineWidthUnit: "px" } }).appearance,
+    ).toMatchObject({ lineWidth: 100 });
     expect(
-      mergeSettings({ appearance: { lineWidthUnit: "percent", lineWidth: 10 } }).appearance,
-    ).toMatchObject({ lineWidth: 30, lineWidthUnit: "percent" });
+      mergeSettings({ appearance: { lineWidth: 860, lineWidthUnit: "px" } }).appearance,
+    ).not.toHaveProperty("lineWidthUnit");
   });
 
   it("界面语言仅接受 zh / en / system", () => {
@@ -63,7 +64,7 @@ describe("设置合并", () => {
     const patched = patchSettings(base, { appearance: { lineWidth: 700 }, editor: { autoSave: false } });
     expect(patched.appearance.fontSize).toBe(18);
     expect(patched.appearance.theme).toBe("dark");
-    expect(patched.appearance.lineWidth).toBe(700);
+    expect(patched.appearance.lineWidth).toBe(300);
     expect(patched.editor.autoSave).toBe(false);
   });
 });

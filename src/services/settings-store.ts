@@ -46,7 +46,7 @@ export class SettingsStore {
 
   private apply(): void {
     const root = document.documentElement;
-    const { theme, fontSize, lineWidth, lineWidthUnit } = this.state.appearance;
+    const { theme, fontSize, lineWidth } = this.state.appearance;
     if (theme === "system") {
       delete root.dataset["theme"];
     } else {
@@ -54,10 +54,7 @@ export class SettingsStore {
     }
     root.style.setProperty("--editor-font-size", `${fontSize}px`);
     root.style.setProperty("--prose-font-size", `${fontSize}px`);
-    root.style.setProperty(
-      "--prose-max-width",
-      lineWidthUnit === "percent" ? `${lineWidth}%` : `${lineWidth}px`,
-    );
+    root.style.setProperty("--prose-max-width", `${lineWidth}%`);
     root.style.setProperty("--cm-tab-size", String(this.state.editor.tabSize));
   }
 

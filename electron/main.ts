@@ -118,10 +118,6 @@ function buildMenu(): void {
       submenu: [
         { role: "reload", label: t("重新加载") },
         { role: "toggleDevTools", label: t("开发者工具") },
-        { type: "separator" },
-        { role: "resetZoom", label: t("实际大小") },
-        { role: "zoomIn", label: t("放大") },
-        { role: "zoomOut", label: t("缩小") },
       ],
     },
   ];
