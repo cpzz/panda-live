@@ -19,6 +19,19 @@ function ignoredEntry(entry: DirEntry): boolean {
   return ALWAYS_IGNORED.has(entry.name) || entry.name.startsWith(".");
 }
 
+/**
+ * 监听时的忽略规则：目录树不展示的隐藏目录/大目录不再递归监听，
+ * 避免对 `.venv` 等目录内的符号链接或无权限文件做 stat 触发 EACCES。
+ * `stats` 缺失时按目录处理，优先保证不进入不可访问路径。
+ */
+function ignoredWatchPath(target: string, stats?: { isDirectory(): boolean }): boolean {
+  const base = path.basename(target);
+  if (base.startsWith(".tmp-")) return true;
+  const directory = stats ? stats.isDirectory() : true;
+  if (!directory) return false;
+  return ALWAYS_IGNORED.has(base) || base.startsWith(".");
+}
+
 interface WatcherState {
   watcher: FSWatcher;
   timer: ReturnType<typeof setTimeout> | null;
@@ -57,11 +70,15 @@ export class WorkspaceService {
       if (stats?.isDirectory()) directory = true;
     }
 
+    const roots = new Set(resolved.map((target) => path.resolve(target)));
     const state: WatcherState = {
       watcher: chokidar.watch(resolved, {
         ignoreInitial: true,
-        // 忽略原子写入使用的中转文件，避免自动保存触发自身监听。
-        ignored: (target) => path.basename(target).startsWith(".tmp-"),
+        // 用户显式打开的根目录即使以「.」开头也要监听。
+        ignored: (target, stats) =>
+          !roots.has(path.resolve(target)) && ignoredWatchPath(target, stats),
+        // 不跟进符号链接：虚拟环境等目录中的链接可能指向无权限目标。
+        followSymlinks: false,
       }),
       timer: null,
       pending: new Map(),
@@ -80,7 +97,13 @@ export class WorkspaceService {
       .on("addDir", record("add"))
       .on("change", record("change"))
       .on("unlink", record("unlink"))
-      .on("unlinkDir", record("unlink"));
+      .on("unlinkDir", record("unlink"))
+      // 单个路径无权限/已消失不应中断整个监听，也不应冒泡为未处理的 Promise 拒绝。
+      .on("error", (error) => {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === "EACCES" || code === "EPERM" || code === "ENOENT") return;
+        console.warn("[workspace] watch error", error);
+      });
 
     this.watchers.set(watchId, state);
     return { watchId };

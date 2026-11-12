@@ -689,7 +689,7 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [recoveries, setRecoveries] = useState<DraftEntry[]>([]);
   const [recent, setRecent] = useState<RecentEntry[]>([]);
-  const [perfVisible, setPerfVisible] = useState(import.meta.env.DEV);
+  const [perfVisible, setPerfVisible] = useState(false);
   const [problemsOpen, setProblemsOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [extensionCommands, setExtensionCommands] = useState<CommandItem[]>([]);
@@ -2020,10 +2020,7 @@ export function App() {
           dirty={active?.dirty ?? false}
           mode={diffMode}
           modeAvailable={state.mode !== "wysiwyg"}
-          commitRef={diffRef}
           onToggle={() => updateDiffOption(activeId, { enabled: !diffEnabled })}
-          onBaseChange={(base) => updateDiffOption(activeId, { base })}
-          onCommitRefApply={(ref) => updateDiffOption(activeId, { base: "commit", ref })}
           onModeChange={(mode) => updateDiffOption(activeId, { mode })}
           onRefresh={() => setDiffRefresh((value) => value + 1)}
           onPrev={() => navigateDiff(-1)}
@@ -2035,6 +2032,16 @@ export function App() {
             revealDiffAt(line);
           }}
         />
+        <button
+          type="button"
+          className={perfVisible ? "statusbar-button active" : "statusbar-button"}
+          aria-label={t("性能浮层")}
+          aria-pressed={perfVisible}
+          title={t("性能浮层")}
+          onClick={() => setPerfVisible((value) => !value)}
+        >
+          {t("性能")}
+        </button>
         {(problems.length > 0 || problemsOpen) && (
           <button
             type="button"
@@ -2096,9 +2103,7 @@ export function App() {
         onClose={() => setRecoveries([])}
       />
 
-      {import.meta.env.DEV && perfVisible && (
-        <PerformanceOverlay onClose={() => setPerfVisible(false)} />
-      )}
+      {perfVisible && <PerformanceOverlay onClose={() => setPerfVisible(false)} />}
     </div>
   );
 }

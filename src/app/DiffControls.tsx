@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import type { DiffBase, DiffViewMode } from "../shared/diff";
+import { useEffect, useState } from "react";
+import type { DiffViewMode } from "../shared/diff";
 import { t } from "../i18n";
 import { Icon } from "./icons";
 import type { DiffViewState } from "./useDocumentDiff";
@@ -22,11 +22,7 @@ interface DiffControlsProps {
   mode: DiffViewMode;
   /** 所见即所得为编辑态，不提供折叠/片段粒度。 */
   modeAvailable: boolean;
-  /** 已应用的提交引用（base === "commit" 时使用）。 */
-  commitRef: string;
   onToggle(): void;
-  onBaseChange(base: DiffBase): void;
-  onCommitRefApply(ref: string): void;
   onModeChange(mode: DiffViewMode): void;
   onRefresh(): void;
   onPrev(): void;
@@ -35,7 +31,8 @@ interface DiffControlsProps {
 }
 
 /**
- * 状态栏的改动入口：开关、基线选择、计数、上下一处与改动列表。
+ * 状态栏的改动入口：开关、计数、上下一处与改动列表。
+ * 基线/提交选择由独立 Git 差异面板负责，状态栏不再重复。
  * 见 doc/design.md §21.8.1–§21.8.3。
  */
 export function DiffControls({
@@ -47,10 +44,7 @@ export function DiffControls({
   dirty,
   mode,
   modeAvailable,
-  commitRef,
   onToggle,
-  onBaseChange,
-  onCommitRefApply,
   onModeChange,
   onRefresh,
   onPrev,
@@ -58,16 +52,6 @@ export function DiffControls({
   onJump,
 }: DiffControlsProps) {
   const [listOpen, setListOpen] = useState(false);
-  const [refDraft, setRefDraft] = useState(commitRef);
-  const refInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    setRefDraft(commitRef);
-  }, [commitRef]);
-
-  useEffect(() => {
-    if (enabled && state.base === "commit") refInputRef.current?.focus();
-  }, [enabled, state.base]);
 
   useEffect(() => {
     if (!listOpen) return;
@@ -114,54 +98,6 @@ export function DiffControls({
         <span className="diff-label">{t("显示改动")}</span>
         {enabled && dirty && <span className="diff-dirty-dot" aria-label={t("包含未保存修改")} />}
       </button>
-
-      {enabled && (
-        <select
-          className="diff-base"
-          aria-label={t("对比基线")}
-          title={
-            state.inRepo
-              ? t("对比基线")
-              : t("未检测到 Git 仓库或 Git 命令，HEAD/暂存区/指定提交不可用")
-          }
-          value={state.base}
-          onChange={(event) => onBaseChange(event.target.value as DiffBase)}
-        >
-          <option value="head" disabled={!state.inRepo}>
-            HEAD
-          </option>
-          <option value="index" disabled={!state.inRepo}>
-            {t("暂存区")}
-          </option>
-          <option value="commit" disabled={!state.inRepo}>
-            {t("指定提交…")}
-          </option>
-          <option value="lastSave">{t("上次保存")}</option>
-        </select>
-      )}
-
-      {enabled && state.base === "commit" && (
-        <form
-          className="diff-ref-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            onCommitRefApply(refDraft.trim());
-          }}
-        >
-          <input
-            ref={refInputRef}
-            className="diff-ref-input"
-            aria-label={t("提交引用")}
-            placeholder="HEAD~3 / main / commit id"
-            value={refDraft}
-            disabled={!state.inRepo}
-            onChange={(event) => setRefDraft(event.target.value)}
-          />
-          <button type="submit" className="statusbar-button" disabled={!state.inRepo}>
-            {t("对比")}
-          </button>
-        </form>
-      )}
 
       {loading && <span className="statusbar-meta">{t("对比中…")}</span>}
       {stale && (

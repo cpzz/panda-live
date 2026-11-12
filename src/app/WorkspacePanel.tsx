@@ -1,4 +1,12 @@
-import { useEffect, useRef, useState, useSyncExternalStore, type DragEvent as ReactDragEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type DragEvent as ReactDragEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from "react";
 import type { FileRef } from "../shared/ipc";
 import { t } from "../i18n";
 import type { WorkspaceNode, WorkspaceStore } from "../services/workspace-store";
@@ -99,6 +107,7 @@ function NodeRow({
         <button
           type="button"
           className="tree-name"
+          data-node-kind={node.kind}
           title={node.path}
           onClick={() => (node.kind === "dir" ? void store.toggle(node.path) : onOpenFile(node, rootId))}
         >
@@ -196,6 +205,37 @@ export function WorkspacePanel({
     });
   };
 
+  /**
+   * 侧栏键盘导航：在文件树/大纲内按上下方向键直接切换，无需回车。
+   * 焦点在标签、标题栏按钮或列表项上都能生效；从列表外按键时从第一项开始。
+   */
+  const handleSidebarKeys = (event: ReactKeyboardEvent<HTMLElement>): void => {
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    if (event.defaultPrevented) return;
+    const target = event.target;
+    if (target instanceof HTMLElement && target.tagName === "INPUT") return;
+    const selector = tab === "files" ? ".tree-name" : ".outline-item";
+    const items = [...event.currentTarget.querySelectorAll<HTMLButtonElement>(selector)];
+    if (items.length === 0) return;
+    const current =
+      target instanceof HTMLElement
+        ? items.indexOf(target.closest(selector) as HTMLButtonElement)
+        : -1;
+    const step = event.key === "ArrowDown" ? 1 : -1;
+    const index = current < 0 ? (step === 1 ? 0 : items.length - 1) : current + step;
+    const next = items[Math.min(Math.max(index, 0), items.length - 1)];
+    if (!next) return;
+    event.preventDefault();
+    next.focus();
+    if (tab === "outline") {
+      next.click();
+    } else if (next.dataset.nodeKind === "file") {
+      // 文件直接切换文档；目录只移动焦点，避免经过时误展开/折叠。
+      next.click();
+    }
+    requestAnimationFrame(() => next.focus());
+  };
+
   const toggleRoot = (rootPath: string): void => {
     setCollapsedRoots((current) => {
       const next = new Set(current);
@@ -260,6 +300,7 @@ export function WorkspacePanel({
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
+        onKeyDown={handleSidebarKeys}
       >
         {dragging && (
           <div className="sidebar-drop-hint" aria-hidden="true">
@@ -412,9 +453,6 @@ export function WorkspacePanel({
             ) : (
               <div className="sidebar-empty">
                 <p>{t("未打开文件夹")}</p>
-                <button type="button" className="button" onClick={() => void store.openPicker()}>
-                  {t("打开文件夹")}
-                </button>
               </div>
             )}
           </div>
