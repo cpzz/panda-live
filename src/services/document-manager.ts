@@ -319,6 +319,10 @@ export class DocumentManager {
   async saveDocument(id: string, silent = false): Promise<void> {
     const doc = this.findDocument(id);
     if (!doc) return;
+    if (doc.format === "pdf") {
+      this.notify("info", t("PDF 文档为只读预览，无需保存"));
+      return;
+    }
     if (!doc.path) {
       await this.saveDocumentAs(id);
       return;
@@ -364,6 +368,11 @@ export class DocumentManager {
   async saveDocumentAs(id: string): Promise<void> {
     const doc = this.findDocument(id);
     if (!doc) return;
+    // PDF 是二进制只读文档：content 不代表磁盘内容，另存为会写坏目标文件。
+    if (doc.format === "pdf") {
+      this.notify("error", t("PDF 文档为只读预览，不支持另存为"));
+      return;
+    }
     try {
       const ref = await window.panda.dialog.saveAs({
         suggestedName: doc.path ? doc.name : "untitled.md",
@@ -632,11 +641,13 @@ export class DocumentManager {
       ) {
         return;
       }
-      const data = await window.panda.fs.readText({ path: ref.path });
+      // PDF 是二进制文档：不读文本，只读元数据并以只读预览打开。
+      const isPdf = detectFormatEntry(ref.name)?.id === "pdf";
+      const data = isPdf ? null : await window.panda.fs.readText({ path: ref.path });
       const watchId = await this.watchFile(ref.path);
       let forceSource = policy.preferSource;
       let blockLimit = false;
-      if (!forceSource && detectFormatEntry(ref.name)?.id === "markdown") {
+      if (data && !forceSource && detectFormatEntry(ref.name)?.id === "markdown") {
         try {
           const blocks = parseMarkdown(data.content).doc.content?.length ?? 0;
           blockLimit = preferSourceByBlocks(blocks);
@@ -651,16 +662,17 @@ export class DocumentManager {
         path: ref.path,
         rootId: ref.rootId || null,
         format: detectFormatEntry(ref.name)?.id ?? "text",
-        content: data.content,
-        savedContent: data.content,
+        content: data ? data.content : "",
+        savedContent: data ? data.content : "",
         dirty: false,
-        eol: data.eol,
-        bom: data.bom,
-        encoding: data.encoding,
-        readOnly: data.readOnly,
-        hash: data.hash,
-        mtimeMs: data.mtimeMs,
-        size: data.size,
+        eol: data ? data.eol : "lf",
+        bom: data ? data.bom : false,
+        encoding: data ? data.encoding : "utf-8",
+        // PDF 以只读预览打开，不允许编辑与写回。
+        readOnly: data ? data.readOnly : true,
+        hash: data ? data.hash : "",
+        mtimeMs: data ? data.mtimeMs : stats.mtimeMs,
+        size: data ? data.size : stats.size,
         revision: 0,
         draftKey: null,
         watchId,
@@ -668,13 +680,15 @@ export class DocumentManager {
       this.commit({
         documents: [...this.state.documents, document],
         activeId: document.id,
-        mode: !supportsPreview(document.format)
-          ? "source"
-          : forceSource
+        mode: isPdf
+          ? "preview"
+          : !supportsPreview(document.format)
             ? "source"
-            : document.format === "markdown" || this.state.mode !== "wysiwyg"
-              ? this.state.mode
-              : "source",
+            : forceSource
+              ? "source"
+              : document.format === "markdown" || this.state.mode !== "wysiwyg"
+                ? this.state.mode
+                : "source",
       });
       if (blockLimit) {
         this.notify("info", t("文档顶层块超过 8000，已默认切换到源码模式"));
@@ -684,7 +698,7 @@ export class DocumentManager {
       if (!options.silentRecent) {
         await window.panda.recent.add({ path: ref.path }).catch(() => undefined);
       }
-      if (data.readOnly) {
+      if (data?.readOnly) {
         this.notify("info", t("编码 {0} 暂不支持写回，已以只读方式打开", data.encoding));
       }
       this.scheduleSessionSave();
@@ -710,6 +724,17 @@ export class DocumentManager {
       return;
     }
     if (!doc.path) return;
+    // PDF 是二进制只读文档：外部修改只更新元数据并提示重新打开，不做文本重读。
+    if (doc.format === "pdf") {
+      try {
+        const stats = await window.panda.fs.stat({ path: doc.path });
+        this.patchDocument(doc.id, () => ({ mtimeMs: stats.mtimeMs, size: stats.size }));
+        this.notify("info", t("PDF 文件已在外部更新"));
+      } catch {
+        // 文件消失由 unlink 分支处理
+      }
+      return;
+    }
     try {
       const data = await window.panda.fs.readText({ path: doc.path });
       if (data.hash === doc.hash) return;

@@ -8,6 +8,18 @@ export class SettingsStore {
   private state: Settings = DEFAULT_SETTINGS;
   private readonly listeners = new Set<() => void>();
   private loaded = false;
+  private systemDarkQuery: MediaQueryList | null = null;
+  private readonly onSystemThemeChange = (): void => {
+    if (this.state.appearance.theme === "system") this.apply();
+  };
+
+  constructor() {
+    // 主题单源：无论显式还是 system 都解析为 data-theme 写到根元素。
+    if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
+      this.systemDarkQuery = window.matchMedia("(prefers-color-scheme: dark)");
+      this.systemDarkQuery.addEventListener("change", this.onSystemThemeChange);
+    }
+  }
 
   readonly getState = (): Settings => this.state;
 
@@ -47,11 +59,8 @@ export class SettingsStore {
   private apply(): void {
     const root = document.documentElement;
     const { theme, fontSize, lineWidth } = this.state.appearance;
-    if (theme === "system") {
-      delete root.dataset["theme"];
-    } else {
-      root.dataset["theme"] = theme;
-    }
+    const dark = theme === "dark" || (theme === "system" && this.systemDarkQuery?.matches);
+    root.dataset["theme"] = dark ? "dark" : "light";
     root.style.setProperty("--editor-font-size", `${fontSize}px`);
     root.style.setProperty("--prose-font-size", `${fontSize}px`);
     root.style.setProperty("--prose-max-width", `${lineWidth}%`);

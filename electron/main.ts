@@ -42,7 +42,7 @@ let extensions: ExtensionService | undefined;
 let windowStateTimer: ReturnType<typeof setTimeout> | null = null;
 const pendingOpenPaths: string[] = [];
 
-const DOCUMENT_EXTENSION = /\.(md|markdown|mdown|mkd|qmd|rmd|mdx|tex|latex|mathml|mml|puml|plantuml|mmd|mermaid|adoc)$/i;
+const DOCUMENT_EXTENSION = /\.(md|markdown|mdown|mkd|qmd|rmd|mdx|tex|latex|mathml|mml|puml|plantuml|mmd|mermaid|adoc|pdf)$/i;
 
 /** 从命令行参数提取可打开的文档路径（文件关联 / 第二实例）。见 §12.7。 */
 function extractOpenPaths(argv: readonly string[]): string[] {
@@ -130,6 +130,28 @@ function applyLanguage(settingsValue: Settings): void {
   buildMenu();
 }
 
+/**
+ * 标题栏系统按钮（titleBarOverlay）配色：跟随应用主题（显式或系统）。
+ * macOS 使用 hiddenInset，无需 overlay 配色。
+ */
+function titlebarOverlayColors(): { color: string; symbolColor: string; height: number } {
+  const theme = settings?.get().appearance.theme;
+  const dark = theme === "dark" || (theme !== "light" && nativeTheme.shouldUseDarkColors);
+  return dark
+    ? { color: "#252526", symbolColor: "#d4d4d4", height: 40 }
+    : { color: "#f8f8f8", symbolColor: "#24292f", height: 40 };
+}
+
+function applyTitlebarOverlay(): void {
+  if (process.platform === "darwin") return;
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  try {
+    mainWindow.setTitleBarOverlay(titlebarOverlayColors());
+  } catch {
+    // 部分平台/版本不支持运行时改 overlay 配色，保持创建时的取值即可。
+  }
+}
+
 function createWindow(bounds?: SessionState["window"]): void {
   const iconPath = path.join(__dirname, "../dist/icon.png");
   const window = new BrowserWindow({
@@ -142,6 +164,10 @@ function createWindow(bounds?: SessionState["window"]): void {
     show: false,
     title: "Panda Live",
     ...(existsSync(iconPath) ? { icon: iconPath } : {}),
+    // 合并标题栏与工具栏：Windows/Linux 用 overlay 保留系统窗口按钮，macOS 用 hiddenInset 红绿灯。
+    ...(process.platform === "darwin"
+      ? { titleBarStyle: "hiddenInset" as const }
+      : { titleBarStyle: "hidden" as const, titleBarOverlay: titlebarOverlayColors() }),
     autoHideMenuBar: false,
     backgroundColor: nativeTheme.shouldUseDarkColors ? "#17181a" : "#f6f7f8",
     webPreferences: {
@@ -239,7 +265,10 @@ async function bootstrap(): Promise<void> {
     settings,
     session,
     drafts,
-    onSettingsChanged: (next) => applyLanguage(next),
+    onSettingsChanged: (next) => {
+      applyLanguage(next);
+      applyTitlebarOverlay();
+    },
   });
   registerExtensionHandlers({ extensions: extensionService, getWindow: () => mainWindow });
   handle("app:pendingOpenPaths", () => pendingOpenPaths.splice(0));
@@ -251,6 +280,10 @@ async function bootstrap(): Promise<void> {
     compiler: new TexCompiler(files, userDataDir, () => detectEngines()),
   });
   buildMenu();
+  // 系统主题切换时同步标题栏按钮配色。
+  nativeTheme.on("updated", () => {
+    if (settings) applyTitlebarOverlay();
+  });
 
   const saved = await session.load();
   createWindow(saved?.window);

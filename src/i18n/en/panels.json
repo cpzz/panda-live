@@ -107,6 +107,7 @@
   "无匹配命令": "No matching commands",
   "性能浮层": "Performance overlay",
   "性能": "Performance",
+  "拖动调整渲染内容宽度；Ctrl+滚轮或 Ctrl +/- 亦可缩放": "Drag to adjust the rendered content width; Ctrl+wheel or Ctrl +/- also zoom.",
   "长任务": "Long tasks",
   "{0} 次 / {1} ms": "{0} times / {1} ms",
   "图表缓存": "Diagram cache",

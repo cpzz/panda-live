@@ -23,7 +23,7 @@ async function launch(userDataDir: string): Promise<ElectronApplication> {
   });
 }
 
-test("M27：工具栏图标可在中英文之间即时切换", async () => {
+test("M27：界面语言可在设置中于中英文之间切换", async () => {
   test.setTimeout(120_000);
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "panda-m27-file-"));
   const userDataDir = await prepareUserData();
@@ -39,30 +39,42 @@ test("M27：工具栏图标可在中英文之间即时切换", async () => {
     await page.getByRole("button", { name: "打开", exact: true }).click();
     await expect(page.locator(".tab-name")).toHaveText("locale.md");
 
-    // 默认中文：模式按钮与语言按钮均为中文。
+    // 默认中文：工具栏为中文按钮。
     await expect(page.getByRole("button", { name: "源码", exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: "切换到英文界面", exact: true })).toBeVisible();
 
-    await page.getByRole("button", { name: "切换到英文界面", exact: true }).click();
+    // 通过设置对话框切换到英文。
+    await page.getByRole("button", { name: "设置", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "设置" });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: "外观", exact: true })).toBeVisible();
+    await dialog
+      .locator(".settings-row", { hasText: "界面语言" })
+      .locator("select")
+      .selectOption("en");
+    await dialog.getByRole("button", { name: "保存", exact: true }).click();
+
     await expect(page.getByRole("button", { name: "Source", exact: true })).toBeVisible({
       timeout: 20_000,
     });
     await expect(page.getByRole("button", { name: "Save", exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Switch to Chinese", exact: true })).toBeVisible();
 
-    // 设置对话框同样跟随语言。
+    // 设置对话框同样跟随语言；切回中文。
     await page.getByRole("button", { name: "Settings", exact: true }).click();
-    await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Appearance", exact: true })).toBeVisible();
-    await page.getByRole("button", { name: "Close", exact: true }).click();
+    const dialogEn = page.getByRole("dialog", { name: "Settings" });
+    await expect(dialogEn).toBeVisible();
+    await expect(dialogEn.getByRole("heading", { name: "Appearance", exact: true })).toBeVisible();
+    await dialogEn
+      .locator(".settings-row", { hasText: "Interface language" })
+      .locator("select")
+      .selectOption("zh");
+    await dialogEn.getByRole("button", { name: "Save", exact: true }).click();
 
-    // 切回中文。
-    await page.getByRole("button", { name: "Switch to Chinese", exact: true }).click();
     await expect(page.getByRole("button", { name: "源码", exact: true })).toBeVisible({
       timeout: 20_000,
     });
-    await expect(page.getByRole("button", { name: "切换到英文界面", exact: true })).toBeVisible();
   } finally {
     await app.close();
+    await fs.rm(tempDir, { recursive: true, force: true });
+    await fs.rm(userDataDir, { recursive: true, force: true });
   }
 });

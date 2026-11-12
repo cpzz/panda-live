@@ -34,9 +34,9 @@ import { diffLineMarkers, describeHunk, useDocumentDiff } from "./useDocumentDif
 import { hunkAnchorLine, type DiffHunk } from "../diff/compute";
 import type { PreviewDiffModel } from "../diff/preview";
 import type { DiffBase, DiffViewMode } from "../shared/diff";
-import { Icon, PandaMark, type IconName } from "./icons";
+import { Icon, PandaMark, fileIconForPath, type IconName } from "./icons";
 import { OutlinePanel } from "./OutlinePanel";
-import { PdfPreview } from "./PdfPreview";
+import { PdfPreview, PdfDocumentPreview } from "./PdfPreview";
 import { PerformanceOverlay } from "./PerformanceOverlay";
 import { ProblemPanel } from "./ProblemPanel";
 import { SettingsDialog } from "./SettingsDialog";
@@ -536,6 +536,12 @@ function TexPreviewPane({
     if (compileSignal > 0) void compile();
   }, [compileSignal]);
 
+  // 稳定 source 引用：避免父组件重渲染时 PdfPreview 反复销毁重载。
+  const texSource = useMemo(
+    () => (result && result.ok && result.pdfKey ? { url: `panda-pdf://${result.pdfKey}` } : null),
+    [result],
+  );
+
   if (engines && !engines.available) {
     return (
       <div className="preview-pane">
@@ -561,9 +567,7 @@ function TexPreviewPane({
       {busy && (
         <p className="placeholder">{t("编译中…（首次编译需下载 TeX 宏包，可能需要几分钟）")}</p>
       )}
-      {result && result.ok && result.pdfKey ? (
-        <PdfPreview pdfKey={result.pdfKey} />
-      ) : null}
+      {texSource ? <PdfPreview source={texSource} /> : null}
       {result && !result.ok && result.diagnostics.length > 0 && (
         <ul className="tex-diagnostics">
           {result.diagnostics.map((diagnostic, index) => (
@@ -674,18 +678,19 @@ export function App() {
   const workspace = useSyncExternalStore(workspaces.subscribe, workspaces.getState);
 
   // 界面语言在父组件渲染前写入全局，子组件直接调用 t() 即可拿到当前语言。
-  const locale = useMemo(() => {
+  useMemo(() => {
     const resolved = resolveLocale(settings.appearance.language, navigator.language);
     setLocale(resolved);
     if (typeof document !== "undefined") {
       document.documentElement.lang = resolved === "zh" ? "zh-CN" : "en";
     }
-    return resolved;
   }, [settings.appearance.language]);
 
-  // 内容宽度：状态栏滑块、Ctrl+滚轮与 Ctrl +/- 统一按百分比调整。
+  // 内容宽度：状态栏弹层滑块、Ctrl+滚轮与 Ctrl +/- 统一按百分比调整。
   const widthPercent = settings.appearance.lineWidth;
   const [widthDraft, setWidthDraft] = useState(widthPercent);
+  const [widthOpen, setWidthOpen] = useState(false);
+  const widthRef = useRef<HTMLDivElement>(null);
   const widthDraftRef = useRef(widthDraft);
   widthDraftRef.current = widthDraft;
   const widthTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -704,6 +709,17 @@ export function App() {
   useEffect(() => {
     setWidthDraft(widthPercent);
   }, [widthPercent]);
+  // 弹层打开时点击外部关闭。
+  useEffect(() => {
+    if (!widthOpen) return;
+    const onPointerDown = (event: PointerEvent): void => {
+      if (widthRef.current && !widthRef.current.contains(event.target as Node)) {
+        setWidthOpen(false);
+      }
+    };
+    window.addEventListener("pointerdown", onPointerDown);
+    return () => window.removeEventListener("pointerdown", onPointerDown);
+  }, [widthOpen]);
   useEffect(
     () => () => {
       if (widthTimerRef.current) clearTimeout(widthTimerRef.current);
@@ -722,6 +738,10 @@ export function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [extensionCommands, setExtensionCommands] = useState<CommandItem[]>([]);
   const [tabsOverflow, setTabsOverflow] = useState(false);
+  const [canScrollTabs, setCanScrollTabs] = useState<{ left: boolean; right: boolean }>({
+    left: false,
+    right: false,
+  });
   const [tabMenu, setTabMenu] = useState<{ top: number; right: number } | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const stored = Number(localStorage.getItem("panda.sidebarWidth"));
@@ -734,7 +754,7 @@ export function App() {
   sidebarWidthRef.current = sidebarWidth;
   const splitRatioRef = useRef(splitRatio);
   splitRatioRef.current = splitRatio;
-  const tabstripRef = useRef<HTMLDivElement>(null);
+  const tabScrollRef = useRef<HTMLDivElement>(null);
   const tabItemsRef = useRef<HTMLDivElement>(null);
   const tabMenuButtonRef = useRef<HTMLButtonElement>(null);
   const problemsState = useSyncExternalStore(problemStore.subscribe, problemStore.getState);
@@ -757,6 +777,8 @@ export function App() {
   const dragTabRef = useRef<string | null>(null);
 
   const active = state.documents.find((doc) => doc.id === state.activeId) ?? null;
+  // PDF 是二进制只读文档：所有编辑/预览面板隐藏，由专用 PDF 面板展示。
+  const activeIsPdf = active?.format === "pdf";
   const activeRef = useRef(active);
   activeRef.current = active;
   const settingsRef = useRef(settings);
@@ -828,7 +850,8 @@ export function App() {
 
   const diffState = useDocumentDiff({
     document: active,
-    enabled: diffEnabled,
+    // PDF 是二进制只读文档，不参与差异对比。
+    enabled: diffEnabled && !activeIsPdf,
     base: diffBase,
     ref: diffRef,
     refreshKey: diffRefresh,
@@ -1231,21 +1254,57 @@ export function App() {
     };
   }, [paletteOpen, manager]);
 
-  // 标签超出可用宽度时显示「全部标签」下拉。见 doc/design.md §15.1。
+  // 标签超出滚动区宽度时显示「全部标签」与左右滚动按钮。见 doc/design.md §15.1。
   useEffect(() => {
-    const host = tabstripRef.current;
+    const host = tabScrollRef.current;
     const items = tabItemsRef.current;
     if (!host || !items) return;
     const update = (): void => {
-      const buttonSpace = tabMenuButtonRef.current?.offsetWidth ?? 76;
-      setTabsOverflow(items.scrollWidth > host.clientWidth - buttonSpace);
+      setTabsOverflow(items.scrollWidth > host.clientWidth);
+      setCanScrollTabs({
+        left: host.scrollLeft > 1,
+        right: host.scrollLeft < host.scrollWidth - host.clientWidth - 1,
+      });
     };
     update();
     const observer = new ResizeObserver(update);
     observer.observe(host);
     observer.observe(items);
-    return () => observer.disconnect();
+    host.addEventListener("scroll", update, { passive: true });
+    return () => {
+      observer.disconnect();
+      host.removeEventListener("scroll", update);
+    };
   }, [state.documents.length]);
+
+  const scrollTabs = (direction: -1 | 1): void => {
+    tabScrollRef.current?.scrollBy({ left: direction * 240, behavior: "smooth" });
+  };
+
+  // 活动标签滚动到可视区：溢出菜单、命令面板或搜索跳转激活文档时同样生效。
+  useEffect(() => {
+    tabItemsRef.current
+      ?.querySelector<HTMLElement>(".tab-item.active")
+      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [state.activeId, state.documents.length]);
+
+  /** 关闭全部文档：先确认；逐文档沿用三选一，用户点「取消」时中止剩余关闭。 */
+  const closeAllDocuments = async (): Promise<void> => {
+    const docs = manager.getState().documents;
+    const dirtyCount = docs.filter((doc) => doc.dirty).length;
+    const message =
+      dirtyCount > 0
+        ? t("确定关闭全部 {0} 个文档吗？其中 {1} 个有未保存修改，关闭时将逐个询问。", docs.length, dirtyCount)
+        : t("确定关闭全部 {0} 个文档吗？", docs.length);
+    if (!window.confirm(message)) return;
+    const ids = docs.map((doc) => doc.id);
+    for (const id of ids) {
+      await manager.closeDocument(id);
+      // 文档仍在列表中说明关闭被取消（保存/不保存/取消中的「取消」或保存失败）。
+      if (manager.getState().documents.some((item) => item.id === id)) return;
+    }
+    setTabMenu(null);
+  };
 
   useEffect(() => {
     return window.panda.onMenuCommand((command) => {
@@ -1551,17 +1610,17 @@ export function App() {
           className={workspace.visible ? "icon-button sidebar-toggle active" : "icon-button sidebar-toggle"}
           aria-pressed={workspace.visible}
           aria-label={workspace.visible ? t("折叠工作区") : t("展开工作区")}
-          title={workspace.visible ? t("折叠工作区") : t("展开工作区")}
+          data-tip={workspace.visible ? t("折叠工作区") : t("展开工作区")}
           onClick={() => workspaces.setVisible(!workspace.visible)}
         >
           <Icon name={workspace.visible ? "sidebar-close" : "sidebar-open"} />
         </button>
-        <div className="toolbar-spacer" />
+        <span className="toolbar-divider" aria-hidden="true" />
         <button
           type="button"
           className="icon-button toolbar-icon"
           aria-label={t("新建")}
-          title={t("新建（Ctrl+N）")}
+          data-tip={t("新建（Ctrl+N）")}
           onClick={() => manager.newDocument()}
         >
           <Icon name="file-plus" />
@@ -1570,7 +1629,7 @@ export function App() {
           type="button"
           className="icon-button toolbar-icon"
           aria-label={t("打开")}
-          title={t("打开（Ctrl+O）")}
+          data-tip={t("打开（Ctrl+O）")}
           onClick={() => void manager.openFiles()}
         >
           <Icon name="folder-open" />
@@ -1579,32 +1638,23 @@ export function App() {
           type="button"
           className="icon-button toolbar-icon"
           aria-label={t("保存")}
-          title={t("保存（Ctrl+S）")}
+          data-tip={t("保存（Ctrl+S）")}
           onClick={() => void manager.saveDocument(state.activeId ?? "")}
           disabled={!active}
         >
           <Icon name="save" />
         </button>
-        <button
-          type="button"
-          className="icon-button toolbar-icon"
-          aria-label={t("另存为")}
-          title={t("另存为（Ctrl+Shift+S）")}
-          onClick={() => active && void manager.saveDocumentAs(active.id)}
-          disabled={!active}
-        >
-          <Icon name="save-as" />
-        </button>
-        <button
-          type="button"
-          className="icon-button toolbar-icon"
-          aria-label={t("命令面板")}
-          title={t("命令面板（Ctrl+Shift+P）")}
-          onClick={() => setPaletteOpen(true)}
-        >
-          <Icon name="terminal" />
-        </button>
-        <span className="toolbar-divider" aria-hidden="true" />
+        <div className="toolbar-spacer" />
+        <div className={active?.dirty ? "toolbar-doc dirty" : "toolbar-doc"}>
+          <span className="toolbar-doc-dot" aria-hidden="true" />
+          <span
+            className={active ? "toolbar-doc-name" : "toolbar-doc-name empty"}
+            title={active?.path ?? "Panda Live"}
+          >
+            {active ? active.name : "Panda Live"}
+          </span>
+        </div>
+        <div className="toolbar-spacer" />
         <div className="mode-switch" role="group" aria-label={t("视图模式")}>
           {(Object.keys(MODE_LABELS) as EditorMode[]).map((mode) => (
             <button
@@ -1613,10 +1663,11 @@ export function App() {
               className={state.mode === mode ? "mode-button active" : "mode-button"}
               aria-pressed={state.mode === mode}
               aria-label={t(MODE_LABELS[mode]!)}
-              title={t(MODE_LABELS[mode]!)}
+              data-tip={t(MODE_LABELS[mode]!)}
               onClick={() => manager.setMode(mode)}
               disabled={
                 !active ||
+                activeIsPdf ||
                 (mode === "wysiwyg" && active.format !== "markdown") ||
                 ((mode === "split" || mode === "preview") &&
                   !formatSupportsPreview(active.format))
@@ -1630,21 +1681,17 @@ export function App() {
         <button
           type="button"
           className="icon-button toolbar-icon"
-          aria-label={locale === "zh" ? "切换到英文界面" : "Switch to Chinese"}
-          title={locale === "zh" ? "Switch to English" : "切换为中文"}
-          onClick={() => {
-            void settingsStore.update({
-              appearance: { language: locale === "zh" ? "en" : "zh" },
-            });
-          }}
+          aria-label={t("命令面板")}
+          data-tip={t("命令面板（Ctrl+Shift+P）")}
+          onClick={() => setPaletteOpen(true)}
         >
-          <Icon name="languages" />
+          <Icon name="terminal" />
         </button>
         <button
           type="button"
-          className="icon-button toolbar-icon"
+          className="icon-button toolbar-icon tip-left"
           aria-label={t("设置")}
-          title={t("设置（Ctrl+,）")}
+          data-tip={t("设置（Ctrl+,）")}
           onClick={() => setSettingsOpen(true)}
         >
           <Icon name="settings" />
@@ -1678,97 +1725,137 @@ export function App() {
         )}
 
         <div className="editor-area">
-          <div className="tabstrip" ref={tabstripRef}>
-        <div
-          className="tabstrip-items"
-          role="tablist"
-          aria-label={t("打开的文档")}
-          ref={tabItemsRef}
-        >
-          {state.documents.map((doc) => (
-            <div
-              key={doc.id}
-              className={doc.id === state.activeId ? "tab-item active" : "tab-item"}
-              draggable
-              title={t("{0}（拖拽排序，中键关闭）", doc.path ?? doc.name)}
-              onMouseDown={(event) => {
-                // 阻止中键在标签上触发自动滚动。
-                if (event.button === 1) event.preventDefault();
-              }}
-              onAuxClick={(event) => {
-                if (event.button !== 1) return;
-                event.preventDefault();
-                void manager.closeDocument(doc.id);
-              }}
-              onDragStart={(event) => {
-                dragTabRef.current = doc.id;
-                event.dataTransfer.effectAllowed = "move";
-                event.dataTransfer.setData("text/plain", doc.id);
-              }}
-              onDragOver={(event) => {
-                if (!dragTabRef.current || dragTabRef.current === doc.id) return;
-                event.preventDefault();
-                event.dataTransfer.dropEffect = "move";
-              }}
-              onDrop={(event) => {
-                event.preventDefault();
-                const fromId = dragTabRef.current ?? event.dataTransfer.getData("text/plain");
-                dragTabRef.current = null;
-                if (fromId) manager.moveDocument(fromId, doc.id);
-              }}
-              onDragEnd={() => {
-                dragTabRef.current = null;
-              }}
-            >
-              <button
-                type="button"
-                role="tab"
-                aria-selected={doc.id === state.activeId}
-                className="tab"
-                onClick={() => manager.setActive(doc.id)}
+          <div className="tabstrip">
+            <div className="tabstrip-scroll" ref={tabScrollRef}>
+              <div
+                className="tabstrip-items"
+                role="tablist"
+                aria-label={t("打开的文档")}
+                ref={tabItemsRef}
               >
-                {doc.dirty && <span className="tab-dot" aria-label={t("未保存")} />}
-                <span className="tab-name">{doc.name}</span>
-              </button>
-              <button
-                type="button"
-                className="tab-close"
-                aria-label={t("关闭 {0}", doc.name)}
-                title={t("关闭 {0}", doc.name)}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  void manager.closeDocument(doc.id);
-                }}
-              >
-                <Icon name="close" size={12} />
-              </button>
+                {state.documents.map((doc) => (
+                  <div
+                    key={doc.id}
+                    className={doc.id === state.activeId ? "tab-item active" : "tab-item"}
+                    draggable
+                    title={t("{0}（拖拽排序，中键关闭）", doc.path ?? doc.name)}
+                    onMouseDown={(event) => {
+                      // 阻止中键在标签上触发自动滚动。
+                      if (event.button === 1) event.preventDefault();
+                    }}
+                    onAuxClick={(event) => {
+                      if (event.button !== 1) return;
+                      event.preventDefault();
+                      void manager.closeDocument(doc.id);
+                    }}
+                    onDragStart={(event) => {
+                      dragTabRef.current = doc.id;
+                      event.dataTransfer.effectAllowed = "move";
+                      event.dataTransfer.setData("text/plain", doc.id);
+                    }}
+                    onDragOver={(event) => {
+                      if (!dragTabRef.current || dragTabRef.current === doc.id) return;
+                      event.preventDefault();
+                      event.dataTransfer.dropEffect = "move";
+                    }}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      const fromId = dragTabRef.current ?? event.dataTransfer.getData("text/plain");
+                      dragTabRef.current = null;
+                      if (fromId) manager.moveDocument(fromId, doc.id);
+                    }}
+                    onDragEnd={() => {
+                      dragTabRef.current = null;
+                    }}
+                  >
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={doc.id === state.activeId}
+                      className="tab"
+                      onClick={() => manager.setActive(doc.id)}
+                    >
+                      <Icon name={fileIconForPath(doc.path)} size={13} className="tab-icon" />
+                      {doc.dirty && <span className="tab-dot" aria-label={t("未保存")} />}
+                      <span className="tab-name">{doc.name}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="tab-close"
+                      aria-label={t("关闭 {0}", doc.name)}
+                      title={t("关闭 {0}", doc.name)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void manager.closeDocument(doc.id);
+                      }}
+                    >
+                      <Icon name="close" size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              {state.documents.length === 0 && (
+                <span className="tabstrip-empty">{t("未打开文档")}</span>
+              )}
             </div>
-          ))}
-          {state.documents.length === 0 && (
-            <span className="tabstrip-empty">{t("未打开文档")}</span>
-          )}
-        </div>
-        {tabsOverflow && (
-          <button
-            ref={tabMenuButtonRef}
-            type="button"
-            className="tab-overflow-button"
-            aria-label={t("全部标签")}
-            title={t("全部标签")}
-            aria-expanded={tabMenu !== null}
-            onClick={(event) => {
-              if (tabMenu) {
-                setTabMenu(null);
-                return;
-              }
-              const rect = event.currentTarget.getBoundingClientRect();
-              setTabMenu({ top: rect.bottom + 2, right: window.innerWidth - rect.right });
-            }}
-          >
-            <Icon name="list" size={14} />
-          </button>
-        )}
-      </div>
+            <div className="tabstrip-actions">
+              {tabsOverflow && (
+                <>
+                  <button
+                    type="button"
+                    className="tab-scroll"
+                    aria-label={t("向左滚动标签")}
+                    title={t("向左滚动标签")}
+                    disabled={!canScrollTabs.left}
+                    onClick={() => scrollTabs(-1)}
+                  >
+                    <Icon name="chevron-left" size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    className="tab-scroll"
+                    aria-label={t("向右滚动标签")}
+                    title={t("向右滚动标签")}
+                    disabled={!canScrollTabs.right}
+                    onClick={() => scrollTabs(1)}
+                  >
+                    <Icon name="chevron-right" size={14} />
+                  </button>
+                </>
+              )}
+              {state.documents.length > 1 && (
+                <button
+                  type="button"
+                  className="tab-close-all"
+                  aria-label={t("关闭全部")}
+                  title={t("关闭全部")}
+                  onClick={() => void closeAllDocuments()}
+                >
+                  <Icon name="close" size={13} />
+                </button>
+              )}
+              {tabsOverflow && (
+                <button
+                  ref={tabMenuButtonRef}
+                  type="button"
+                  className="tab-overflow-button"
+                  aria-label={t("全部标签")}
+                  title={t("全部标签")}
+                  aria-expanded={tabMenu !== null}
+                  onClick={(event) => {
+                    if (tabMenu) {
+                      setTabMenu(null);
+                      return;
+                    }
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    setTabMenu({ top: rect.bottom + 2, right: window.innerWidth - rect.right });
+                  }}
+                >
+                  <Icon name="list" size={14} />
+                </button>
+              )}
+            </div>
+          </div>
 
       {tabMenu && (
         <>
@@ -1780,24 +1867,58 @@ export function App() {
             style={{ top: tabMenu.top, right: tabMenu.right }}
           >
             {state.documents.map((doc) => (
-              <button
+              <div
                 key={doc.id}
-                type="button"
-                role="menuitem"
                 className={doc.id === state.activeId ? "tab-menu-item active" : "tab-menu-item"}
-                title={doc.path ?? doc.name}
-                onClick={() => {
-                  manager.setActive(doc.id);
-                  setTabMenu(null);
-                }}
               >
-                {doc.dirty && <span className="tab-dot" aria-label={t("未保存")} />}
-                <span className="tab-menu-name">{doc.name}</span>
-                {doc.id === state.activeId && (
-                  <span className="tab-menu-mark">{t("当前")}</span>
-                )}
-              </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="tab-menu-open"
+                  title={doc.path ?? doc.name}
+                  onClick={() => {
+                    manager.setActive(doc.id);
+                    setTabMenu(null);
+                  }}
+                >
+                  <Icon name={fileIconForPath(doc.path)} size={13} className="tab-menu-icon" />
+                  {doc.dirty && <span className="tab-dot" aria-label={t("未保存")} />}
+                  <span className="tab-menu-name">{doc.name}</span>
+                  {doc.id === state.activeId && (
+                    <span className="tab-menu-mark">{t("当前")}</span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="tab-menu-close"
+                  aria-label={t("关闭 {0}", doc.name)}
+                  title={t("关闭 {0}", doc.name)}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void manager.closeDocument(doc.id).then(() => {
+                      // 关掉最后一个文档时同步收起菜单。
+                      if (manager.getState().documents.length === 0) setTabMenu(null);
+                    });
+                  }}
+                >
+                  <Icon name="close" size={12} />
+                </button>
+              </div>
             ))}
+            {state.documents.length > 0 && (
+              <div className="tab-menu-footer">
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="tab-menu-action"
+                  onClick={() => void closeAllDocuments()}
+                >
+                  <Icon name="close" size={12} />
+                  {t("关闭全部")}
+                </button>
+              </div>
+            )}
           </div>
         </>
       )}
@@ -1875,7 +1996,7 @@ export function App() {
           <main ref={workspacePaneRef} className={`workspace mode-${state.mode}`}>
             <section
               className="pane wysiwyg-pane"
-              hidden={state.mode !== "wysiwyg"}
+              hidden={activeIsPdf || state.mode !== "wysiwyg"}
               aria-label={t("所见即所得编辑")}
             >
               <WysiwygPane
@@ -1891,7 +2012,10 @@ export function App() {
             <section
               className="pane source-pane"
               hidden={
-                state.mode === "preview" || state.mode === "wysiwyg" || state.mode === "git"
+                activeIsPdf ||
+                state.mode === "preview" ||
+                state.mode === "wysiwyg" ||
+                state.mode === "git"
               }
               aria-label={t("源码编辑")}
             >
@@ -1910,7 +2034,7 @@ export function App() {
                 }}
               />
             </section>
-            {state.mode === "split" && (
+            {state.mode === "split" && !activeIsPdf && (
               <div
                 className="resizer split-resizer"
                 role="separator"
@@ -1922,13 +2046,16 @@ export function App() {
             <section
               className="pane"
               hidden={
-                state.mode === "source" || state.mode === "wysiwyg" || state.mode === "git"
+                activeIsPdf ||
+                state.mode === "source" ||
+                state.mode === "wysiwyg" ||
+                state.mode === "git"
               }
               aria-label={t("渲染预览")}
             >
               <PreviewPane
                 document={active}
-                enabled={state.mode === "split" || state.mode === "preview"}
+                enabled={(state.mode === "split" || state.mode === "preview") && !activeIsPdf}
                 compileSignal={compileSignal}
                 diff={previewDiff}
                 onDiffModeChange={(mode) => updateDiffOption(active.id, { mode })}
@@ -1941,14 +2068,23 @@ export function App() {
             </section>
             <section
               className="pane git-pane"
-              hidden={state.mode !== "git"}
+              hidden={activeIsPdf || state.mode !== "git"}
               aria-label={t("Git 差异")}
             >
               <GitPane
                 key={active.id}
                 document={active}
-                active={state.mode === "git"}
+                active={state.mode === "git" && !activeIsPdf}
               />
+            </section>
+            <section
+              className="pane pdf-pane"
+              hidden={!activeIsPdf}
+              aria-label={t("PDF 预览")}
+            >
+              {activeIsPdf && active?.path ? (
+                <PdfDocumentPreview path={active.path} mtimeMs={active.mtimeMs} />
+              ) : null}
             </section>
           </main>
         ) : (
@@ -1958,9 +2094,11 @@ export function App() {
             <p>{t("源码与渲染结果实时同步，保存时保留原文件编码与换行符。")}</p>
             <div className="empty-actions">
               <button type="button" className="button primary" onClick={() => manager.newDocument()}>
+                <Icon name="file-plus" size={14} />
                 {t("新建文档")}
               </button>
               <button type="button" className="button" onClick={() => void manager.openFiles()}>
+                <Icon name="folder-open" size={14} />
                 {t("打开文件")}
               </button>
             </div>
@@ -2041,23 +2179,31 @@ export function App() {
         <span className="statusbar-name">{active?.path ?? t("就绪")}</span>
         {active && (
           <span className="statusbar-meta">
-            {t(ENCODING_LABELS[active.encoding] ?? active.encoding)}
-            {" · "}
-            {active.eol.toUpperCase()}
-            {active.bom ? " · BOM" : ""}
-            {active.readOnly ? t(" · 只读") : ""}
-            {" · "}
-            {active.format}
+            {active.format === "pdf"
+              ? `PDF · ${formatSize(active.size)} · ${t("只读")}`
+              : [
+                  t(ENCODING_LABELS[active.encoding] ?? active.encoding),
+                  active.eol.toUpperCase(),
+                  active.bom ? "BOM" : "",
+                  active.readOnly ? t("只读") : "",
+                  active.format,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
           </span>
         )}
         <span className="statusbar-spacer" />
-        {active && (
+        {active && !activeIsPdf && (
           <span className="statusbar-meta">
             {formatSize(active.size)}
             {" · "}
             {state.mode === "wysiwyg"
               ? t("所见即所得")
               : t("行 {0}，列 {1}", cursor.line, cursor.column)}
+          </span>
+        )}
+        {active && !activeIsPdf && (
+          <span className="statusbar-meta" role="status">
             {active.dirty ? t(" · 未保存") : t(" · 已保存")}
           </span>
         )}
@@ -2068,25 +2214,41 @@ export function App() {
               ? (workspace.roots[0]?.root.name ?? t("无工作区"))
               : t("{0} 个工作区", workspace.roots.length)}
         </span>
-        <label className="statusbar-width" title={t("内容宽度")}>
-          <input
-            type="range"
-            className="statusbar-width-range"
-            min={30}
-            max={300}
-            step={5}
-            value={widthDraft}
+        <div className="statusbar-width" ref={widthRef}>
+          <button
+            type="button"
+            className={widthOpen ? "statusbar-width-button active" : "statusbar-width-button"}
             aria-label={t("内容宽度")}
-            onChange={(event) => applyContentWidth(Number(event.target.value))}
-          />
-          <span className="statusbar-meta statusbar-width-value">{widthDraft}%</span>
-        </label>
+            aria-expanded={widthOpen}
+            title={t("内容宽度")}
+            onClick={() => setWidthOpen((value) => !value)}
+          >
+            <span className="statusbar-width-value">{widthDraft}%</span>
+          </button>
+          {widthOpen && (
+            <div className="statusbar-popover" role="group" aria-label={t("内容宽度")}>
+              <input
+                type="range"
+                className="statusbar-width-range"
+                min={30}
+                max={300}
+                step={5}
+                value={widthDraft}
+                aria-label={t("内容宽度")}
+                onChange={(event) => applyContentWidth(Number(event.target.value))}
+              />
+              <span className="statusbar-popover-note">
+                {t("拖动调整渲染内容宽度；Ctrl+滚轮或 Ctrl +/- 亦可缩放")}
+              </span>
+            </div>
+          )}
+        </div>
         <DiffControls
-          enabled={diffEnabled}
+          enabled={diffEnabled && !activeIsPdf}
           state={diffState}
           items={diffItems}
           currentIndex={diffIndex}
-          disabled={!active}
+          disabled={!active || activeIsPdf}
           dirty={active?.dirty ?? false}
           mode={diffMode}
           modeAvailable={state.mode !== "wysiwyg"}

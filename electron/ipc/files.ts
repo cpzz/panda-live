@@ -75,7 +75,8 @@ const MARKDOWN_EXTENSIONS = ["md", "markdown", "mdown", "mkd", "qmd", "rmd", "md
 
 function markdownFilters(): FileFilter[] {
   return [
-    { name: t("所有支持的文件"), extensions: [...MARKDOWN_EXTENSIONS, ...CODE_EXTENSIONS, "tex", "latex"] },
+    { name: t("所有支持的文件"), extensions: [...MARKDOWN_EXTENSIONS, ...CODE_EXTENSIONS, "tex", "latex", "pdf"] },
+    { name: "PDF", extensions: ["pdf"] },
     { name: t("代码文件"), extensions: CODE_EXTENSIONS },
     { name: "Markdown", extensions: MARKDOWN_EXTENSIONS },
     { name: t("文本文件"), extensions: ["txt", "log", "puml", "mmd"] },

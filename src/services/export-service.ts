@@ -12,7 +12,7 @@ body { margin: 0; background: #ffffff; color: #1f2328; font-family: -apple-syste
 .markdown-body { max-width: 860px; margin: 0 auto; padding: 48px 32px 96px; font-size: 15px; line-height: 1.75; }
 .markdown-body h1, .markdown-body h2 { border-bottom: 1px solid #e3e6ea; padding-bottom: 0.3em; }
 .markdown-body pre { background: #f2f4f6; padding: 14px 16px; border-radius: 8px; overflow-x: auto; }
-.markdown-body code { background: #f2f4f6; padding: 0.15em 0.35em; border-radius: 4px; font-family: "JetBrains Mono", Consolas, monospace; font-size: 0.9em; }
+.markdown-body code { background: #f2f4f6; padding: 0.15em 0.35em; border-radius: 4px; font-family: ui-monospace, Consolas, monospace; font-size: 0.9em; }
 .markdown-body pre code { background: transparent; padding: 0; }
 .markdown-body table { border-collapse: collapse; }
 .markdown-body th, .markdown-body td { border: 1px solid #d0d7de; padding: 6px 12px; }

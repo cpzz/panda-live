@@ -26,6 +26,10 @@ test("M31：内容宽度可超过 100%、状态栏滑块与 Ctrl +/- 缩放", as
     await page.getByRole("button", { name: "预览", exact: true }).click();
     await expect(page.locator(".markdown-body h1")).toHaveText("宽度", { timeout: 15_000 });
 
+    // 状态栏宽度按钮弹出滑块。
+    const widthButton = page.locator(".statusbar-width-button");
+    await expect(widthButton).toHaveText("100%");
+    await widthButton.click();
     const slider = page.locator(".statusbar-width-range");
     await expect(slider).toBeVisible();
     await slider.evaluate((element) => {

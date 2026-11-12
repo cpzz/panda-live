@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { t } from "../i18n";
+import { useFocusTrap } from "./useFocusTrap";
 
 export interface CommandItem {
   id: string;
@@ -32,6 +33,7 @@ export function CommandPalette({
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useFocusTrap(open);
   const filtered = commands.filter((command) => matches(command, query.trim().toLowerCase()));
 
   useEffect(() => {
@@ -59,6 +61,7 @@ export function CommandPalette({
   return (
     <div className="palette-backdrop" role="presentation" onClick={onClose}>
       <div
+        ref={dialogRef}
         className="palette"
         role="dialog"
         aria-modal="true"

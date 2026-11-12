@@ -27,6 +27,33 @@ const ICONS = {
       <path d="M14 2v5a1 1 0 0 0 1 1h5" />
     </>
   ),
+  /** 文本/Markdown 文档 */
+  "file-text": (
+    <>
+      <path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" />
+      <path d="M14 2v5a1 1 0 0 0 1 1h5" />
+      <path d="M9 13h6" />
+      <path d="M9 17h6" />
+    </>
+  ),
+  /** LaTeX / MathML 等代码型文档 */
+  "file-code": (
+    <>
+      <path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" />
+      <path d="M14 2v5a1 1 0 0 0 1 1h5" />
+      <path d="m10 13-2 2 2 2" />
+      <path d="m14 13 2 2-2 2" />
+    </>
+  ),
+  /** PlantUML / Mermaid 图表文档 */
+  diagram: (
+    <>
+      <rect x="3" y="3" width="6" height="5" rx="1" />
+      <rect x="15" y="16" width="6" height="5" rx="1" />
+      <path d="M6 8v4a3 3 0 0 0 3 3h4" />
+      <path d="m11 13 2 2-2 2" />
+    </>
+  ),
   "file-plus": (
     <>
       <path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" />
@@ -53,13 +80,6 @@ const ICONS = {
       <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
       <polyline points="17 21 17 13 7 13 7 21" />
       <polyline points="7 3 7 8 15 8" />
-    </>
-  ),
-  "save-as": (
-    <>
-      <path d="M12 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9l4 4v4" />
-      <polyline points="7 3 7 8 13 8" />
-      <path d="M21.2 12.2a1 1 0 0 0-1.4-1.4L12 18.6V21h2.4z" />
     </>
   ),
   search: (
@@ -245,20 +265,22 @@ const ICONS = {
       <path d="m11 10-4 4 4 4" />
     </>
   ),
-  /** 界面语言切换：字母 A 与「文」的通用语言图标。 */
-  languages: (
-    <>
-      <path d="m5 8 6 6" />
-      <path d="m4 14 6-6 2-3" />
-      <path d="M2 5h12" />
-      <path d="M7 2h1" />
-      <path d="m22 22-5-10-5 10" />
-      <path d="M14 18h6" />
-    </>
-  ),
 } satisfies Record<string, ReactNode>;
 
 export type IconName = keyof typeof ICONS;
+
+const TEXT_FILE_EXT = /\.(md|markdown|mdown|mkd|qmd|rmd|mdx|adoc|txt)$/i;
+const CODE_FILE_EXT = /\.(tex|latex|mml|mathml)$/i;
+const DIAGRAM_FILE_EXT = /\.(puml|plantuml|mmd|mermaid)$/i;
+
+/** 按文件扩展名挑选标签页/文件树使用的文档图标。 */
+export function fileIconForPath(filePath: string | null | undefined): IconName {
+  if (!filePath) return "file";
+  if (DIAGRAM_FILE_EXT.test(filePath)) return "diagram";
+  if (CODE_FILE_EXT.test(filePath)) return "file-code";
+  if (TEXT_FILE_EXT.test(filePath)) return "file-text";
+  return "file";
+}
 
 /** 熊猫品牌标识：纯 SVG，可随尺寸缩放，浅色/深色下均可见。 */
 export function PandaMark({ size = 16, className }: { size?: number; className?: string }) {
@@ -302,7 +324,7 @@ export function Icon({
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth={2}
+      strokeWidth={1.75}
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"

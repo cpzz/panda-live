@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import { t } from "../i18n";
 import { onThemeChange, resolveTheme, type AppTheme } from "../services/theme";
@@ -9,12 +9,15 @@ interface PageSlot {
   ratio: number;
 }
 
+/** PDF 数据来源：TeX 编译产物走自定义协议，磁盘文档走内存字节。 */
+export type PdfSource = { url: string } | { data: Uint8Array };
+
 /**
- * TeX 编译产物预览：PDF.js 按需渲染。
+ * PDF 预览：PDF.js 按需渲染。
  * worker 作为独立资源打包，切换文档或关闭预览时销毁文档实例以终止 worker。
  * 不渲染注释链接层，因此不存在外部链接自动跳转。见 doc/design.md §9.5、§13.4。
  */
-export function PdfPreview({ pdfKey }: { pdfKey: string }) {
+export function PdfPreview({ source }: { source: PdfSource }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const pagesRef = useRef<HTMLDivElement>(null);
   const documentRef = useRef<PDFDocumentProxy | null>(null);
@@ -39,12 +42,15 @@ export function PdfPreview({ pdfKey }: { pdfKey: string }) {
         import("pdfjs-dist/build/pdf.worker.min.mjs?url"),
       ]);
       pdfjs.GlobalWorkerOptions.workerSrc = workerModule.default;
+      // data 源会被 pdfjs transfer 到 worker（buffer 变 detached），每次加载复制一份，保证 source 可复用。
+      const params =
+        "url" in source ? { url: source.url } : { data: new Uint8Array(source.data) };
       const loadingTask = pdfjs.getDocument({
-        url: `panda-pdf://${pdfKey}`,
+        ...params,
         // 中文等 CID 字体需要 Adobe CMap 才能正确映射字形。
         cMapUrl: "panda-cmaps://local/",
         cMapPacked: true,
-        disableAutoFetch: true,
+        disableAutoFetch: "url" in source,
       });
       loadingTaskRef.current = loadingTask;
       const pdf = await loadingTask.promise;
@@ -80,7 +86,7 @@ export function PdfPreview({ pdfKey }: { pdfKey: string }) {
       documentRef.current = null;
       loadingTaskRef.current = null;
     };
-  }, [pdfKey]);
+  }, [source]);
 
   // 占位元素渲染完成后再观察可见性；否则首帧 children 为空，页面永远不会绘制。
   useEffect(() => {
@@ -178,7 +184,7 @@ export function PdfPreview({ pdfKey }: { pdfKey: string }) {
 
   if (error) {
     return (
-      <div className="preview-pane">
+      <div className="pdf-viewer">
         <p className="placeholder">{t("PDF 加载失败：{0}", error)}</p>
       </div>
     );
@@ -201,4 +207,54 @@ export function PdfPreview({ pdfKey }: { pdfKey: string }) {
       </div>
     </div>
   );
+}
+
+/**
+ * 打开的 PDF 文档：经 fs.readBase64 读取磁盘字节后交给 PdfPreview 渲染。
+ * 路径或修改时间变化（含外部更新）时自动重新加载。
+ */
+export function PdfDocumentPreview({ path, mtimeMs }: { path: string; mtimeMs: number }) {
+  const [state, setState] = useState<{ data: Uint8Array } | { error: string } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setState(null);
+    void (async () => {
+      try {
+        const file = await window.panda.fs.readBase64({ path });
+        if (cancelled) return;
+        // base64 → Uint8Array：pdfjs 的 data 源要求二进制。
+        const binary = atob(file.data);
+        const bytes = new Uint8Array(binary.length);
+        for (let index = 0; index < binary.length; index += 1) {
+          bytes[index] = binary.charCodeAt(index);
+        }
+        setState({ data: bytes });
+      } catch (reason) {
+        if (!cancelled) {
+          setState({ error: reason instanceof Error ? reason.message : String(reason) });
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [path, mtimeMs]);
+
+  // 稳定 source 引用：bytes 加载完成后不再因父组件重渲染而重建。
+  const source = useMemo<PdfSource | null>(
+    () => (state && "data" in state ? { data: state.data } : null),
+    [state],
+  );
+
+  if (!source) {
+    return (
+      <div className="pdf-viewer">
+        <p className="placeholder">
+          {state && "error" in state ? t("PDF 加载失败：{0}", state.error) : t("正在加载 PDF…")}
+        </p>
+      </div>
+    );
+  }
+  return <PdfPreview source={source} />;
 }

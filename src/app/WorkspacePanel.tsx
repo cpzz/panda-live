@@ -10,7 +10,7 @@ import {
 import type { FileRef } from "../shared/ipc";
 import { t } from "../i18n";
 import type { WorkspaceNode, WorkspaceStore } from "../services/workspace-store";
-import { Icon } from "./icons";
+import { Icon, fileIconForPath } from "./icons";
 
 interface WorkspacePanelProps {
   store: WorkspaceStore;
@@ -102,7 +102,7 @@ function NodeRow({
           <span className="tree-toggle placeholder" aria-hidden="true" />
         )}
         <span className="tree-icon" aria-hidden="true">
-          <Icon name={node.kind === "dir" ? "folder" : "file"} size={13} />
+          <Icon name={node.kind === "dir" ? "folder" : fileIconForPath(node.path)} size={13} />
         </span>
         <button
           type="button"

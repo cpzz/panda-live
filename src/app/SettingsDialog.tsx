@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { Settings } from "../shared/settings";
 import { t } from "../i18n";
 import { ExtensionSettings } from "./ExtensionSettings";
+import { useFocusTrap } from "./useFocusTrap";
 import { Icon } from "./icons";
 
 interface SettingsDialogProps {
@@ -21,6 +22,7 @@ export function SettingsDialog({
   onExtensionsChanged,
 }: SettingsDialogProps) {
   const [draft, setDraft] = useState<Settings>(settings);
+  const dialogRef = useFocusTrap(open);
 
   useEffect(() => {
     if (open) setDraft(settings);
@@ -47,6 +49,7 @@ export function SettingsDialog({
   return (
     <div className="modal-backdrop" role="presentation" onClick={onClose}>
       <div
+        ref={dialogRef}
         className="modal"
         role="dialog"
         aria-modal="true"
