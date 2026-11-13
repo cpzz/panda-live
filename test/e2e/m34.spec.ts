@@ -34,6 +34,10 @@ test("M34：预览代码块提供复制按钮", async () => {
     // 复制按钮挂在代码块右上角，点击后写入剪贴板。
     const button = page.locator(".markdown-body .preview-copy");
     await expect(button).toHaveCount(1);
+    // clipboard.writeText 要求文档持有焦点；先把窗口带到前台，避免偶发拒绝。
+    await app.evaluate(({ BrowserWindow }) => {
+      BrowserWindow.getAllWindows().forEach((win) => win.focus());
+    });
     await button.click();
     await expect(button).toHaveClass(/copied/);
     await expect

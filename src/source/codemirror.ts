@@ -1,4 +1,3 @@
-import { basicSetup } from "codemirror";
 import { css } from "@codemirror/lang-css";
 import { cpp } from "@codemirror/lang-cpp";
 import { html } from "@codemirror/lang-html";
@@ -25,10 +24,12 @@ import { toml } from "@codemirror/legacy-modes/mode/toml";
 import {
   HighlightStyle,
   StreamLanguage,
-  codeFolding,
+  bracketMatching,
+  defaultHighlightStyle,
   foldGutter,
   foldKeymap,
   foldService,
+  indentOnInput,
   indentUnit,
   syntaxHighlighting,
   syntaxTree,
@@ -42,17 +43,31 @@ import {
   StateField,
   countColumn,
   type Extension,
+  type Line,
   type Text,
 } from "@codemirror/state";
 import {
   Decoration,
   EditorView,
   GutterMarker,
+  drawSelection,
+  dropCursor,
   gutter,
+  highlightActiveLine,
+  highlightActiveLineGutter,
+  highlightSpecialChars,
   keymap,
+  lineNumbers,
+  rectangularSelection,
+  crosshairCursor,
   type DecorationSet,
 } from "@codemirror/view";
+import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from "@codemirror/autocomplete";
+import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
+import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
+import { lintKeymap } from "@codemirror/lint";
 import { tags } from "@lezer/highlight";
+import type { SyntaxNode } from "@lezer/common";
 import { t } from "../i18n";
 import { iniStreamParser } from "./ini-mode";
 
@@ -234,7 +249,7 @@ function languageExtension(language: SourceLanguage): Extension {
     case "objectivec":
       return [StreamLanguage.define(objectiveC), indentFoldFallback];
     case "stex":
-      return [StreamLanguage.define(stex), indentFoldFallback];
+      return [StreamLanguage.define(stex), stexFolding, indentFoldFallback];
     case "ini":
       return [StreamLanguage.define(iniStreamParser), indentFoldFallback];
     case "toml":
@@ -245,14 +260,41 @@ function languageExtension(language: SourceLanguage): Extension {
 }
 
 /**
- * Markdown 围栏代码块折叠：隐藏两行 ``` 之间的内容，保留开闭围栏。见 doc/design.md §11.4。
- * lang-markdown 自带 Table 折叠但不覆盖 FencedCode，这里通过 foldService 补齐。
+ * Markdown 折叠：标题分节（同层级下一个标题或文档结尾为界）与围栏代码块（保留开闭围栏）。
+ * 见 doc/design.md §11.4。lang-markdown 自带 Table 折叠，但不覆盖标题与 FencedCode。
  */
+const MARKDOWN_HEADING = /^(?:ATXHeading|SetextHeading)([1-6])$/;
+
+/** 该行是否为标题起始；返回标题层级（1–6），否则 null。 */
+function markdownHeadingLevel(state: EditorState, line: Line): number | null {
+  const node = syntaxTree(state).resolveInner(line.from, 1);
+  for (let current: SyntaxNode | null = node; current; current = current.parent) {
+    const match = MARKDOWN_HEADING.exec(current.name);
+    if (match && current.from === line.from) return Number(match[1]);
+  }
+  return null;
+}
+
 const markdownFolding: Extension = markdownLanguage.data.of({
   foldService: (state: EditorState, from: number): { from: number; to: number } | null => {
+    const line = state.doc.lineAt(from);
+    // 标题分节：折叠到下一个同级或更高级标题之前；无边界则折叠到文档结尾（与 VS Code 一致）。
+    const level = markdownHeadingLevel(state, line);
+    if (level !== null) {
+      for (let number = line.number + 1; number <= state.doc.lines; number += 1) {
+        const next = state.doc.line(number);
+        const nextLevel = markdownHeadingLevel(state, next);
+        if (nextLevel !== null && nextLevel <= level) {
+          return next.from > line.to ? { from: line.to, to: next.from } : null;
+        }
+      }
+      return state.doc.length > line.to ? { from: line.to, to: state.doc.length } : null;
+    }
+    // 围栏代码块：隐藏两行 ``` 之间的内容。仅在起始行给标记，
+    // 围栏内部行的键盘折叠由 CodeMirror 的 foldableContainer 向前回溯处理。
     const node = syntaxTree(state).resolveInner(from, -1);
-    for (let current: typeof node | null = node; current; current = current.parent) {
-      if (current.name === "FencedCode") {
+    for (let current: SyntaxNode | null = node; current; current = current.parent) {
+      if (current.name === "FencedCode" && current.from === from) {
         const first = state.doc.lineAt(current.from);
         const last = state.doc.lineAt(current.to);
         if (first.number >= last.number) return null;
@@ -263,20 +305,53 @@ const markdownFolding: Extension = markdownLanguage.data.of({
   },
 });
 
+/** 行首空白对应的列数（Tab 按 tabSize 展开），用于缩进折叠判断。 */
+function lineIndent(text: string, tabSize: number): number {
+  const match = /^[ \t]*/.exec(text);
+  return countColumn(match?.[0] ?? "", tabSize);
+}
+
 /** 缩进折叠兜底：当前行缩进更小时，把后续更深层缩进的连续行折叠起来。 */
 const indentFoldFallback: Extension = foldService.of(
   (state: EditorState, from: number): { from: number; to: number } | null => {
     const line = state.doc.lineAt(from);
     if (!line.text.trim()) return null;
-    const base = countColumn(line.text, state.tabSize);
+    const base = lineIndent(line.text, state.tabSize);
     let last = line.number;
     for (let number = line.number + 1; number <= state.doc.lines; number += 1) {
       const current = state.doc.line(number);
       if (!current.text.trim()) continue;
-      if (countColumn(current.text, state.tabSize) > base) last = number;
+      if (lineIndent(current.text, state.tabSize) > base) last = number;
       else break;
     }
     return last > line.number ? { from: line.to, to: state.doc.line(last).to } : null;
+  },
+);
+
+/** LaTeX 章节命令与其层级；折叠到下一个同级或更高级命令之前。见 doc/design.md §11.4。 */
+const LATEX_SECTION_LEVELS: readonly (readonly [RegExp, number])[] = [
+  [/^\\part\*?\b/, 0],
+  [/^\\chapter\*?\b/, 1],
+  [/^\\section\*?\b/, 2],
+  [/^\\subsection\*?\b/, 3],
+  [/^\\subsubsection\*?\b/, 4],
+  [/^\\paragraph\*?\b/, 5],
+  [/^\\subparagraph\*?\b/, 6],
+];
+
+const stexFolding: Extension = foldService.of(
+  (state: EditorState, from: number): { from: number; to: number } | null => {
+    const line = state.doc.lineAt(from);
+    const current = LATEX_SECTION_LEVELS.find(([pattern]) => pattern.test(line.text));
+    if (!current) return null;
+    for (let number = line.number + 1; number <= state.doc.lines; number += 1) {
+      const next = state.doc.line(number);
+      const found = LATEX_SECTION_LEVELS.find(([pattern]) => pattern.test(next.text));
+      if (found && found[1] <= current[1]) {
+        return next.from > line.to ? { from: line.to, to: next.from } : null;
+      }
+    }
+    return state.doc.length > line.to ? { from: line.to, to: state.doc.length } : null;
   },
 );
 
@@ -411,6 +486,47 @@ const pandaTheme = EditorView.theme(
 const FOLD_CHEVRON =
   '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>';
 
+/**
+ * 显式基础扩展集：复制 CodeMirror basicSetup 并定制折叠 gutter（VS Code 风格箭头）。
+ * 不能与 basicSetup 叠加使用——basicSetup 已内置 foldGutter，叠加会出现两条折叠槽。
+ */
+const pandaSetup: Extension[] = [
+  lineNumbers(),
+  highlightActiveLineGutter(),
+  highlightSpecialChars(),
+  history(),
+  foldGutter({ markerDOM: foldMarkerDOM }),
+  drawSelection(),
+  dropCursor(),
+  EditorState.allowMultipleSelections.of(true),
+  indentOnInput(),
+  syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+  bracketMatching(),
+  closeBrackets(),
+  autocompletion(),
+  rectangularSelection(),
+  crosshairCursor(),
+  highlightActiveLine(),
+  highlightSelectionMatches(),
+  keymap.of([
+    ...closeBracketsKeymap,
+    ...defaultKeymap,
+    ...searchKeymap,
+    ...historyKeymap,
+    ...foldKeymap,
+    ...completionKeymap,
+    ...lintKeymap,
+  ]),
+];
+
+function foldMarkerDOM(open: boolean): HTMLElement {
+  const marker = document.createElement("span");
+  marker.className = open ? "cm-fold-marker open" : "cm-fold-marker closed";
+  marker.innerHTML = FOLD_CHEVRON;
+  marker.setAttribute("aria-hidden", "true");
+  return marker;
+}
+
 function createState(
   doc: string,
   readOnly: boolean,
@@ -422,21 +538,9 @@ function createState(
   return EditorState.create({
     doc,
     extensions: [
-      basicSetup,
+      pandaSetup,
       EditorState.phrases.of(buildPhrases()),
       languageExtension(language),
-      // 语法折叠：VS Code 风格 chevron 箭头 + 键位（Ctrl+Shift+[ / ] 等）。见 doc/design.md §11.4。
-      codeFolding(),
-      foldGutter({
-        markerDOM: (open) => {
-          const marker = document.createElement("span");
-          marker.className = open ? "cm-fold-marker open" : "cm-fold-marker closed";
-          marker.innerHTML = FOLD_CHEVRON;
-          marker.setAttribute("aria-hidden", "true");
-          return marker;
-        },
-      }),
-      keymap.of(foldKeymap),
       // 源码模式的查找替换复用 CodeMirror 搜索面板与匹配装饰（§11.5）。
       search({ top: true }),
       EditorView.lineWrapping,
