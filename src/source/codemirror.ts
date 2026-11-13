@@ -67,8 +67,8 @@ import {
   crosshairCursor,
   type DecorationSet,
 } from "@codemirror/view";
-import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from "@codemirror/autocomplete";
-import { defaultKeymap, history, historyKeymap, copyLineDown, copyLineUp, moveLineDown, moveLineUp } from "@codemirror/commands";
+import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap, acceptCompletion, completionStatus } from "@codemirror/autocomplete";
+import { defaultKeymap, history, historyKeymap, copyLineDown, copyLineUp, indentMore, moveLineDown, moveLineUp } from "@codemirror/commands";
 import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
 import { lintKeymap } from "@codemirror/lint";
 import { tags } from "@lezer/highlight";
@@ -448,6 +448,8 @@ export interface SourceEditorOptions {
   language?: SourceLanguage;
   /** Tab 宽度（空格数），默认 2。 */
   tabSize?: number;
+  /** Tab 键是否输出空格（false = 输出硬制表符 \t），默认 true。 */
+  insertSpaces?: boolean;
   /** 是否显示行号，默认 true。 */
   showLineNumbers?: boolean;
   onChange(content: string): void;
@@ -610,10 +612,42 @@ function toggleCommentCommand(view: EditorView): boolean {
 }
 
 /**
+ * Tab 键缩进单位（StateField 存「Tab 是否输出空格」，命令运行时读取，随设置即时切换）。
+ * 见 doc/design.md §11.4、§15.3。
+ */
+const setInsertSpacesEffect = StateEffect.define<boolean>();
+
+const insertSpacesField = StateField.define<boolean>({
+  create: () => true,
+  update(value, transaction) {
+    for (const effect of transaction.effects) {
+      if (effect.is(setInsertSpacesEffect)) return effect.value;
+    }
+    return value;
+  },
+});
+
+/** Tab 键：输出缩进单位（N 空格或硬制表符）；有选区/多光标时整段缩进；补全激活时先接受补全。 */
+function tabCommand(view: EditorView): boolean {
+  if (completionStatus(view.state) === "active") return acceptCompletion(view);
+  const state = view.state;
+  if (state.selection.ranges.length > 1 || !state.selection.main.empty) return indentMore(view);
+  const insertSpaces = state.field(insertSpacesField, false) ?? true;
+  view.dispatch(state.replaceSelection(insertSpaces ? " ".repeat(state.tabSize) : "\t"));
+  return true;
+}
+
+/** Tab 宽度与输出单位（空格/硬 Tab）；Tab 键位在 pandaSetup 中（动态读取 insertSpacesField）。 */
+function buildIndentExtension(tabSize: number, insertSpaces: boolean): Extension {
+  return [EditorState.tabSize.of(tabSize), indentUnit.of(insertSpaces ? " ".repeat(tabSize) : "\t")];
+}
+
+/**
  * 显式基础扩展集：复制 CodeMirror basicSetup 并定制折叠 gutter（VS Code 风格箭头）。
  * 不能与 basicSetup 叠加使用——basicSetup 已内置 foldGutter，叠加会出现两条折叠槽。
  */
 const pandaSetup: Extension[] = [
+  insertSpacesField,
   lineNumbers(),
   highlightActiveLineGutter(),
   highlightSpecialChars(),
@@ -631,6 +665,8 @@ const pandaSetup: Extension[] = [
   crosshairCursor(),
   highlightActiveLine(),
   highlightSelectionMatches(),
+  // Tab 输出缩进单位；单独一个 keymap 并置于 defaultKeymap（Tab→indentMore）之前以获得更高优先级。
+  keymap.of([{ key: "Tab", run: tabCommand }]),
   keymap.of([
     ...closeBracketsKeymap,
     ...defaultKeymap,
@@ -665,6 +701,7 @@ function createState(
   updateListener: ReturnType<typeof EditorView.updateListener.of>,
   tabSizeCompartment: Compartment,
   tabSize: number,
+  insertSpaces: boolean,
 ): EditorState {
   return EditorState.create({
     doc,
@@ -675,11 +712,8 @@ function createState(
       // 源码模式的查找替换复用 CodeMirror 搜索面板与匹配装饰（§11.5）。
       search({ top: true }),
       EditorView.lineWrapping,
-      // 自动缩进使用与 Tab 宽度一致的空格数。
-      tabSizeCompartment.of([
-        EditorState.tabSize.of(tabSize),
-        indentUnit.of(" ".repeat(tabSize)),
-      ]),
+      // 自动缩进与 Tab 输出使用一致的单位（空格或硬制表符）。
+      tabSizeCompartment.of(buildIndentExtension(tabSize, insertSpaces)),
       syntaxHighlighting(pandaHighlight),
       pandaTheme,
       diffExtension,
@@ -696,11 +730,13 @@ export class SourceEditor {
   private readonly updateListener: ReturnType<typeof EditorView.updateListener.of>;
   private readonly tabSizeCompartment = new Compartment();
   private tabSize: number;
+  private insertSpaces: boolean;
   private showLineNumbers: boolean;
   private suppressChange = false;
 
   constructor(private readonly options: SourceEditorOptions) {
     this.tabSize = options.tabSize ?? 2;
+    this.insertSpaces = options.insertSpaces ?? true;
     this.showLineNumbers = options.showLineNumbers ?? true;
     this.updateListener = EditorView.updateListener.of((update) => {
       // 折叠/展开随事务出现；逐事务检查是否包含折叠效果。
@@ -728,10 +764,15 @@ export class SourceEditor {
         this.updateListener,
         this.tabSizeCompartment,
         this.tabSize,
+        this.insertSpaces,
       ),
       parent: options.parent,
     });
     this.applyShowLineNumbers();
+    if (!this.insertSpaces) {
+      // compartment 已按硬 Tab 构建；补齐 StateField 初始值。
+      this.view.dispatch({ effects: setInsertSpacesEffect.of(false) });
+    }
   }
 
   /** 设置变更后更新 Tab 宽度，无需重建编辑器。 */
@@ -739,10 +780,19 @@ export class SourceEditor {
     if (size === this.tabSize) return;
     this.tabSize = size;
     this.view.dispatch({
-      effects: this.tabSizeCompartment.reconfigure([
-        EditorState.tabSize.of(size),
-        indentUnit.of(" ".repeat(size)),
-      ]),
+      effects: this.tabSizeCompartment.reconfigure(buildIndentExtension(size, this.insertSpaces)),
+    });
+  }
+
+  /** 设置变更后切换 Tab 输出单位（空格 ↔ 硬制表符），无需重建编辑器。 */
+  setInsertSpaces(enabled: boolean): void {
+    if (enabled === this.insertSpaces) return;
+    this.insertSpaces = enabled;
+    this.view.dispatch({
+      effects: [
+        setInsertSpacesEffect.of(enabled),
+        this.tabSizeCompartment.reconfigure(buildIndentExtension(this.tabSize, enabled)),
+      ],
     });
   }
 
@@ -788,8 +838,13 @@ export class SourceEditor {
         this.updateListener,
         this.tabSizeCompartment,
         this.tabSize,
+        this.insertSpaces,
       ),
     );
+    if (!this.insertSpaces) {
+      // 新 State 的 field 回到默认值；补齐硬 Tab 语义。
+      this.view.dispatch({ effects: setInsertSpacesEffect.of(false) });
+    }
   }
 
   focus(): void {

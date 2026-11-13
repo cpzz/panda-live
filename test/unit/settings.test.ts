@@ -30,6 +30,12 @@ describe("设置合并", () => {
     expect(merged.appearance.theme).toBe("light");
   });
 
+  it("Tab 键输出单位：默认空格，非布尔值回落默认", () => {
+    expect(mergeSettings(undefined).editor.insertSpaces).toBe(true);
+    expect(mergeSettings({ editor: { insertSpaces: "yes" } }).editor.insertSpaces).toBe(true);
+    expect(mergeSettings({ editor: { insertSpaces: false } }).editor.insertSpaces).toBe(false);
+  });
+
   it("内容宽度为百分比并校正范围，旧版像素配置回退为 100%", () => {
     expect(mergeSettings({ appearance: { lineWidth: 120 } }).appearance).toMatchObject({
       lineWidth: 120,

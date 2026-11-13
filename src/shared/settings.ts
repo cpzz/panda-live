@@ -23,6 +23,8 @@ export interface Settings {
     /** 有路径的文档在停止输入后自动写盘。 */
     autoSave: boolean;
     tabSize: number;
+    /** Tab 键输出空格（true）或硬制表符（false）。 */
+    insertSpaces: boolean;
     showLineNumbers: boolean;
     /** 保存时的换行符；`preserve` 沿用文件已有换行。 */
     eol: SaveEol;
@@ -65,7 +67,7 @@ export const SETTINGS_SCHEMA_VERSION = 1;
 export const DEFAULT_SETTINGS: Settings = {
   schemaVersion: SETTINGS_SCHEMA_VERSION,
   appearance: { theme: "system", fontSize: 15, lineWidth: 100, language: "zh" },
-  editor: { autoSave: true, tabSize: 2, showLineNumbers: true, eol: "preserve" },
+  editor: { autoSave: true, tabSize: 2, insertSpaces: true, showLineNumbers: true, eol: "preserve" },
   math: {
     // KaTeX 内置已支持 \Pr，这里作为默认示例展示宏写法（design.md §9.2）。
     macros: "\\Pr = \\operatorname{Pr}",
@@ -135,6 +137,10 @@ export function mergeSettings(raw: unknown): Settings {
       ...editor,
       autoSave: typeof editor.autoSave === "boolean" ? editor.autoSave : DEFAULT_SETTINGS.editor.autoSave,
       tabSize: pickNumber(editor.tabSize, DEFAULT_SETTINGS.editor.tabSize, 1, 8),
+      insertSpaces:
+        typeof editor.insertSpaces === "boolean"
+          ? editor.insertSpaces
+          : DEFAULT_SETTINGS.editor.insertSpaces,
       showLineNumbers:
         typeof editor.showLineNumbers === "boolean"
           ? editor.showLineNumbers

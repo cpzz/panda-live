@@ -46,6 +46,12 @@ test("M17：保存换行符与行号设置生效", async () => {
 
     await page.locator(".cm-content").click();
     await page.keyboard.type("追加");
+    // Tab 键输出 4 个空格（Tab 宽度已设为 4，默认「插入空格」开启）。
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Tab");
+    await page.keyboard.type("缩进");
+    const withTab = await page.locator(".cm-content").innerText();
+    expect(withTab).toContain("    缩进");
     await page.getByRole("button", { name: "保存", exact: true }).click();
     await expect(page.locator(".tab-dot")).toHaveCount(0, { timeout: 10_000 });
     await expect(page.locator(".statusbar")).toContainText("LF");
@@ -53,6 +59,9 @@ test("M17：保存换行符与行号设置生效", async () => {
     const raw = await fs.readFile(filePath, "utf8");
     expect(raw).not.toContain("\r");
     expect(raw).toContain("追加");
+    // Tab 输出为空格而非 \t。
+    expect(raw).not.toContain("\t");
+    expect(raw).toContain("缩进");
   } finally {
     await app.close();
     await fs.rm(tempDir, { recursive: true, force: true });

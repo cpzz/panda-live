@@ -186,6 +186,17 @@ export function SettingsDialog({
                   />
                 </label>
                 <label className="settings-row">
+                  <span>{t("Tab 键插入空格")}</span>
+                  <input
+                    type="checkbox"
+                    checked={draft.editor.insertSpaces}
+                    onChange={(event) => patch("editor", { insertSpaces: event.target.checked })}
+                  />
+                </label>
+                <p className="settings-note">
+                  {t("关闭后 Tab 键插入硬制表符（\\t）；按 Tab 宽度设置显示列宽。")}
+                </p>
+                <label className="settings-row">
                   <span>{t("显示行号")}</span>
                   <input
                     type="checkbox"

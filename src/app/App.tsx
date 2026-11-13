@@ -111,6 +111,7 @@ function SourcePane({
   searchSignal,
   jump,
   tabSize,
+  insertSpaces,
   showLineNumbers,
   diffMarkers,
   onChange,
@@ -122,6 +123,8 @@ function SourcePane({
   searchSignal: number;
   jump: { line: number; column: number; token: number } | null;
   tabSize: number;
+  /** Tab 键输出空格（false = 硬制表符）。 */
+  insertSpaces: boolean;
   showLineNumbers: boolean;
   diffMarkers: readonly DiffLineMarker[];
   onChange(content: string): void;
@@ -195,6 +198,10 @@ function SourcePane({
   }, [tabSize]);
 
   useEffect(() => {
+    editorRef.current?.setInsertSpaces(insertSpaces);
+  }, [insertSpaces]);
+
+  useEffect(() => {
     editorRef.current?.setShowLineNumbers(showLineNumbers);
   }, [showLineNumbers]);
 
@@ -231,6 +238,7 @@ function SourcePane({
         readOnly: document.readOnly,
         language,
         tabSize,
+        insertSpaces,
         showLineNumbers,
         onChange: (content) => callbacksRef.current.onChange(content),
         onSelection: (info) => callbacksRef.current.onSelection(info),
@@ -2061,6 +2069,7 @@ export function App() {
                 searchSignal={searchSignal}
                 jump={sourceJump}
                 tabSize={settings.editor.tabSize}
+                insertSpaces={settings.editor.insertSpaces}
                 showLineNumbers={settings.editor.showLineNumbers}
                 diffMarkers={sourceDiffMarkers}
                 onChange={(content) => manager.updateContent(active.id, content)}

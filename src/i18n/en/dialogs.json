@@ -14,6 +14,8 @@
   "按当前渲染面板宽度的百分比计算；超过 100% 时内容会加宽并出现水平滚动条，超宽表格与代码块也会在内容区内部滚动。": "Relative to the current preview pane width; above 100% the content widens and scrolls horizontally, and very wide tables and code blocks scroll inside the content area.",
   "自动保存（停止输入 10 s）": "Auto save (10 s after you stop typing)",
   "Tab 宽度": "Tab width",
+  "Tab 键插入空格": "Insert spaces for Tab",
+  "关闭后 Tab 键插入硬制表符（\\t）；按 Tab 宽度设置显示列宽。": "When off, the Tab key inserts a hard tab (\\t), rendered at the configured tab width.",
   "显示行号": "Show line numbers",
   "保存换行符": "Line endings",
   "沿用文件": "Preserve",
