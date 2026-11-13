@@ -1,5 +1,8 @@
 {
   "外观": "Appearance",
+  "设置分类": "Categories",
+  "修改需点击保存后生效": "Changes take effect after you click Save",
+  "图表主题永远跟随应用主题。": "Diagram theme always follows the app theme.",
   "主题": "Theme",
   "跟随系统": "System",
   "浅色": "Light",

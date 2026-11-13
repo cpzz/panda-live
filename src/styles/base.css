@@ -2432,6 +2432,79 @@ body.resizing * {
   background: var(--chrome-bg);
 }
 
+/* 设置对话框：VS Code 风格两栏布局（左分类导航 + 右内容面板）。见 doc/design.md §15.3。 */
+.settings-modal {
+  width: min(920px, 94vw);
+  height: min(640px, 86vh);
+  max-height: 86vh;
+}
+
+.settings-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.settings-nav {
+  display: flex;
+  flex: none;
+  width: 188px;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 8px;
+  border-right: 1px solid var(--border);
+  background: var(--chrome-bg);
+  overflow-y: auto;
+}
+
+.settings-nav-item {
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.settings-nav-item:hover {
+  background: var(--surface-muted);
+}
+
+.settings-nav-item.active {
+  background: var(--surface-muted);
+  color: var(--accent);
+  font-weight: 600;
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.settings-pane {
+  flex: 1;
+  min-width: 0;
+  padding: 18px 22px;
+  overflow-y: auto;
+}
+
+.settings-pane h3,
+.settings-pane-title {
+  margin: 0 0 10px;
+  color: var(--fg);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: normal;
+}
+
+.settings-pane > .settings-group:last-child {
+  margin-bottom: 0;
+}
+
+.settings-footer-hint {
+  margin-right: auto;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
 .settings-group {
   margin-bottom: 20px;
 }
@@ -2444,19 +2517,31 @@ body.resizing * {
   letter-spacing: 0.08em;
 }
 
+/* 设置面板内的分组标题（如扩展页）与主导航标题保持一致的尺寸。 */
+.settings-pane .settings-group h3 {
+  margin: 0 0 10px;
+  color: var(--fg);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: normal;
+}
+
 .settings-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 30px;
-  padding: 4px 0;
-  border-bottom: 1px solid var(--border);
-  font-size: 12px;
+  min-height: 32px;
+  padding: 7px 0;
+  font-size: 12.5px;
 }
 
-.settings-row:last-of-type {
-  border-bottom: 0;
+.settings-row-top {
+  align-items: flex-start;
+}
+
+.settings-row-top > span {
+  padding-top: 2px;
 }
 
 .settings-row input[type="number"] {
@@ -2530,7 +2615,7 @@ body.resizing * {
 }
 
 .settings-note {
-  margin: 8px 0 0;
+  margin: 2px 0 14px;
   color: var(--muted);
   font-size: 11.5px;
   line-height: 1.5;

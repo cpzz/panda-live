@@ -107,7 +107,8 @@ test("M4：工作区树、查找面板与设置持久化", async () => {
     await expect(settingsModal).toBeVisible();
 
     // 设置：数学分组（关闭单美元内联公式）持久化到 settings.json；窗口保持打开
-    const mathGroup = settingsModal.locator(".settings-group", { hasText: "数学" });
+    await settingsModal.getByRole("button", { name: "数学" }).click();
+    const mathGroup = settingsModal.locator(".settings-row", { hasText: "单美元" });
     await expect(mathGroup).toBeVisible();
     await mathGroup.getByRole("checkbox").uncheck();
     await settingsModal.getByRole("button", { name: "保存", exact: true }).click();
