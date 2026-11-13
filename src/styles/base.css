@@ -1344,6 +1344,58 @@ button {
   cursor: pointer;
 }
 
+/* 宽度弹层：直接输入行 + 刻度标签（可点击）。 */
+.statusbar-width-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.statusbar-width-input {
+  width: 64px;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--fg);
+  font-size: 12px;
+}
+
+.statusbar-width-row .button {
+  margin-left: auto;
+}
+
+.statusbar-width-ticks {
+  position: relative;
+  height: 28px;
+  margin: -2px 2px 0;
+}
+
+.statusbar-width-tick {
+  position: absolute;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 12px;
+  transform: translateX(-50%);
+  cursor: pointer;
+}
+
+.statusbar-width-tick:hover {
+  color: var(--accent);
+}
+
+.statusbar-width-tick:first-child {
+  transform: none;
+}
+
+.statusbar-width-tick:last-child {
+  transform: translateX(-100%);
+}
+
 .statusbar-popover-note {
   color: var(--muted);
   line-height: 1.5;

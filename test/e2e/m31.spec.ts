@@ -59,11 +59,29 @@ test("M31：内容宽度可超过 100%、状态栏滑块与 Ctrl +/- 缩放", as
       )
       .toBe(true);
 
-    // Ctrl + 加号放大、Ctrl + 0 复位。
+    // Ctrl + 加号放大、Ctrl + 0 复位（恢复跟随全局设置）。
     await page.keyboard.press("Control+=");
     await expect(page.locator(".statusbar-width-value")).toHaveText("160%");
     await page.keyboard.press("Control+0");
     await expect(page.locator(".statusbar-width-value")).toHaveText("100%");
+
+    // 状态栏调整只作用于当前显示：settings.json 不被写入 lineWidth（弹层仍开着）。
+    await slider.evaluate((element) => {
+      const input = element as HTMLInputElement;
+      const setter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype,
+        "value",
+      )?.set;
+      setter?.call(input, "300");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await expect(page.locator(".statusbar-width-value")).toHaveText("300%");
+    // settings.json 可能从未被写过（本用例没有保存过设置）；存在时也不应包含 lineWidth。
+    const raw = await fs
+      .readFile(path.join(userDataDir, "settings.json"), "utf8")
+      .catch(() => "");
+    const saved = JSON.parse(raw || "{}") as { appearance?: { lineWidth?: number } };
+    expect(saved.appearance?.lineWidth).toBeUndefined();
   } finally {
     await app.close();
     await fs.rm(tempDir, { recursive: true, force: true });

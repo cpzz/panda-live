@@ -102,6 +102,9 @@ interface SavedEditorState {
   language: SourceLanguage;
 }
 
+/** 状态栏宽度滑块的刻度（可点击）；位置按 (值-30)/970 线性分布，奇偶交错避免重叠。 */
+const WIDTH_TICKS = [30, 100, 300, 600, 1000];
+
 function SourcePane({
   document,
   mode,
@@ -723,29 +726,29 @@ export function App() {
     applyDiagramMemoryLimit();
   }, [settings.diagram.memoryCacheLimit]);
 
-  // 内容宽度：状态栏弹层滑块、Ctrl+滚轮与 Ctrl +/- 统一按百分比调整。
+  // 内容宽度：状态栏滑块、数字输入、Ctrl+滚轮与 Ctrl +/- 只调整「当前显示」，
+  // 不写入全局设置；全局默认在 设置 → 外观，Ctrl+0 恢复跟随全局。见 §21.15 说明。
   const widthPercent = settings.appearance.lineWidth;
-  const [widthDraft, setWidthDraft] = useState(widthPercent);
+  const [viewWidth, setViewWidth] = useState<number | null>(null);
+  const widthDraft = viewWidth ?? widthPercent;
+  const [widthInput, setWidthInput] = useState<string | null>(null);
   const [widthOpen, setWidthOpen] = useState(false);
   const widthRef = useRef<HTMLDivElement>(null);
-  const widthDraftRef = useRef(widthDraft);
-  widthDraftRef.current = widthDraft;
-  const widthTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const applyContentWidth = (value: number, immediate = false): void => {
-    const next = Math.min(1000, Math.max(30, Math.round(value / 5) * 5));
-    setWidthDraft(next);
-    if (widthTimerRef.current) clearTimeout(widthTimerRef.current);
-    const commit = (): void => {
-      void settingsStore.update({ appearance: { lineWidth: next } });
-    };
-    if (immediate) commit();
-    else widthTimerRef.current = setTimeout(commit, 180);
+  const applyWidthValue = (value: number): void => {
+    setViewWidth(Math.min(1000, Math.max(30, Math.round(value / 5) * 5)));
+  };
+  // 滑块/刻度/快捷键路径：清掉输入框的临时文本，让输入框跟随新值。
+  const applyContentWidth = (value: number): void => {
+    setWidthInput(null);
+    applyWidthValue(value);
   };
   const applyContentWidthRef = useRef(applyContentWidth);
   applyContentWidthRef.current = applyContentWidth;
+  const widthDraftRef = useRef(widthDraft);
+  widthDraftRef.current = widthDraft;
   useEffect(() => {
-    setWidthDraft(widthPercent);
-  }, [widthPercent]);
+    settingsStore.setViewWidthOverride(viewWidth);
+  }, [viewWidth]);
   // 弹层打开时点击外部关闭。
   useEffect(() => {
     if (!widthOpen) return;
@@ -757,12 +760,6 @@ export function App() {
     window.addEventListener("pointerdown", onPointerDown);
     return () => window.removeEventListener("pointerdown", onPointerDown);
   }, [widthOpen]);
-  useEffect(
-    () => () => {
-      if (widthTimerRef.current) clearTimeout(widthTimerRef.current);
-    },
-    [],
-  );
 
   const [cursor, setCursor] = useState<SelectionInfo>({ line: 1, column: 1 });
   const [searchSignal, setSearchSignal] = useState(0);
@@ -1400,7 +1397,9 @@ export function App() {
       }
       if (key === "0") {
         event.preventDefault();
-        applyContentWidthRef.current(100, true);
+        // Ctrl+0 恢复跟随全局设置（不一定是 100%）。
+        setWidthInput(null);
+        setViewWidth(null);
         return;
       }
       if (key === "n" && !event.shiftKey) {
@@ -2266,18 +2265,76 @@ export function App() {
           </button>
           {widthOpen && (
             <div className="statusbar-popover" role="group" aria-label={t("内容宽度")}>
+              <div className="statusbar-width-row">
+                <input
+                  type="number"
+                  className="statusbar-width-input"
+                  min={30}
+                  max={1000}
+                  step={5}
+                  value={widthInput ?? String(widthDraft)}
+                  aria-label={t("内容宽度")}
+                  onChange={(event) => {
+                    const raw = event.target.value;
+                    setWidthInput(raw);
+                    const parsed = Number(raw);
+                    if (raw.trim() !== "" && Number.isFinite(parsed) && parsed >= 30) {
+                      applyWidthValue(parsed);
+                    }
+                  }}
+                  onBlur={() => setWidthInput(null)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") event.currentTarget.blur();
+                  }}
+                />
+                <span className="settings-suffix">%</span>
+                <button
+                  type="button"
+                  className="button small ghost"
+                  onClick={() => {
+                    setWidthInput(null);
+                    setViewWidth(null);
+                  }}
+                >
+                  {t("重置")}
+                </button>
+              </div>
               <input
                 type="range"
                 className="statusbar-width-range"
                 min={30}
                 max={1000}
                 step={5}
+                list="width-scale-ticks"
                 value={widthDraft}
                 aria-label={t("内容宽度")}
                 onChange={(event) => applyContentWidth(Number(event.target.value))}
               />
+              <datalist id="width-scale-ticks">
+                <option value="30" />
+                <option value="100" />
+                <option value="300" />
+                <option value="600" />
+                <option value="1000" />
+              </datalist>
+              <div className="statusbar-width-ticks" aria-hidden="true">
+                {WIDTH_TICKS.map((tick, index) => (
+                  <button
+                    key={tick}
+                    type="button"
+                    className="statusbar-width-tick"
+                    style={{
+                      left: `${((tick - 30) / 970) * 100}%`,
+                      top: index % 2 === 0 ? 0 : "13px",
+                    }}
+                    onClick={() => applyContentWidth(tick)}
+                  >
+                    {tick}
+                  </button>
+                ))}
+              </div>
               <span className="statusbar-popover-note">
-                {t("拖动调整渲染内容宽度；Ctrl+滚轮或 Ctrl +/- 亦可缩放")}
+                {t("仅调整当前显示；全局默认在 设置 → 外观 中修改")}
               </span>
             </div>
           )}
