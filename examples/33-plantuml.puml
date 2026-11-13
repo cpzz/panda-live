@@ -1,0 +1,28 @@
+@startuml
+' PlantUML 示例：Markdown 渲染管线的时序图
+skinparam shadowing false
+skinparam defaultFontName "Microsoft YaHei"
+
+actor 用户
+participant "编辑器" as Editor
+participant "格式注册表" as Registry
+participant "渲染管线" as Pipeline
+database "磁盘" as Disk
+
+用户 -> Editor: 打开 27-markdown.md
+Editor -> Registry: detectFormat("27-markdown.md")
+Registry --> Editor: markdown
+Editor -> Pipeline: parseMarkdown(source)
+Pipeline --> Editor: ProseMirror 文档
+Editor --> 用户: 分栏实时预览
+
+用户 -> Editor: 编辑正文
+Editor -> Pipeline: 防抖重渲染（150 ms）
+Pipeline --> Editor: HTML
+Editor --> 用户: 预览更新
+
+用户 -> Editor: Ctrl+S 保存
+Editor -> Disk: 按原编码与换行符写回
+Disk --> Editor: 完成
+Editor --> 用户: 标签页去掉未保存圆点
+@enduml

@@ -3,6 +3,7 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
+import { singleDollarEnabled } from "../services/math-settings";
 
 export interface OutlineItem {
   /** 文档内标题序号（从 0 开始），用于在 WYSIWYG 与预览中按顺序定位。 */
@@ -22,11 +23,26 @@ interface MdastNode {
   position?: { start?: { line?: number } | null } | null;
 }
 
-const markdownParser = unified()
-  .use(remarkParse)
-  .use(remarkGfm)
-  .use(remarkFrontmatter, ["yaml"])
-  .use(remarkMath);
+function buildMarkdownParser() {
+  return unified()
+    .use(remarkParse)
+    .use(remarkGfm)
+    .use(remarkFrontmatter, ["yaml"])
+    .use(remarkMath, { singleDollarTextMath: singleDollarEnabled() });
+}
+
+/** 大纲解析器按「单美元开关」缓存，与 parse.ts 保持一致。 */
+let cachedParser: ReturnType<typeof buildMarkdownParser> | null = null;
+let cachedSingleDollar: boolean | null = null;
+
+function getMarkdownParser(): ReturnType<typeof buildMarkdownParser> {
+  const singleDollar = singleDollarEnabled();
+  if (!cachedParser || cachedSingleDollar !== singleDollar) {
+    cachedParser = buildMarkdownParser();
+    cachedSingleDollar = singleDollar;
+  }
+  return cachedParser;
+}
 
 /** 提取节点的纯文本，用于大纲标题。 */
 function nodeText(node: MdastNode): string {
@@ -48,7 +64,7 @@ function markdownOutline(source: string): OutlineItem[] {
     }
     for (const child of node.children ?? []) walk(child);
   };
-  walk(markdownParser.parse(source) as unknown as MdastNode);
+  walk(getMarkdownParser().parse(source) as unknown as MdastNode);
   return items;
 }
 

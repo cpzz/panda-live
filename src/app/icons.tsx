@@ -45,6 +45,14 @@ const ICONS = {
       <path d="m14 13 2 2-2 2" />
     </>
   ),
+  /** PDF 文档：文件轮廓 + 字母 P */
+  "file-pdf": (
+    <>
+      <path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" />
+      <path d="M14 2v5a1 1 0 0 0 1 1h5" />
+      <path d="M9 18v-6h2.5a1.75 1.75 0 0 1 0 3.5H9" />
+    </>
+  ),
   /** PlantUML / Mermaid 图表文档 */
   diagram: (
     <>
@@ -142,6 +150,22 @@ const ICONS = {
   "chevron-down": <polyline points="6 9 12 15 18 9" />,
   "chevron-left": <path d="m15 18-6-6 6-6" />,
   "chevron-right": <path d="m9 18 6-6-6-6" />,
+  /** PDF 预览工具栏 */
+  "zoom-in": (
+    <>
+      <circle cx="11" cy="11" r="8" />
+      <path d="m21 21-4.35-4.35" />
+      <path d="M11 8v6" />
+      <path d="M8 11h6" />
+    </>
+  ),
+  "zoom-out": (
+    <>
+      <circle cx="11" cy="11" r="8" />
+      <path d="m21 21-4.35-4.35" />
+      <path d="M8 11h6" />
+    </>
+  ),
   list: (
     <>
       <path d="M3 5h18" />
@@ -272,10 +296,12 @@ export type IconName = keyof typeof ICONS;
 const TEXT_FILE_EXT = /\.(md|markdown|mdown|mkd|qmd|rmd|mdx|adoc|txt)$/i;
 const CODE_FILE_EXT = /\.(tex|latex|mml|mathml)$/i;
 const DIAGRAM_FILE_EXT = /\.(puml|plantuml|mmd|mermaid)$/i;
+const PDF_FILE_EXT = /\.pdf$/i;
 
 /** 按文件扩展名挑选标签页/文件树使用的文档图标。 */
 export function fileIconForPath(filePath: string | null | undefined): IconName {
   if (!filePath) return "file";
+  if (PDF_FILE_EXT.test(filePath)) return "file-pdf";
   if (DIAGRAM_FILE_EXT.test(filePath)) return "diagram";
   if (CODE_FILE_EXT.test(filePath)) return "file-code";
   if (TEXT_FILE_EXT.test(filePath)) return "file-text";

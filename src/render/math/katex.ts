@@ -25,11 +25,37 @@ function cached(key: string, render: () => MathRenderResult): MathRenderResult {
 }
 
 /**
+ * 解析用户设置中的宏定义文本：每行一条 `\命令 = 定义`（也接受 `:` 分隔），
+ * 空行与 `%`、`#` 注释行忽略；非法行跳过。见 doc/design.md §9.2。
+ */
+export function parseKatexMacros(text: string): Record<string, string> {
+  const macros: Record<string, string> = {};
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("%") || line.startsWith("#")) continue;
+    const match = /^(\\[a-zA-Z@]+)\s*[=:]\s*(.+)$/u.exec(line);
+    if (!match) continue;
+    macros[match[1] as string] = match[2]!.trim();
+  }
+  return macros;
+}
+
+export interface KatexRenderOptions {
+  /** 用户自定义宏（`parseKatexMacros` 的产物）；参与缓存键。 */
+  macros?: Record<string, string>;
+}
+
+/**
  * KaTeX 静态渲染，`htmlAndMathml` 输出保证可访问性（doc/design.md §4.4、附录 B）。
  * 渲染失败返回错误信息，由调用方保留源码并提示（FR-04）。
  */
-export function renderKatex(source: string, displayMode: boolean): MathRenderResult {
-  const key = `${displayMode ? "b" : "i"}${source}`;
+export function renderKatex(
+  source: string,
+  displayMode: boolean,
+  options: KatexRenderOptions = {},
+): MathRenderResult {
+  const macroKey = JSON.stringify(options.macros ?? {});
+  const key = `${displayMode ? "b" : "i"}\u0000${macroKey}\u0000${source}`;
   return cached(key, () => {
     try {
       const html = katex.renderToString(source, {
@@ -38,6 +64,7 @@ export function renderKatex(source: string, displayMode: boolean): MathRenderRes
         throwOnError: true,
         strict: "warn",
         trust: false,
+        ...(options.macros ? { macros: { ...options.macros } } : {}),
       });
       return { ok: true, html };
     } catch (error) {
@@ -47,8 +74,12 @@ export function renderKatex(source: string, displayMode: boolean): MathRenderRes
 }
 
 /** 从 KaTeX 输出中提取 MathML 分支，用于「复制 MathML」。见 doc/design.md §9.4。 */
-export function extractMathml(source: string, displayMode: boolean): string | null {
-  const result = renderKatex(source, displayMode);
+export function extractMathml(
+  source: string,
+  displayMode: boolean,
+  options: KatexRenderOptions = {},
+): string | null {
+  const result = renderKatex(source, displayMode, options);
   if (!result.ok) return null;
   const template = document.createElement("template");
   template.innerHTML = result.html;

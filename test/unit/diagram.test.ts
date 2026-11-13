@@ -145,6 +145,25 @@ describe("图表缓存", () => {
     expect(cache.get("c")).toBe(3);
   });
 
+  it("运行中调整容量：保留现有条目并立即淘汰超额项", () => {
+    const cache = new LruCache<number>(3);
+    cache.set("a", 1);
+    cache.set("b", 2);
+    cache.set("c", 3);
+    cache.setCapacity(2);
+    expect(cache.get("a")).toBeUndefined();
+    expect(cache.get("b")).toBe(2);
+    expect(cache.get("c")).toBe(3);
+    cache.setCapacity(5);
+    cache.set("d", 4);
+    expect(cache.get("d")).toBe(4);
+    const diagramCache = new DiagramCache(undefined, 1);
+    void diagramCache.set("x", "<svg/>");
+    diagramCache.setMemoryCapacity(2);
+    void diagramCache.set("y", "<svg2/>");
+    expect(diagramCache.stats().entries).toBe(2);
+  });
+
   it("持久层未命中时回填内存缓存", async () => {
     const map = new Map<string, string>();
     const storage: DiagramCacheStorage = {

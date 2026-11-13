@@ -7,6 +7,7 @@ import remarkMath from "remark-math";
 import remarkParse from "remark-parse";
 import remarkRehype from "remark-rehype";
 import { unified } from "unified";
+import { katexMacros, singleDollarEnabled } from "../../services/math-settings";
 
 interface HastNode {
   type: string;
@@ -64,26 +65,41 @@ function rehypeSourceLines() {
   return (tree: HastNode): void => annotateSourceLines(tree);
 }
 
-const baseProcessor = unified()
-  .use(remarkParse)
-  .use(remarkGfm)
-  .use(remarkFrontmatter, ["yaml"])
-  .use(remarkMath)
-  // 允许原始 HTML 进入 hast 并原样输出（含内嵌 MathML、`<a id>` 锚点），
-  // 输出前由 DOMPurify 白名单过滤，因此不会引入脚本或事件属性。
-  .use(remarkRehype, { allowDangerousHtml: true })
-  .use(rehypeKatex)
-  .use(rehypeStringify, { allowDangerousHtml: true });
+interface BuiltProcessors {
+  base: ReturnType<typeof buildProcessor>;
+  annotated: ReturnType<typeof buildProcessor>;
+}
 
-const annotatedProcessor = unified()
-  .use(remarkParse)
-  .use(remarkGfm)
-  .use(remarkFrontmatter, ["yaml"])
-  .use(remarkMath)
-  .use(remarkRehype, { allowDangerousHtml: true })
-  .use(rehypeKatex)
-  .use(rehypeSourceLines)
-  .use(rehypeStringify, { allowDangerousHtml: true });
+/** 处理器按数学设置（宏、单美元开关）缓存；设置变化时重建。见 doc/design.md §9.2、§15.3。 */
+let builtProcessors: BuiltProcessors | null = null;
+let builtSignature = "";
+
+function buildProcessor(annotate: boolean, singleDollar: boolean) {
+  const processor = unified()
+    .use(remarkParse)
+    .use(remarkGfm)
+    .use(remarkFrontmatter, ["yaml"])
+    .use(remarkMath, { singleDollarTextMath: singleDollar })
+    // 允许原始 HTML 进入 hast 并原样输出（含内嵌 MathML、`<a id>` 锚点），
+    // 输出前由 DOMPurify 白名单过滤，因此不会引入脚本或事件属性。
+    .use(remarkRehype, { allowDangerousHtml: true })
+    .use(rehypeKatex, { macros: katexMacros() });
+  return annotate
+    ? processor.use(rehypeSourceLines).use(rehypeStringify, { allowDangerousHtml: true })
+    : processor.use(rehypeStringify, { allowDangerousHtml: true });
+}
+
+function getProcessors(): BuiltProcessors {
+  const signature = `${singleDollarEnabled() ? "1" : "0"}\u0000${JSON.stringify(katexMacros())}`;
+  if (!builtProcessors || builtSignature !== signature) {
+    builtProcessors = {
+      base: buildProcessor(false, singleDollarEnabled()),
+      annotated: buildProcessor(true, singleDollarEnabled()),
+    };
+    builtSignature = signature;
+  }
+  return builtProcessors;
+}
 
 export interface RenderMarkdownOptions {
   /** 为块级元素附加 `data-src-line` / `data-src-end-line`，供差异装饰定位。 */
@@ -98,7 +114,7 @@ export async function renderMarkdownToHtml(
   markdown: string,
   options: RenderMarkdownOptions = {},
 ): Promise<string> {
-  const processor = options.annotateSource ? annotatedProcessor : baseProcessor;
+  const processor = options.annotateSource ? getProcessors().annotated : getProcessors().base;
   const file = await processor.process(markdown);
   return DOMPurify.sanitize(String(file), {
     USE_PROFILES: { html: true, mathMl: true, svg: true },

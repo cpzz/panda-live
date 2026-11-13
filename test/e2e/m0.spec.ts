@@ -5,10 +5,13 @@ import path from "node:path";
 
 let app: ElectronApplication | undefined;
 let tempDir: string;
+let userDataDir: string;
 let filePath: string;
 
 test.beforeAll(async () => {
   tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "panda-live-e2e-"));
+  // 独立 userData：避免与开发实例共用真实用户数据，导致 Preferences 文件被占用（EBUSY）。
+  userDataDir = await fs.mkdtemp(path.join(os.tmpdir(), "panda-live-e2e-ud-"));
   filePath = path.join(tempDir, "sample.md");
   await fs.writeFile(filePath, "\uFEFF# 初始标题\r\n\r\n初始正文\r\n", "utf8");
 });
@@ -16,10 +19,15 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   await app?.close();
   await fs.rm(tempDir, { recursive: true, force: true });
+  await fs.rm(userDataDir, { recursive: true, force: true });
 });
 
 test("M0：打开、编辑、预览、保存并保留 BOM 与 CRLF", async () => {
-  app = await electron.launch({ args: ["."], cwd: path.resolve(".") });
+  app = await electron.launch({
+    args: ["."],
+    cwd: path.resolve("."),
+    env: { ...process.env, PANDA_USER_DATA_DIR: userDataDir },
+  });
   const page = await app.firstWindow();
 
   await expect(page.locator(".empty-state h1")).toHaveText("打开一个文档开始编辑");

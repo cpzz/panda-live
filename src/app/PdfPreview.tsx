@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import { t } from "../i18n";
 import { onThemeChange, resolveTheme, type AppTheme } from "../services/theme";
+import { Icon } from "./icons";
 
 interface PageSlot {
   pageNumber: number;
@@ -11,6 +12,16 @@ interface PageSlot {
 
 /** PDF 数据来源：TeX 编译产物走自定义协议，磁盘文档走内存字节。 */
 export type PdfSource = { url: string } | { data: Uint8Array };
+
+const ZOOM_MIN = 0.5;
+const ZOOM_MAX = 3;
+const ZOOM_STEP = 0.1;
+/** 与 CSS `.pdf-page` 的 max-width 保持一致，缩放时同步放宽。 */
+const PAGE_MAX_WIDTH = 820;
+
+function clampZoom(value: number): number {
+  return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(value * 10) / 10));
+}
 
 /**
  * PDF 预览：PDF.js 按需渲染。
@@ -25,16 +36,21 @@ export function PdfPreview({ source }: { source: PdfSource }) {
   const [slots, setSlots] = useState<PageSlot[]>([]);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const [pageInput, setPageInput] = useState("1");
   const [theme, setTheme] = useState<AppTheme>(resolveTheme);
   useEffect(() => onThemeChange(setTheme), []);
   // PDF 是固定白底位图，深色主题下自动反转，避免白纸刺眼。
   const invert = theme === "dark";
+  const total = slots.length;
 
   useEffect(() => {
     let cancelled = false;
     setSlots([]);
     setProgress(0);
     setError(null);
+    setZoom(1);
+    setPageInput("1");
 
     const load = async (): Promise<void> => {
       const [pdfjs, workerModule] = await Promise.all([
@@ -89,6 +105,7 @@ export function PdfPreview({ source }: { source: PdfSource }) {
   }, [source]);
 
   // 占位元素渲染完成后再观察可见性；否则首帧 children 为空，页面永远不会绘制。
+  // zoom 变化时重跑：清除已渲染标记并按新宽度重绘（zoom 参与依赖）。
   useEffect(() => {
     const host = pagesRef.current;
     const pdf = documentRef.current;
@@ -147,8 +164,32 @@ export function PdfPreview({ source }: { source: PdfSource }) {
       { root: scrollRef.current, rootMargin: "600px 0px" },
     );
     for (const slot of host.children) {
-      if ((slot as HTMLElement).dataset.page) observer.observe(slot);
+      const target = slot as HTMLElement;
+      if (!target.dataset.page) continue;
+      // 重跑（缩放变化）时清除渲染标记，让页面按新宽度重新绘制。
+      target.dataset.rendered = "";
+      observer.observe(target);
     }
+
+    // 当前页跟踪：滚动时更新页码输入框，便于跳转。见 doc/design.md §13.4。
+    const syncCurrentPage = (): void => {
+      const scroller = scrollRef.current;
+      if (!scroller) return;
+      const scrollerTop = scroller.getBoundingClientRect().top;
+      let current = 1;
+      for (const child of host.children) {
+        const element = child as HTMLElement;
+        const page = Number(element.dataset.page);
+        if (!page) continue;
+        if (element.getBoundingClientRect().top - scrollerTop <= 96) current = page;
+        else break;
+      }
+      // 滚动跟随：输入框始终显示视口顶部所在页（值不变时 React 跳过渲染）。
+      setPageInput((prev) => (prev === String(current) ? prev : String(current)));
+    };
+    const scroller = scrollRef.current;
+    scroller?.addEventListener("scroll", syncCurrentPage, { passive: true });
+    syncCurrentPage();
 
     // 分栏拖动会改变页面宽度，按新宽度重绘已渲染页面，避免位图被拉伸。
     let lastWidth = host.clientWidth;
@@ -176,11 +217,23 @@ export function PdfPreview({ source }: { source: PdfSource }) {
       cancelled = true;
       observer.disconnect();
       resizeObserver.disconnect();
+      scroller?.removeEventListener("scroll", syncCurrentPage);
       if (resizeTimer) clearTimeout(resizeTimer);
       for (const task of tasks) task.cancel();
       tasks.clear();
     };
-  }, [slots]);
+  }, [slots, zoom]);
+
+  /** 跳转到指定页（表单提交；越界夹取）。 */
+  const goToPage = (raw: string): void => {
+    const target = Number.parseInt(raw, 10);
+    if (!Number.isFinite(target)) return;
+    const bounded = Math.min(Math.max(1, target), Math.max(1, total));
+    pagesRef.current
+      ?.querySelector<HTMLElement>(`[data-page="${bounded}"]`)
+      ?.scrollIntoView({ block: "start" });
+    setPageInput(String(bounded));
+  };
 
   if (error) {
     return (
@@ -191,19 +244,75 @@ export function PdfPreview({ source }: { source: PdfSource }) {
   }
 
   return (
-    <div className={`pdf-viewer${invert ? " pdf-invert" : ""}`} ref={scrollRef}>
-      {progress === 0 && <p className="placeholder">{t("正在加载 PDF…")}</p>}
-      <div className="pdf-pages" ref={pagesRef}>
-        {slots.map((slot) => (
-          <div
-            key={slot.pageNumber}
-            className="pdf-page"
-            data-page={slot.pageNumber}
-            style={{ aspectRatio: `${1 / slot.ratio}` }}
+    <div className="pdf-stack">
+      {total > 0 && (
+        <div className="pdf-toolbar">
+          <form
+            className="pdf-page-jump"
+            onSubmit={(event) => {
+              event.preventDefault();
+              goToPage(pageInput);
+            }}
           >
-            <span className="pdf-page-label">{slot.pageNumber}</span>
-          </div>
-        ))}
+            <input
+              type="number"
+              min={1}
+              max={total}
+              value={pageInput}
+              aria-label={t("跳转到页")}
+              onChange={(event) => setPageInput(event.target.value)}
+            />
+            <span className="pdf-page-total">/ {total}</span>
+          </form>
+          <span className="pdf-toolbar-separator" aria-hidden="true" />
+          <button
+            type="button"
+            className="icon-button"
+            aria-label={t("缩小")}
+            title={t("缩小")}
+            disabled={zoom <= ZOOM_MIN}
+            onClick={() => setZoom((value) => clampZoom(value - ZOOM_STEP))}
+          >
+            <Icon name="zoom-out" />
+          </button>
+          <span className="pdf-zoom-label">{Math.round(zoom * 100)}%</span>
+          <button
+            type="button"
+            className="icon-button"
+            aria-label={t("放大")}
+            title={t("放大")}
+            disabled={zoom >= ZOOM_MAX}
+            onClick={() => setZoom((value) => clampZoom(value + ZOOM_STEP))}
+          >
+            <Icon name="zoom-in" />
+          </button>
+          <button
+            type="button"
+            className="button small ghost"
+            disabled={zoom === 1}
+            onClick={() => setZoom(1)}
+          >
+            {t("适配宽度")}
+          </button>
+        </div>
+      )}
+      <div className={`pdf-viewer${invert ? " pdf-invert" : ""}`} ref={scrollRef}>
+        {progress === 0 && <p className="placeholder">{t("正在加载 PDF…")}</p>}
+        <div className="pdf-pages" ref={pagesRef} style={{ width: `${zoom * 100}%` }}>
+          {slots.map((slot) => (
+            <div
+              key={slot.pageNumber}
+              className="pdf-page"
+              data-page={slot.pageNumber}
+              style={{
+                aspectRatio: `${1 / slot.ratio}`,
+                maxWidth: Math.round(PAGE_MAX_WIDTH * zoom),
+              }}
+            >
+              <span className="pdf-page-label">{slot.pageNumber}</span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

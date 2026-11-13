@@ -104,7 +104,7 @@ export function SettingsDialog({
                 <input
                   type="number"
                   min={30}
-                  max={300}
+                  max={1000}
                   step={5}
                   value={draft.appearance.lineWidth}
                   onChange={(event) => patch("appearance", { lineWidth: Number(event.target.value) })}
@@ -156,6 +156,96 @@ export function SettingsDialog({
                 <option value="crlf">CRLF</option>
               </select>
             </label>
+          </section>
+
+          <section className="settings-group">
+            <h3>{t("数学")}</h3>
+            <label className="settings-row">
+              <span>{t("KaTeX 宏定义")}</span>
+              <textarea
+                className="settings-textarea"
+                rows={4}
+                spellCheck={false}
+                value={draft.math.macros}
+                placeholder={"\\Pr = \\operatorname{Pr}"}
+                onChange={(event) => patch("math", { macros: event.target.value })}
+              />
+            </label>
+            <p className="settings-note">
+              {t("每行一条，格式")} <code>\命令 = 定义</code>
+              {t("；空行与 % 注释行忽略。")}
+            </p>
+            <label className="settings-row">
+              <span>{t("单美元内联公式（$…$）")}</span>
+              <input
+                type="checkbox"
+                checked={draft.math.singleDollar}
+                onChange={(event) => patch("math", { singleDollar: event.target.checked })}
+              />
+            </label>
+            <p className="settings-note">
+              {t("关闭后仅识别 $$…$$ 与 \\(…\\)，避免货币符号被误当作公式。")}
+            </p>
+          </section>
+
+          <section className="settings-group">
+            <h3>{t("图表")}</h3>
+            <label className="settings-row">
+              <span>{t("图表主题")}</span>
+              <select
+                value={draft.diagram.theme}
+                onChange={(event) => patch("diagram", { theme: event.target.value })}
+              >
+                <option value="auto">{t("跟随系统")}</option>
+                <option value="light">{t("浅色")}</option>
+                <option value="dark">{t("深色")}</option>
+              </select>
+            </label>
+            <label className="settings-row">
+              <span>{t("内存缓存上限（条）")}</span>
+              <input
+                type="number"
+                min={10}
+                max={1000}
+                value={draft.diagram.memoryCacheLimit}
+                onChange={(event) =>
+                  patch("diagram", { memoryCacheLimit: Number(event.target.value) })
+                }
+              />
+            </label>
+          </section>
+
+          <section className="settings-group">
+            <h3>{t("LaTeX")}</h3>
+            <label className="settings-row">
+              <span>{t("引擎命令")}</span>
+              <input
+                type="text"
+                className="settings-text"
+                value={draft.latex.engineCommand}
+                placeholder={t("tectonic / latexmk / xelatex 或绝对路径")}
+                onChange={(event) => patch("latex", { engineCommand: event.target.value })}
+              />
+            </label>
+            <p className="settings-note">
+              {t("为空时按 Tectonic → latexmk → xelatex 自动探测；可填绝对路径。")}
+            </p>
+            <label className="settings-row">
+              <span>{t("编译超时（秒）")}</span>
+              <input
+                type="number"
+                min={10}
+                max={1800}
+                step={10}
+                value={draft.latex.timeoutSeconds}
+                onChange={(event) =>
+                  patch("latex", { timeoutSeconds: Number(event.target.value) })
+                }
+              />
+            </label>
+            <p className="settings-note">
+              {t("Tectonic 首次编译需下载宏包，超时会自动放宽到至少 600 秒。")}
+            </p>
           </section>
 
           <section className="settings-group">

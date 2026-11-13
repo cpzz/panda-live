@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { clearPreviewDiff, applyPreviewDiff, type PreviewDiffModel } from "../diff/preview";
 import { renderPreviewDiagrams } from "../render/markdown/diagram-preview";
 import { highlightCodeBlocks } from "../render/code-highlight";
+import { settingsStore } from "../services/settings-store";
 import { onThemeChange, resolveTheme, type AppTheme } from "../services/theme";
 import type { DiffViewMode } from "../shared/diff";
 import { t } from "../i18n";
@@ -110,6 +111,11 @@ export function RenderedMarkdown({
 }: RenderedMarkdownProps) {
   const hostRef = useRef<HTMLElement>(null);
   const [theme, setTheme] = useState<AppTheme>(resolveTheme);
+  // 图表主题覆盖（auto/light/dark）变化时重跑预览增强，让图表按新主题重渲染。
+  const diagramTheme = useSyncExternalStore(
+    settingsStore.subscribe,
+    () => settingsStore.getState().diagram.theme,
+  );
 
   useEffect(() => onThemeChange(setTheme), []);
 
@@ -174,7 +180,7 @@ export function RenderedMarkdown({
     return () => {
       cancelled = true;
     };
-  }, [html, sourceKey, theme, diff]);
+  }, [html, sourceKey, theme, diagramTheme, diff]);
 
   // 页内目录：拦截 `#anchor` 链接，避免 Electron 修改 URL，改为容器内平滑滚动。
   useEffect(() => {

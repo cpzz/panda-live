@@ -3,14 +3,29 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
+import { singleDollarEnabled } from "../../services/math-settings";
 import type { MdNode } from "./mapping";
 
-/** 与 parse.ts 使用相同的语法插件，保证指令内容按 Markdown 解析。 */
-const fragmentParser = unified()
-  .use(remarkParse)
-  .use(remarkGfm)
-  .use(remarkFrontmatter, ["yaml"])
-  .use(remarkMath);
+function buildFragmentParser() {
+  return unified()
+    .use(remarkParse)
+    .use(remarkGfm)
+    .use(remarkFrontmatter, ["yaml"])
+    .use(remarkMath, { singleDollarTextMath: singleDollarEnabled() });
+}
+
+/** 与 parse.ts 使用相同的语法插件，保证指令内容按 Markdown 解析；按单美元开关缓存。 */
+let cachedParser: ReturnType<typeof buildFragmentParser> | null = null;
+let cachedSingleDollar: boolean | null = null;
+
+function getFragmentParser(): ReturnType<typeof buildFragmentParser> {
+  const singleDollar = singleDollarEnabled();
+  if (!cachedParser || cachedSingleDollar !== singleDollar) {
+    cachedParser = buildFragmentParser();
+    cachedSingleDollar = singleDollar;
+  }
+  return cachedParser;
+}
 
 type DirectiveName = "tab-set" | "tab-item" | "grid" | "grid-item";
 
@@ -44,7 +59,7 @@ function emptyParagraph(): MdNode {
  */
 function parseFragment(source: string): MdNode[] {
   try {
-    const root = fragmentParser.parse(source) as unknown as MdNode;
+    const root = getFragmentParser().parse(source) as unknown as MdNode;
     const children = root.children ?? [];
     annotate(children, source);
     return expandChildren(children);

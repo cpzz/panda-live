@@ -9,7 +9,7 @@ export interface DiagramCacheStorage {
 export class LruCache<T> {
   private readonly entries = new Map<string, T>();
 
-  constructor(private readonly capacity: number) {}
+  constructor(private capacity: number) {}
 
   get size(): number {
     return this.entries.size;
@@ -40,6 +40,16 @@ export class LruCache<T> {
   clear(): void {
     this.entries.clear();
   }
+
+  /** 运行中调整容量（设置变更）；保留现有条目，超出立即淘汰。 */
+  setCapacity(capacity: number): void {
+    this.capacity = Math.max(1, capacity);
+    while (this.entries.size > this.capacity) {
+      const oldest = this.entries.keys().next().value;
+      if (oldest === undefined) break;
+      this.entries.delete(oldest);
+    }
+  }
 }
 
 const MEMORY_CAPACITY = 100;
@@ -54,11 +64,21 @@ export interface DiagramCacheStats {
 
 /** 两级缓存：内存优先，未命中再查持久层；持久层失败不影响渲染。 */
 export class DiagramCache {
-  private readonly memory = new LruCache<string>(MEMORY_CAPACITY);
+  private readonly memory: LruCache<string>;
   private hits = 0;
   private misses = 0;
 
-  constructor(private readonly storage?: DiagramCacheStorage) {}
+  constructor(
+    private readonly storage?: DiagramCacheStorage,
+    memoryCapacity: number = MEMORY_CAPACITY,
+  ) {
+    this.memory = new LruCache<string>(memoryCapacity);
+  }
+
+  /** 设置变更时调整内存缓存上限；保留现有条目。 */
+  setMemoryCapacity(capacity: number): void {
+    this.memory.setCapacity(capacity);
+  }
 
   stats(): DiagramCacheStats {
     return { hits: this.hits, misses: this.misses, entries: this.memory.size };

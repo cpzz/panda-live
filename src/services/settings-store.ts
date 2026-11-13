@@ -57,6 +57,8 @@ export class SettingsStore {
   }
 
   private apply(): void {
+    // Node 环境（单元测试）无 DOM，跳过 CSS 应用。
+    if (typeof document === "undefined") return;
     const root = document.documentElement;
     const { theme, fontSize, lineWidth } = this.state.appearance;
     const dark = theme === "dark" || (theme === "system" && this.systemDarkQuery?.matches);

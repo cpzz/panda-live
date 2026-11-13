@@ -161,6 +161,8 @@ export interface SessionDocumentState {
   mode: EditorMode;
   cursor?: { line: number; column: number };
   scrollTop?: number;
+  /** 折叠起始行号列表（源码编辑器折叠状态）。见 doc/design.md §21.6。 */
+  folds?: number[];
 }
 
 /** 工作区状态：可同时打开多个根目录。见 doc/design.md §12.5。 */
@@ -292,6 +294,7 @@ const SessionSchema = z.object({
       mode: EditorModeSchema,
       cursor: CursorSchema.optional(),
       scrollTop: z.number().optional(),
+      folds: z.array(z.number().int().min(1)).optional(),
     }),
   ),
   activeIndex: z.number().int().min(0),

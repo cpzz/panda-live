@@ -40,13 +40,42 @@ function packagedTectonicPath(): string | null {
   return existsSync(binary) ? binary : null;
 }
 
-/** 探测可用 TeX 引擎；优先级 Tectonic → latexmk → xelatex → 内置 Tectonic。见 doc/design.md §9.5。 */
-export function detectEngines(): EngineInfo[] {
-  const candidates: Candidate[] = [
+/** 依据 `--version` 输出判定引擎类型；无法识别时返回 null（放弃该候选）。 */
+function classifyEngine(output: string): EngineId | null {
+  const text = output.toLowerCase();
+  if (text.includes("tectonic")) return "tectonic";
+  if (text.includes("latexmk")) return "latexmk";
+  if (text.includes("xetex") || text.includes("xelatex")) return "xelatex";
+  return null;
+}
+
+/**
+ * 探测可用 TeX 引擎；优先级 自定义命令 → Tectonic → latexmk → xelatex → 内置 Tectonic。
+ * 自定义命令（设置 `latex.engineCommand`）通过 `--version` 输出判定类型，
+ * 探测失败或类型不明时回落到自动探测。见 doc/design.md §9.5、§15.3。
+ */
+export function detectEngines(customCommand?: string): EngineInfo[] {
+  const candidates: Candidate[] = [];
+
+  const command = (customCommand ?? "").trim();
+  if (command) {
+    const probe = spawnSync(command, ["--version"], {
+      encoding: "utf8",
+      timeout: 5_000,
+      windowsHide: true,
+    });
+    const output = `${probe.stdout ?? ""}\n${probe.stderr ?? ""}`;
+    const id = classifyEngine(output);
+    if (!probe.error && probe.status === 0 && id) {
+      candidates.push({ id, command, versionArgs: id === "latexmk" ? ["-v"] : ["--version"] });
+    }
+  }
+
+  candidates.push(
     { id: "tectonic", command: "tectonic", versionArgs: ["--version"] },
     { id: "latexmk", command: "latexmk", versionArgs: ["-v"] },
     { id: "xelatex", command: "xelatex", versionArgs: ["--version"] },
-  ];
+  );
   const packaged = packagedTectonicPath();
   if (packaged) {
     candidates.push({ id: "tectonic", command: packaged, versionArgs: ["--version"] });

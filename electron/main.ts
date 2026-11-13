@@ -21,7 +21,6 @@ import { SettingsService } from "./services/settings-service";
 import { UpdateService } from "./services/update-service";
 import { WorkspaceService } from "./services/workspace-service";
 import { TexCompiler } from "./tex/compiler";
-import { detectEngines } from "./tex/engine";
 import { cleanupCompileDirs } from "./tex/pdf-cache";
 import { APP_OPEN_PATH_CHANNEL, FS_CHANGED_CHANNEL } from "../src/shared/events";
 import { resolveLocale, setLocale, t } from "../src/i18n";
@@ -277,7 +276,8 @@ async function bootstrap(): Promise<void> {
   );
   registerExportHandlers({ exports: new ExportService(() => mainWindow, userDataDir), getWindow: () => mainWindow });
   registerLatexHandlers({
-    compiler: new TexCompiler(files, userDataDir, () => detectEngines()),
+    compiler: new TexCompiler(files, userDataDir, () => settings.get().latex),
+    engineCommand: () => settings.get().latex.engineCommand,
   });
   buildMenu();
   // 系统主题切换时同步标题栏按钮配色。
@@ -286,6 +286,21 @@ async function bootstrap(): Promise<void> {
   });
 
   const saved = await session.load();
+  // 允许根是进程内状态，重启后为空；按会话恢复登记，标签与工作区才能重新打开。
+  // session.json 位于用户数据目录，由应用自身写入，登记其中的路径与上次授权一致。
+  if (saved) {
+    for (const doc of saved.documents) {
+      if (doc.path) await files.registerPath(doc.path).catch(() => undefined);
+    }
+    const workspaceRoots =
+      saved.workspace?.roots ??
+      (saved.workspace?.rootPath
+        ? [{ rootPath: saved.workspace.rootPath, expanded: saved.workspace.expanded ?? [] }]
+        : []);
+    for (const root of workspaceRoots) {
+      await files.registerRoot(root.rootPath).catch(() => undefined);
+    }
+  }
   createWindow(saved?.window);
   // 启动参数（文件关联）先入队，渲染进程就绪后通过 IPC 取走。
   pendingOpenPaths.push(...extractOpenPaths(process.argv.slice(1)));

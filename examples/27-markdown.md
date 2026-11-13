@@ -32,6 +32,23 @@ export function greet(name: string): string {
 - [x] 支持自动缩进
 - [ ] 支持更多语言
 
+## 图表
+
+PlantUML 围栏代码块（渲染管线时序图）：
+
+```plantuml
+@startuml
+actor 用户
+participant "编辑器" as Editor
+participant "渲染管线" as Pipeline
+
+用户 -> Editor: 输入内容
+Editor -> Pipeline: 防抖重渲染
+Pipeline --> Editor: HTML / SVG
+Editor --> 用户: 分栏预览
+@enduml
+```
+
 ## 公式
 
 行内公式 $a^2 + b^2 = c^2$。

@@ -46,6 +46,8 @@ export interface DocumentState {
   /** 当前文件监听句柄。 */
   watchId: string | null;
   cursor?: { line: number; column: number };
+  /** 源码编辑器折叠起始行号列表；随会话持久化。见 doc/design.md §21.6。 */
+  folds?: number[];
 }
 
 export interface Notice {
@@ -240,6 +242,21 @@ export class DocumentManager {
     if (!doc) return;
     if (doc.cursor?.line === cursor.line && doc.cursor?.column === cursor.column) return;
     this.patchDocument(id, () => ({ cursor }));
+  }
+
+  /** 源码模式的折叠行号列表，用于会话恢复。见 doc/design.md §21.6。 */
+  updateFolds(id: string, folds: number[]): void {
+    const doc = this.findDocument(id);
+    if (!doc) return;
+    if (folds.length === 0 && !doc.folds) return;
+    if (
+      doc.folds &&
+      doc.folds.length === folds.length &&
+      doc.folds.every((line, index) => line === folds[index])
+    ) {
+      return;
+    }
+    this.patchDocument(id, () => ({ folds: folds.length > 0 ? folds : undefined }));
   }
 
   /** 供导出等外部流程复用提示条。 */
@@ -526,6 +543,7 @@ export class DocumentManager {
       if (doc) {
         this.patchDocument(doc.id, () => ({
           cursor: entry.cursor,
+          folds: entry.folds,
         }));
       }
     }
@@ -600,6 +618,7 @@ export class DocumentManager {
         path: doc.path,
         mode: args.mode,
         cursor: doc.cursor,
+        folds: doc.folds,
       })),
       activeIndex: Math.max(
         0,

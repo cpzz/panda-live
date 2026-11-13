@@ -34,7 +34,7 @@ describe("设置合并", () => {
     expect(mergeSettings({ appearance: { lineWidth: 120 } }).appearance).toMatchObject({
       lineWidth: 120,
     });
-    expect(mergeSettings({ appearance: { lineWidth: 320 } }).appearance.lineWidth).toBe(300);
+    expect(mergeSettings({ appearance: { lineWidth: 1200 } }).appearance.lineWidth).toBe(1000);
     expect(mergeSettings({ appearance: { lineWidth: 10 } }).appearance.lineWidth).toBe(30);
     expect(
       mergeSettings({ appearance: { lineWidth: 860, lineWidthUnit: "px" } }).appearance,
@@ -61,10 +61,47 @@ describe("设置合并", () => {
 
   it("补丁按分组深度合并", () => {
     const base = mergeSettings({ appearance: { fontSize: 18, theme: "dark" } });
-    const patched = patchSettings(base, { appearance: { lineWidth: 700 }, editor: { autoSave: false } });
+    const patched = patchSettings(base, { appearance: { lineWidth: 2000 }, editor: { autoSave: false } });
     expect(patched.appearance.fontSize).toBe(18);
     expect(patched.appearance.theme).toBe("dark");
-    expect(patched.appearance.lineWidth).toBe(300);
+    expect(patched.appearance.lineWidth).toBe(1000);
     expect(patched.editor.autoSave).toBe(false);
+  });
+
+  it("数学分组：宏文本、单美元开关非法值回落默认", () => {
+    expect(mergeSettings(undefined).math).toEqual({
+      macros: DEFAULT_SETTINGS.math.macros,
+      singleDollar: true,
+    });
+    expect(mergeSettings({ math: { macros: 42, singleDollar: "yes" } }).math).toEqual({
+      macros: DEFAULT_SETTINGS.math.macros,
+      singleDollar: true,
+    });
+    expect(mergeSettings({ math: { singleDollar: false } }).math.singleDollar).toBe(false);
+    const longText = "x".repeat(9_000);
+    expect(mergeSettings({ math: { macros: longText } }).math.macros.length).toBe(8_000);
+  });
+
+  it("图表分组：主题枚举与缓存上限范围", () => {
+    expect(mergeSettings(undefined).diagram).toEqual({ theme: "auto", memoryCacheLimit: 100 });
+    expect(mergeSettings({ diagram: { theme: "sepia", memoryCacheLimit: 5 } }).diagram).toEqual({
+      theme: "auto",
+      memoryCacheLimit: 10,
+    });
+    expect(mergeSettings({ diagram: { theme: "dark", memoryCacheLimit: 5_000 } }).diagram).toEqual({
+      theme: "dark",
+      memoryCacheLimit: 1000,
+    });
+  });
+
+  it("LaTeX 分组：引擎命令去空白、超时范围", () => {
+    expect(mergeSettings(undefined).latex).toEqual({ engineCommand: "", timeoutSeconds: 60 });
+    expect(mergeSettings({ latex: { engineCommand: "  wsl xelatex " } }).latex).toEqual({
+      engineCommand: "wsl xelatex",
+      timeoutSeconds: 60,
+    });
+    expect(mergeSettings({ latex: { timeoutSeconds: 1 } }).latex.timeoutSeconds).toBe(10);
+    expect(mergeSettings({ latex: { timeoutSeconds: 99_999 } }).latex.timeoutSeconds).toBe(1800);
+    expect(mergeSettings({ latex: { timeoutSeconds: 300 } }).latex.timeoutSeconds).toBe(300);
   });
 });

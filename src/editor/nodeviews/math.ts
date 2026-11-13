@@ -3,6 +3,7 @@ import type { Node as PMNode } from "prosemirror-model";
 import { t } from "../../i18n";
 import type { EditorView, NodeView } from "prosemirror-view";
 import { extractMathml, renderKatex } from "../../render/math/katex";
+import { katexMacros } from "../../services/math-settings";
 import { problemStore } from "../../services/problem-store";
 import { copyText } from "../../utils/clipboard";
 
@@ -55,7 +56,7 @@ export class MathNodeView implements NodeView {
 
   private render(): void {
     const source = String(this.node.attrs.source ?? "");
-    const result = renderKatex(source, this.displayMode);
+    const result = renderKatex(source, this.displayMode, { macros: katexMacros() });
     if (result.ok) {
       this.dom.innerHTML = DOMPurify.sanitize(result.html, KATEX_PROFILE);
       this.dom.classList.remove("math-node-error");
@@ -106,7 +107,7 @@ export class MathNodeView implements NodeView {
       copyButton.textContent = t("复制 MathML");
       copyButton.addEventListener("mousedown", (event) => event.preventDefault());
       copyButton.addEventListener("click", () => {
-        const mathml = extractMathml(field.value, this.displayMode);
+        const mathml = extractMathml(field.value, this.displayMode, { macros: katexMacros() });
         if (!mathml) {
           this.dom.title = t("公式无法生成 MathML");
           return;

@@ -4,6 +4,7 @@ import { renderMarkdownToHtml } from "../formats/markdown/preview";
 import { parseMarkdown } from "../formats/markdown/parse";
 import { buildOutline, type OutlineItem } from "../formats/outline";
 import { EMPTY_PROBLEMS, problemStore, type Problem } from "../services/problem-store";
+import { mathOptionsSignature } from "../services/math-settings";
 import { getFormatEntry, refreshExtensionFormats } from "../extensions/registry";
 import { sanitizeHtml } from "../render/html";
 import { RenderedMarkdown } from "./RenderedMarkdown";
@@ -18,6 +19,7 @@ import { SourceEditor, type DiffLineMarker, type SelectionInfo, type SourceLangu
 import { sourceLanguageForFormat } from "../source/language";
 import { renderMathml } from "../render/math/mathml";
 import {
+  applyDiagramMemoryLimit,
   currentDiagramTheme,
   getDiagramService,
   onDiagramThemeChange,
@@ -110,6 +112,7 @@ function SourcePane({
   diffMarkers,
   onChange,
   onSelection,
+  onFolds,
 }: {
   document: DocumentState;
   mode: EditorMode;
@@ -120,20 +123,33 @@ function SourcePane({
   diffMarkers: readonly DiffLineMarker[];
   onChange(content: string): void;
   onSelection(info: SelectionInfo): void;
+  onFolds(lines: number[]): void;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<SourceEditor | null>(null);
   const savedRef = useRef(new Map<string, SavedEditorState>());
   const cursorRef = useRef(document.cursor);
   cursorRef.current = document.cursor;
+  const foldsRef = useRef(document.folds);
+  foldsRef.current = document.folds;
+  const appliedFoldsRef = useRef<string | null>(null);
+
+  /** 把已保存的折叠行应用到编辑器（创建或切换标签重建时）。 */
+  const applySavedFolds = (): void => {
+    const editor = editorRef.current;
+    const folds = foldsRef.current;
+    if (!editor || !folds || folds.length === 0) return;
+    appliedFoldsRef.current = folds.join(",");
+    editor.setFolds(folds);
+  };
   const lastRef = useRef<{
     id: string;
     revision: number;
     mode: EditorMode;
     language: SourceLanguage;
   } | null>(null);
-  const callbacksRef = useRef({ onChange, onSelection });
-  callbacksRef.current = { onChange, onSelection };
+  const callbacksRef = useRef({ onChange, onSelection, onFolds });
+  callbacksRef.current = { onChange, onSelection, onFolds };
   const diffMarkersRef = useRef(diffMarkers);
   diffMarkersRef.current = diffMarkers;
   const [gotoOpen, setGotoOpen] = useState(false);
@@ -159,6 +175,16 @@ function SourcePane({
     if (!jump) return;
     editorRef.current?.setCursor({ line: jump.line, column: jump.column });
   }, [jump]);
+
+  // 会话恢复：折叠数据可能在编辑器创建后经 patchDocument 才到位，单独响应。
+  useEffect(() => {
+    const folds = document.folds;
+    if (!folds || folds.length === 0) return;
+    const key = folds.join(",");
+    if (appliedFoldsRef.current === key || !editorRef.current) return;
+    appliedFoldsRef.current = key;
+    editorRef.current.setFolds(folds);
+  }, [document.folds]);
 
   // 设置变更即时应用到现有编辑器。
   useEffect(() => {
@@ -205,9 +231,11 @@ function SourcePane({
         showLineNumbers,
         onChange: (content) => callbacksRef.current.onChange(content),
         onSelection: (info) => callbacksRef.current.onSelection(info),
+        onFolds: (lines) => callbacksRef.current.onFolds(lines),
       });
       editorRef.current = editor;
       if (cursorRef.current) editor.setCursor(cursorRef.current);
+      applySavedFolds();
     } else {
       const previous = lastRef.current;
       if (previous && previous.id !== document.id) {
@@ -222,6 +250,7 @@ function SourcePane({
         } else {
           editor.reset(document.content, document.readOnly, language);
           if (cursorRef.current) editor.setCursor(cursorRef.current);
+          applySavedFolds();
         }
         savedRef.current.delete(document.id);
       } else if (
@@ -590,6 +619,7 @@ function PreviewPane({
   enabled,
   compileSignal,
   diff,
+  mathKey,
   onDiffModeChange,
   onDiffJump,
 }: {
@@ -597,6 +627,8 @@ function PreviewPane({
   enabled: boolean;
   compileSignal: number;
   diff: PreviewDiffModel | null;
+  /** 数学设置签名（宏 + 单美元）；变化时用新设置重渲染预览。 */
+  mathKey: string;
   onDiffModeChange(mode: DiffViewMode): void;
   onDiffJump(line: number): void;
 }) {
@@ -624,7 +656,7 @@ function PreviewPane({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [document.content, supported, enabled, annotate]);
+  }, [document.content, supported, enabled, annotate, mathKey]);
 
   const entry = getFormatEntry(document.format);
   if (entry?.extensionId) {
@@ -686,6 +718,11 @@ export function App() {
     }
   }, [settings.appearance.language]);
 
+  // 图表内存缓存上限跟随设置即时生效（服务已创建时调整容量）。
+  useEffect(() => {
+    applyDiagramMemoryLimit();
+  }, [settings.diagram.memoryCacheLimit]);
+
   // 内容宽度：状态栏弹层滑块、Ctrl+滚轮与 Ctrl +/- 统一按百分比调整。
   const widthPercent = settings.appearance.lineWidth;
   const [widthDraft, setWidthDraft] = useState(widthPercent);
@@ -695,7 +732,7 @@ export function App() {
   widthDraftRef.current = widthDraft;
   const widthTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const applyContentWidth = (value: number, immediate = false): void => {
-    const next = Math.min(300, Math.max(30, Math.round(value / 5) * 5));
+    const next = Math.min(1000, Math.max(30, Math.round(value / 5) * 5));
     setWidthDraft(next);
     if (widthTimerRef.current) clearTimeout(widthTimerRef.current);
     const commit = (): void => {
@@ -2032,6 +2069,7 @@ export function App() {
                   setCursor(info);
                   manager.updateCursor(active.id, info);
                 }}
+                onFolds={(lines) => manager.updateFolds(active.id, lines)}
               />
             </section>
             {state.mode === "split" && !activeIsPdf && (
@@ -2058,6 +2096,7 @@ export function App() {
                 enabled={(state.mode === "split" || state.mode === "preview") && !activeIsPdf}
                 compileSignal={compileSignal}
                 diff={previewDiff}
+                mathKey={mathOptionsSignature()}
                 onDiffModeChange={(mode) => updateDiffOption(active.id, { mode })}
                 onDiffJump={(line) => {
                   if (state.mode === "preview") manager.setMode("source");
@@ -2231,7 +2270,7 @@ export function App() {
                 type="range"
                 className="statusbar-width-range"
                 min={30}
-                max={300}
+                max={1000}
                 step={5}
                 value={widthDraft}
                 aria-label={t("内容宽度")}

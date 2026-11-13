@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { renderKatex } from "../../src/render/math/katex";
+import { parseKatexMacros, renderKatex } from "../../src/render/math/katex";
 import { parseMarkdown } from "../../src/formats/markdown/parse";
 import { serializeMarkdown } from "../../src/formats/markdown/serialize";
+import { settingsStore } from "../../src/services/settings-store";
+import { DEFAULT_SETTINGS } from "../../src/shared/settings";
 import type { PMJson } from "../../src/editor/schema";
 
 function topBlockTypes(doc: PMJson): string[] {
@@ -46,6 +48,48 @@ describe("数学公式", () => {
   it("非法公式返回错误而不抛异常", () => {
     const result = renderKatex("\\badcommand{", false);
     expect(result.ok).toBe(false);
+  });
+
+  it("宏文本解析：等号/冒号分隔，忽略空行与注释，非法行跳过", () => {
+    const macros = parseKatexMacros(
+      [
+        "% 注释行",
+        "# 另一种注释",
+        "",
+        "\\RR = \\mathbb{R}",
+        "\\NN : \\mathbb{N}",
+        "没有反斜杠 = 1",
+        "\\x", // 无定义
+      ].join("\n"),
+    );
+    expect(macros).toEqual({ "\\RR": "\\mathbb{R}", "\\NN": "\\mathbb{N}" });
+    expect(parseKatexMacros("")).toEqual({});
+  });
+
+  it("自定义宏参与渲染：未定义时报错，定义后成功且缓存键区分", () => {
+    expect(renderKatex("\\RR", false).ok).toBe(false);
+    const withMacro = renderKatex("\\RR", false, { macros: parseKatexMacros("\\RR = \\mathbb{R}") });
+    expect(withMacro.ok).toBe(true);
+    // 同宏重复命中缓存成功；改回无宏后仍报错（缓存键区分宏）。
+    expect(renderKatex("\\RR", false, { macros: parseKatexMacros("\\RR = \\mathbb{R}") }).ok).toBe(true);
+    expect(renderKatex("\\RR", false).ok).toBe(false);
+  });
+
+  it("设置生效：关闭单美元后 $…$ 不再解析，$$ 与宏仍可用", async () => {
+    try {
+      await settingsStore.update({
+        math: { singleDollar: false, macros: "\\RR = \\mathbb{R}" },
+      });
+      const { doc } = parseMarkdown("价格 $5 与 $6\n\n$$\n\\RR\n$$\n");
+      const paragraph = doc.content?.[0];
+      expect(paragraph?.content?.some((child) => child.type === "math_inline")).toBe(false);
+      expect(topBlockTypes(doc)).toContain("math_block");
+    } finally {
+      // 恢复默认，避免影响其他用例（模块级设置单例）。
+      await settingsStore.update({
+        math: { singleDollar: DEFAULT_SETTINGS.math.singleDollar, macros: DEFAULT_SETTINGS.math.macros },
+      });
+    }
   });
 
   it("不受信任的指令被拒绝（无脚本执行）", () => {

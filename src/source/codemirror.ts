@@ -33,6 +33,11 @@ import {
   indentUnit,
   syntaxHighlighting,
   syntaxTree,
+  foldable,
+  foldEffect,
+  foldState,
+  unfoldEffect,
+  type Language,
 } from "@codemirror/language";
 import { closeSearchPanel, openSearchPanel, search } from "@codemirror/search";
 import {
@@ -63,7 +68,7 @@ import {
   type DecorationSet,
 } from "@codemirror/view";
 import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from "@codemirror/autocomplete";
-import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
+import { defaultKeymap, history, historyKeymap, copyLineDown, copyLineUp, moveLineDown, moveLineUp } from "@codemirror/commands";
 import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
 import { lintKeymap } from "@codemirror/lint";
 import { tags } from "@lezer/highlight";
@@ -197,66 +202,118 @@ const diffExtension: Extension = [
 /** 语言标识 → CodeMirror 语言扩展；未知语言退化为纯文本。 */
 function languageExtension(language: SourceLanguage): Extension {
   switch (language) {
-    case "markdown":
-      return [markdown(), markdownFolding];
+    case "markdown": {
+      const lang = markdown();
+      return [lang, markdownFolding, commentTokensData(lang, language)];
+    }
     case "xml":
-      return xml();
+      return [xml(), commentTokensData(xml(), language)];
     case "html":
-      return html();
+      return [html(), commentTokensData(html(), language)];
     case "css":
-      return css();
+      return [css(), commentTokensData(css(), language)];
     case "cpp":
-      return cpp();
+      return [cpp(), commentTokensData(cpp(), language)];
     case "java":
-      return java();
-    case "javascript":
-      return javascript({ jsx: true, typescript: true });
+      return [java(), commentTokensData(java(), language)];
+    case "javascript": {
+      const lang = javascript({ jsx: true, typescript: true });
+      return [lang, commentTokensData(lang, language)];
+    }
     case "json":
       return json();
     case "yaml":
-      return yaml();
+      return [yaml(), commentTokensData(yaml(), language)];
     case "python":
-      return python();
+      return [python(), commentTokensData(python(), language)];
     case "sql":
-      return sql();
+      return [sql(), commentTokensData(sql(), language)];
     case "php":
-      return php();
+      return [php(), commentTokensData(php(), language)];
     case "rust":
-      return rust();
+      return [rust(), commentTokensData(rust(), language)];
     // 其余主流语言复用 CodeMirror 5 的流式解析模式；没有语法树折叠属性，按缩进兜底折叠。
     case "csharp":
-      return [StreamLanguage.define(csharp), indentFoldFallback];
+      return streamLanguage(csharp, language);
     case "go":
-      return [StreamLanguage.define(go), indentFoldFallback];
+      return streamLanguage(go, language);
     case "ruby":
-      return [StreamLanguage.define(ruby), indentFoldFallback];
+      return streamLanguage(ruby, language);
     case "kotlin":
-      return [StreamLanguage.define(kotlin), indentFoldFallback];
+      return streamLanguage(kotlin, language);
     case "swift":
-      return [StreamLanguage.define(swift), indentFoldFallback];
+      return streamLanguage(swift, language);
     case "r":
-      return [StreamLanguage.define(r), indentFoldFallback];
+      return streamLanguage(r, language);
     case "scala":
-      return [StreamLanguage.define(scala), indentFoldFallback];
+      return streamLanguage(scala, language);
     case "shell":
-      return [StreamLanguage.define(shell), indentFoldFallback];
+      return streamLanguage(shell, language);
     case "dart":
-      return [StreamLanguage.define(dart), indentFoldFallback];
+      return streamLanguage(dart, language);
     case "lua":
-      return [StreamLanguage.define(lua), indentFoldFallback];
+      return streamLanguage(lua, language);
     case "perl":
-      return [StreamLanguage.define(perl), indentFoldFallback];
+      return streamLanguage(perl, language);
     case "objectivec":
-      return [StreamLanguage.define(objectiveC), indentFoldFallback];
+      return streamLanguage(objectiveC, language);
     case "stex":
-      return [StreamLanguage.define(stex), stexFolding, indentFoldFallback];
+      return [...streamLanguage(stex, language), stexFolding];
     case "ini":
-      return [StreamLanguage.define(iniStreamParser), indentFoldFallback];
+      return streamLanguage(iniStreamParser, language);
     case "toml":
-      return [StreamLanguage.define(toml), indentFoldFallback];
+      return streamLanguage(toml, language);
     default:
       return [];
   }
+}
+
+/** 注释切换（Mod-/）使用的注释符；按语言附加到语言数据。见 doc/design.md §11.4。 */
+interface CommentTokens {
+  line?: string;
+  block?: { open: string; close: string };
+}
+
+const COMMENT_TOKENS: Partial<Record<SourceLanguage, CommentTokens>> = {
+  cpp: { line: "//", block: { open: "/*", close: "*/" } },
+  csharp: { line: "//", block: { open: "/*", close: "*/" } },
+  java: { line: "//", block: { open: "/*", close: "*/" } },
+  javascript: { line: "//", block: { open: "/*", close: "*/" } },
+  kotlin: { line: "//", block: { open: "/*", close: "*/" } },
+  swift: { line: "//", block: { open: "/*", close: "*/" } },
+  scala: { line: "//", block: { open: "/*", close: "*/" } },
+  objectivec: { line: "//", block: { open: "/*", close: "*/" } },
+  dart: { line: "//", block: { open: "/*", close: "*/" } },
+  go: { line: "//", block: { open: "/*", close: "*/" } },
+  rust: { line: "//", block: { open: "/*", close: "*/" } },
+  php: { line: "//", block: { open: "/*", close: "*/" } },
+  sql: { line: "--" },
+  css: { block: { open: "/*", close: "*/" } },
+  html: { block: { open: "<!--", close: "-->" } },
+  xml: { block: { open: "<!--", close: "-->" } },
+  markdown: { block: { open: "<!--", close: "-->" } },
+  python: { line: "#" },
+  r: { line: "#" },
+  ruby: { line: "#" },
+  perl: { line: "#" },
+  shell: { line: "#" },
+  yaml: { line: "#" },
+  toml: { line: "#" },
+  ini: { line: "#" },
+  lua: { line: "--" },
+  stex: { line: "%" },
+};
+
+/** 把注释符数据附加到语言实例（Lezer 或 StreamLanguage 均实现 Language.data）。 */
+function commentTokensData(extension: Extension & { language?: Language }, language: SourceLanguage): Extension {
+  const tokens = COMMENT_TOKENS[language];
+  const target = (extension as { language?: Language }).language ?? (extension as unknown as Language);
+  return tokens ? target.data.of({ commentTokens: tokens }) : [];
+}
+
+function streamLanguage(mode: Parameters<typeof StreamLanguage.define>[0], language: SourceLanguage): Extension[] {
+  const lang = StreamLanguage.define(mode);
+  return [lang, commentTokensData(lang, language), indentFoldFallback];
 }
 
 /**
@@ -367,6 +424,8 @@ export interface SourceEditorOptions {
   showLineNumbers?: boolean;
   onChange(content: string): void;
   onSelection(info: SelectionInfo): void;
+  /** 折叠状态变化（展开/折叠）；用于会话持久化。见 doc/design.md §21.6。 */
+  onFolds?(lines: number[]): void;
 }
 
 const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -486,6 +545,42 @@ const pandaTheme = EditorView.theme(
 const FOLD_CHEVRON =
   '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>';
 
+/** 注释切换（Mod-/）：行注释优先；只有块注释符的语言包裹选中行。见 doc/design.md §11.4。 */
+function toggleCommentCommand(view: EditorView): boolean {
+  const state = view.state;
+  const changes: { from: number; insert: string; to?: number }[] = [];
+  const handled = new Set<number>();
+  for (const range of state.selection.ranges) {
+    const fromLine = state.doc.lineAt(range.from).number;
+    const toLine = state.doc.lineAt(range.to).number;
+    for (let number = fromLine; number <= toLine; number += 1) {
+      if (handled.has(number)) continue;
+      handled.add(number);
+      const line = state.doc.line(number);
+      if (!line.text.trim()) continue;
+      const tokens = state.languageDataAt<CommentTokens>("commentTokens", line.from)[0] ?? {};
+      const trimmed = line.text.trimStart();
+      const indentLength = line.text.length - trimmed.length;
+      if (tokens.line && trimmed.startsWith(tokens.line)) {
+        // 取消行注释（连同其后一个空格）。
+        const start = line.from + indentLength;
+        const end = state.doc.sliceString(start + tokens.line.length, start + tokens.line.length + 1) === " "
+          ? start + tokens.line.length + 1
+          : start + tokens.line.length;
+        changes.push({ from: start, to: end, insert: "" });
+      } else if (tokens.line) {
+        changes.push({ from: line.from + indentLength, insert: `${tokens.line} ` });
+      } else if (tokens.block) {
+        changes.push({ from: line.from, insert: `${tokens.block.open} ` });
+        changes.push({ from: line.to, insert: ` ${tokens.block.close}` });
+      }
+    }
+  }
+  if (changes.length === 0) return false;
+  view.dispatch({ changes });
+  return true;
+}
+
 /**
  * 显式基础扩展集：复制 CodeMirror basicSetup 并定制折叠 gutter（VS Code 风格箭头）。
  * 不能与 basicSetup 叠加使用——basicSetup 已内置 foldGutter，叠加会出现两条折叠槽。
@@ -516,6 +611,14 @@ const pandaSetup: Extension[] = [
     ...foldKeymap,
     ...completionKeymap,
     ...lintKeymap,
+  ]),
+  // 效率键位（FR-14，VS Code 默认键位）：Mod-/ 注释切换；Alt+↑/↓ 移动行；Shift+Alt+↑/↓ 复制行。
+  keymap.of([{ key: "Mod-/", run: toggleCommentCommand }]),
+  keymap.of([
+    { key: "Alt-ArrowUp", run: moveLineUp },
+    { key: "Alt-ArrowDown", run: moveLineDown },
+    { key: "Shift-Alt-ArrowUp", run: copyLineUp },
+    { key: "Shift-Alt-ArrowDown", run: copyLineDown },
   ]),
 ];
 
@@ -572,6 +675,13 @@ export class SourceEditor {
     this.tabSize = options.tabSize ?? 2;
     this.showLineNumbers = options.showLineNumbers ?? true;
     this.updateListener = EditorView.updateListener.of((update) => {
+      // 折叠/展开随事务出现；逐事务检查是否包含折叠效果。
+      for (const tr of update.transactions) {
+        if (tr.effects.some((effect) => effect.is(foldEffect) || effect.is(unfoldEffect))) {
+          if (!this.suppressChange) options.onFolds?.(this.getFolds());
+          break;
+        }
+      }
       if (update.docChanged && !this.suppressChange) {
         options.onChange(update.state.doc.toString());
       }
@@ -682,6 +792,41 @@ export class SourceEditor {
       scrollIntoView: true,
     });
     this.view.focus();
+  }
+
+  /** 当前折叠的起始行号列表（会话持久化）。见 doc/design.md §21.6。 */
+  getFolds(): number[] {
+    const folds = this.view.state.field(foldState, false);
+    if (!folds || folds.size === 0) return [];
+    const doc = this.view.state.doc;
+    const lines: number[] = [];
+    const cursor = folds.iter();
+    while (cursor.value) {
+      lines.push(doc.lineAt(cursor.from).number);
+      cursor.next();
+    }
+    return lines;
+  }
+
+  /** 恢复折叠状态：先全部展开，再对给定行做可折叠范围折叠。 */
+  setFolds(lines: readonly number[]): void {
+    const state = this.view.state;
+    const effects: Array<StateEffect<unknown>> = [];
+    const current = state.field(foldState, false);
+    if (current && current.size > 0) {
+      const cursor = current.iter();
+      while (cursor.value) {
+        effects.push(unfoldEffect.of({ from: cursor.from, to: cursor.to }));
+        cursor.next();
+      }
+    }
+    for (const line of lines) {
+      if (!Number.isInteger(line) || line < 1 || line > state.doc.lines) continue;
+      const lineInfo = state.doc.line(line);
+      const range = foldable(state, lineInfo.from, lineInfo.to);
+      if (range) effects.push(foldEffect.of(range));
+    }
+    if (effects.length > 0) this.view.dispatch({ effects });
   }
 
   destroy(): void {

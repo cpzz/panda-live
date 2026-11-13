@@ -23,10 +23,28 @@ function ignoredEntry(entry: DirEntry): boolean {
  * 监听时的忽略规则：目录树不展示的隐藏目录/大目录不再递归监听，
  * 避免对 `.venv` 等目录内的符号链接或无权限文件做 stat 触发 EACCES。
  * `stats` 缺失时按目录处理，优先保证不进入不可访问路径。
+ * `roots` 为用户显式监听的路径：其自身（即使以「.」开头）不被忽略。
  */
-function ignoredWatchPath(target: string, stats?: { isDirectory(): boolean }): boolean {
-  const base = path.basename(target);
+function ignoredWatchPath(
+  target: string,
+  stats: { isDirectory(): boolean } | undefined,
+  roots: ReadonlySet<string>,
+): boolean {
+  const resolved = path.resolve(target);
+  if (roots.has(resolved)) return false;
+  const base = path.basename(resolved);
   if (base.startsWith(".tmp-")) return true;
+  // 祖先目录任一为忽略目录则整体忽略：否则隐藏目录（如应用的 .dev-user-data）
+  // 内的文件仍会被逐个 watch，Windows 上与 Chromium 写 Preferences*.tmp 撞锁即 EBUSY。
+  // 显式监听的根目录所在前缀不计入祖先检查。
+  const inRoot = [...roots].find((root) => resolved.startsWith(root + path.sep));
+  const relative = inRoot ? resolved.slice(inRoot.length + 1) : resolved;
+  const ancestors = relative.split(/[\\/]/).slice(0, -1);
+  if (
+    ancestors.some((segment) => ALWAYS_IGNORED.has(segment) || (segment.startsWith(".") && segment !== "." && segment !== ".."))
+  ) {
+    return true;
+  }
   const directory = stats ? stats.isDirectory() : true;
   if (!directory) return false;
   return ALWAYS_IGNORED.has(base) || base.startsWith(".");
@@ -75,8 +93,7 @@ export class WorkspaceService {
       watcher: chokidar.watch(resolved, {
         ignoreInitial: true,
         // 用户显式打开的根目录即使以「.」开头也要监听。
-        ignored: (target, stats) =>
-          !roots.has(path.resolve(target)) && ignoredWatchPath(target, stats),
+        ignored: (target, stats) => ignoredWatchPath(target, stats, roots),
         // 不跟进符号链接：虚拟环境等目录中的链接可能指向无权限目标。
         followSymlinks: false,
       }),

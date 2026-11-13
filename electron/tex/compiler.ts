@@ -6,12 +6,18 @@ import { t } from "../../src/i18n";
 import type { CompileRequest, CompileResult, EngineInfo } from "../../src/shared/ipc";
 import type { FileService } from "../services/file-service";
 import { sha256Hex } from "../services/text-codec";
+import { detectEngines } from "./engine";
 import { parseLatexLog } from "./log-parser";
 import { prunePdfCache } from "./pdf-cache";
 
-const COMPILE_TIMEOUT_MS = 60_000;
 /** Tectonic 首次编译需联网下载宏包，放宽超时；后续编译命中缓存。 */
-const TECTONIC_TIMEOUT_MS = 600_000;
+const TECTONIC_MIN_TIMEOUT_MS = 600_000;
+
+/** LaTeX 运行时设置：来自设置分组 `latex`（引擎命令为空时自动探测）。 */
+export interface LatexRuntimeOptions {
+  engineCommand: string;
+  timeoutSeconds: number;
+}
 
 interface RunResult {
   code: number | null;
@@ -21,7 +27,7 @@ interface RunResult {
 }
 
 /**
- * TeX 编译：编译只读磁盘内容，并发 1，新任务替换旧任务，超时 60 s。
+ * TeX 编译：编译只读磁盘内容，并发 1，新任务替换旧任务，超时按设置（默认 60 s）。
  * 本实现直接把输出写到 `userData/cache/pdf/<cacheKey>.pdf`。见 doc/design.md §9.5。
  */
 export class TexCompiler {
@@ -30,8 +36,17 @@ export class TexCompiler {
   constructor(
     private readonly files: FileService,
     private readonly userDataDir: string,
-    private readonly engines: () => EngineInfo[],
+    private readonly options: () => LatexRuntimeOptions,
   ) {}
+
+  private engines(): EngineInfo[] {
+    return detectEngines(this.options().engineCommand);
+  }
+
+  private timeoutMs(engine: EngineInfo): number {
+    const ms = this.options().timeoutSeconds * 1000;
+    return engine.id === "tectonic" ? Math.max(ms, TECTONIC_MIN_TIMEOUT_MS) : ms;
+  }
 
   async compile(request: CompileRequest): Promise<CompileResult> {
     const engine = this.engines()[0];
@@ -142,7 +157,7 @@ export class TexCompiler {
       const timer = setTimeout(() => {
         timedOut = true;
         child.kill();
-      }, engine.id === "tectonic" ? TECTONIC_TIMEOUT_MS : COMPILE_TIMEOUT_MS);
+      }, this.timeoutMs(engine));
 
       this.current = {
         child,

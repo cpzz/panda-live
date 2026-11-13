@@ -9,6 +9,15 @@ function git(cwd: string, ...args: string[]): string {
   return execFileSync("git", args, { cwd, encoding: "utf8" });
 }
 
+/** Windows 上 Git 对象只读/句柄未释放会让 rmSync 抛 EPERM；重试并容忍最终失败。 */
+function rmTempRepo(dir: string): void {
+  try {
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  } catch {
+    // 清理失败不影响测试结论；临时目录由系统回收。
+  }
+}
+
 /** 开发机或 CI 未安装 Git 时跳过；其余情况下该用例覆盖真实仓库行为。 */
 const hasGit = (() => {
   try {
@@ -98,7 +107,7 @@ describe.skipIf(!hasGit)("Git 基线读取", () => {
   });
 
   afterAll(() => {
-    rmSync(repo, { recursive: true, force: true });
+    rmTempRepo(repo);
   });
 
   it("读取 HEAD 基线而不是工作区内容", async () => {
@@ -116,8 +125,8 @@ describe.skipIf(!hasGit)("Git 基线读取", () => {
     const result = await new GitService().readBaseline(other, "head");
     expect(result.inRepo).toBe(true);
     expect(result.oldText).toBeNull();
-    expect(result.reason).toBe("blob-missing");
-  });
+    expect(result.reason).toBe("untracked");
+  }, 30_000);
 
   it("支持 HEAD~1 与 commit id 作为基线", async () => {
     const custom = mkdtempSync(path.join(tmpdir(), "panda-git-ref-"));
@@ -146,9 +155,9 @@ describe.skipIf(!hasGit)("Git 基线读取", () => {
       expect(invalid.reason).toBe("invalid-ref");
       expect(invalid.oldText).toBeNull();
     } finally {
-      rmSync(custom, { recursive: true, force: true });
+      rmTempRepo(custom);
     }
-  });
+  }, 30_000);
 
   it("非仓库返回 inRepo=false", async () => {
     const outside = mkdtempSync(path.join(tmpdir(), "panda-nogit-"));

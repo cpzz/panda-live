@@ -324,6 +324,10 @@
 
 /* 数学公式（KaTeX + MathLive） */
 .prose-editor .math-node {
+  /* inline-block 让盒子完整包住 KaTeX 内容：inline 盒会被行高裁剪，
+     溢出的公式部分落在节点盒之外，指针命中会落到父级段落。 */
+  display: inline-block;
+  vertical-align: baseline;
   position: relative;
   cursor: pointer;
   border-radius: 4px;

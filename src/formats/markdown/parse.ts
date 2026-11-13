@@ -5,15 +5,31 @@ import remarkParse from "remark-parse";
 import { unified } from "unified";
 import type { PMJson } from "../../editor/schema";
 import { t } from "../../i18n";
+import { singleDollarEnabled } from "../../services/math-settings";
 import type { Diagnostic } from "../types";
 import { mdastToPmJson, type MdNode } from "./mapping";
 import { expandMyst } from "./myst";
 
-const parser = unified()
-  .use(remarkParse)
-  .use(remarkGfm)
-  .use(remarkFrontmatter, ["yaml"])
-  .use(remarkMath);
+function buildParser() {
+  return unified()
+    .use(remarkParse)
+    .use(remarkGfm)
+    .use(remarkFrontmatter, ["yaml"])
+    .use(remarkMath, { singleDollarTextMath: singleDollarEnabled() });
+}
+
+/** 解析器按「单美元开关」缓存；设置变化时重建。见 doc/design.md §15.3。 */
+let cachedParser: ReturnType<typeof buildParser> | null = null;
+let cachedSingleDollar: boolean | null = null;
+
+function getParser(): ReturnType<typeof buildParser> {
+  const singleDollar = singleDollarEnabled();
+  if (!cachedParser || cachedSingleDollar !== singleDollar) {
+    cachedParser = buildParser();
+    cachedSingleDollar = singleDollar;
+  }
+  return cachedParser;
+}
 
 export interface MarkdownParseResult {
   doc: PMJson;
@@ -27,7 +43,7 @@ export interface MarkdownParseResult {
 export function parseMarkdown(source: string): MarkdownParseResult {
   const diagnostics: Diagnostic[] = [];
   try {
-    const tree = parser.parse(source) as unknown as MdNode;
+    const tree = getParser().parse(source) as unknown as MdNode;
     const expanded = expandMyst(tree, source);
     return { doc: mdastToPmJson(expanded, source), diagnostics };
   } catch (error) {

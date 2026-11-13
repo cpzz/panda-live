@@ -2498,6 +2498,21 @@ body.resizing * {
   font-size: 12px;
 }
 
+.settings-row .settings-textarea {
+  flex: 1;
+  max-width: 62%;
+  min-height: 64px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
 .settings-row select {
   height: 26px;
   padding: 0 6px;
@@ -2699,6 +2714,61 @@ body.resizing * {
   background: var(--surface-muted);
   overflow: auto;
   padding: 12px;
+}
+
+/* PDF 工具栏：页码跳转 + 缩放；固定在预览顶部。 */
+.pdf-stack {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+}
+
+.pdf-toolbar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--chrome-bg);
+}
+
+.pdf-page-jump {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pdf-page-jump input {
+  width: 60px;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--fg);
+  font-size: 12px;
+}
+
+.pdf-page-total {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.pdf-toolbar-separator {
+  width: 1px;
+  height: 16px;
+  margin: 0 4px;
+  background: var(--border);
+}
+
+.pdf-zoom-label {
+  min-width: 40px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
 }
 
 .pdf-pages {

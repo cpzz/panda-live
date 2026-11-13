@@ -104,6 +104,22 @@ test("M4：工作区树、查找面板与设置持久化", async () => {
     await settingsModal.locator(".settings-row select").first().selectOption("dark");
     await settingsModal.getByRole("button", { name: "保存", exact: true }).click();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark", { timeout: 10_000 });
+
+    // 设置：数学分组（关闭单美元内联公式）持久化到 settings.json
+    await page.getByRole("button", { name: "设置", exact: true }).click();
+    const mathGroup = settingsModal.locator(".settings-group", { hasText: "数学" });
+    await expect(mathGroup).toBeVisible();
+    await mathGroup.getByRole("checkbox").uncheck();
+    await settingsModal.getByRole("button", { name: "保存", exact: true }).click();
+    await expect
+      .poll(async () => {
+        const raw = await fs
+          .readFile(path.join(userDataDir, "settings.json"), "utf8")
+          .catch(() => "");
+        const parsed = JSON.parse(raw || "{}") as { math?: { singleDollar?: boolean } };
+        return parsed.math?.singleDollar;
+      }, { timeout: 10_000 })
+      .toBe(false);
   } finally {
     await app.close();
     await fs.rm(tempDir, { recursive: true, force: true });
