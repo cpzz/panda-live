@@ -34,8 +34,6 @@ export interface Settings {
     singleDollar: boolean;
   };
   diagram: {
-    /** 图表渲染主题；`auto` 跟随应用主题。 */
-    theme: "auto" | "light" | "dark";
     /** 内存 SVG 缓存条目上限（10–1000）。 */
     memoryCacheLimit: number;
   };
@@ -73,7 +71,7 @@ export const DEFAULT_SETTINGS: Settings = {
     macros: "\\Pr = \\operatorname{Pr}",
     singleDollar: true,
   },
-  diagram: { theme: "auto", memoryCacheLimit: 100 },
+  diagram: { memoryCacheLimit: 100 },
   latex: { engineCommand: "", timeoutSeconds: 60 },
   diff: { defaultOn: false },
   git: { command: "git" },
@@ -154,16 +152,20 @@ export function mergeSettings(raw: unknown): Settings {
           ? math.singleDollar
           : DEFAULT_SETTINGS.math.singleDollar,
     },
-    diagram: {
-      ...diagram,
-      theme: pickEnum(diagram.theme, ["auto", "light", "dark"] as const, "auto"),
-      memoryCacheLimit: pickNumber(
-        diagram.memoryCacheLimit,
-        DEFAULT_SETTINGS.diagram.memoryCacheLimit,
-        10,
-        1000,
-      ),
-    },
+    diagram: (() => {
+      const rest = { ...diagram };
+      // 主题覆盖字段已废弃：图表主题永远跟随应用主题。
+      delete rest.theme;
+      return {
+        ...rest,
+        memoryCacheLimit: pickNumber(
+          diagram.memoryCacheLimit,
+          DEFAULT_SETTINGS.diagram.memoryCacheLimit,
+          10,
+          1000,
+        ),
+      };
+    })(),
     latex: {
       ...latex,
       engineCommand:

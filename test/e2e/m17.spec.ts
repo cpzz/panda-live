@@ -32,6 +32,9 @@ test("M17：保存换行符与行号设置生效", async () => {
     await dialog.getByLabel("显示行号").uncheck();
     await dialog.getByLabel("Tab 宽度").fill("4");
     await dialog.getByRole("button", { name: "保存", exact: true }).click();
+    // 保存不关闭窗口；Esc 关闭后再操作编辑器。
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden({ timeout: 5_000 });
 
     // 行号设置即时生效。
     await expect(page.locator(".cm-editor.hide-line-numbers")).toHaveCount(1);

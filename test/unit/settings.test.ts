@@ -82,16 +82,14 @@ describe("设置合并", () => {
     expect(mergeSettings({ math: { macros: longText } }).math.macros.length).toBe(8_000);
   });
 
-  it("图表分组：主题枚举与缓存上限范围", () => {
-    expect(mergeSettings(undefined).diagram).toEqual({ theme: "auto", memoryCacheLimit: 100 });
-    expect(mergeSettings({ diagram: { theme: "sepia", memoryCacheLimit: 5 } }).diagram).toEqual({
-      theme: "auto",
+  it("图表分组：缓存上限范围，主题覆盖字段被移除（图表主题跟随应用）", () => {
+    expect(mergeSettings(undefined).diagram).toEqual({ memoryCacheLimit: 100 });
+    expect(mergeSettings({ diagram: { memoryCacheLimit: 5 } }).diagram).toEqual({
       memoryCacheLimit: 10,
     });
-    expect(mergeSettings({ diagram: { theme: "dark", memoryCacheLimit: 5_000 } }).diagram).toEqual({
-      theme: "dark",
-      memoryCacheLimit: 1000,
-    });
+    const legacy = mergeSettings({ diagram: { theme: "dark", memoryCacheLimit: 5000 } });
+    expect(legacy.diagram).toEqual({ memoryCacheLimit: 1000 });
+    expect(legacy.diagram).not.toHaveProperty("theme");
   });
 
   it("LaTeX 分组：引擎命令去空白、超时范围", () => {

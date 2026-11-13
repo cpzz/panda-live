@@ -42,9 +42,9 @@ test("M18：预览代码高亮背景随主题切换", async () => {
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
     await expect.poll(backgroundSum, { timeout: 20_000 }).toBeLessThan(260);
 
-    await page.getByRole("button", { name: "设置", exact: true }).click();
-    await page.getByRole("dialog", { name: "设置" }).getByRole("combobox").first().selectOption("light");
-    await page.getByRole("dialog", { name: "设置" }).getByRole("button", { name: "保存", exact: true }).click();
+    // 保存不关闭窗口：同一对话框内切回浅色。
+    await dialog.getByRole("combobox").first().selectOption("light");
+    await dialog.getByRole("button", { name: "保存", exact: true }).click();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
     await expect.poll(backgroundSum, { timeout: 20_000 }).toBeGreaterThan(700);
   } finally {

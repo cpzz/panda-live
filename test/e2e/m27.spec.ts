@@ -56,10 +56,10 @@ test("M27：界面语言可在设置中于中英文之间切换", async () => {
     await expect(page.getByRole("button", { name: "Source", exact: true })).toBeVisible({
       timeout: 20_000,
     });
-    await expect(page.getByRole("button", { name: "Save", exact: true })).toBeVisible();
+    // 工具栏 Save 与打开着的设置对话框内 Save 同名，限定工具栏图标避免 strict 冲突。
+    await expect(page.locator(".toolbar-icon[aria-label='Save']")).toBeVisible();
 
-    // 设置对话框同样跟随语言；切回中文。
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    // 保存不关闭窗口：同一对话框切换语言后标题变为 Settings；切回中文。
     const dialogEn = page.getByRole("dialog", { name: "Settings" });
     await expect(dialogEn).toBeVisible();
     await expect(dialogEn.getByRole("heading", { name: "Appearance", exact: true })).toBeVisible();

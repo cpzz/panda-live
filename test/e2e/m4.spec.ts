@@ -97,16 +97,16 @@ test("M4：工作区树、查找面板与设置持久化", async () => {
     await panel.getByLabel("查找内容").fill("Alpha");
     await expect(panel.locator(".search-count")).toContainText("1 /");
 
-    // 设置：切换深色主题并保存
+    // 设置：切换深色主题并保存（保存不关闭窗口）
     await page.getByRole("button", { name: "设置", exact: true }).click();
     const settingsModal = page.locator(".modal[aria-label='设置']");
     await expect(settingsModal).toBeVisible();
     await settingsModal.locator(".settings-row select").first().selectOption("dark");
     await settingsModal.getByRole("button", { name: "保存", exact: true }).click();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark", { timeout: 10_000 });
+    await expect(settingsModal).toBeVisible();
 
-    // 设置：数学分组（关闭单美元内联公式）持久化到 settings.json
-    await page.getByRole("button", { name: "设置", exact: true }).click();
+    // 设置：数学分组（关闭单美元内联公式）持久化到 settings.json；窗口保持打开
     const mathGroup = settingsModal.locator(".settings-group", { hasText: "数学" });
     await expect(mathGroup).toBeVisible();
     await mathGroup.getByRole("checkbox").uncheck();

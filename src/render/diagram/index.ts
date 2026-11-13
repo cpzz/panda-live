@@ -33,28 +33,14 @@ export function getDiagramService(): DiagramRenderService {
   return service;
 }
 
-/** 图表渲染主题：设置覆盖（light/dark）优先，`auto` 跟随应用主题。见 doc/design.md §15.3。 */
+/** 图表渲染主题与应用主题保持一致，保证源码与渲染同步。 */
 export function currentDiagramTheme(): DiagramTheme {
-  const override = settingsStore.getState().diagram.theme;
-  return override === "light" || override === "dark" ? override : resolveTheme();
+  return resolveTheme();
 }
 
-/** 图表主题变化（应用主题或设置覆盖）时通知调用方重渲染；主题参与缓存键。 */
+/** 应用主题切换时通知调用方重渲染（主题参与缓存键）。 */
 export function onDiagramThemeChange(listener: (theme: DiagramTheme) => void): () => void {
-  const offTheme = onThemeChange(listener);
-  // 设置覆盖变化（auto ↔ light ↔ dark）不伴随应用主题变化，也需通知。
-  let previous = currentDiagramTheme();
-  const offSettings = settingsStore.subscribe(() => {
-    const next = currentDiagramTheme();
-    if (next !== previous) {
-      previous = next;
-      listener(next);
-    }
-  });
-  return () => {
-    offTheme();
-    offSettings();
-  };
+  return onThemeChange(listener);
 }
 
 /** 设置变更时同步内存缓存上限；服务尚未创建时记录待用值即可。 */

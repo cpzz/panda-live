@@ -191,17 +191,6 @@ export function SettingsDialog({
           <section className="settings-group">
             <h3>{t("图表")}</h3>
             <label className="settings-row">
-              <span>{t("图表主题")}</span>
-              <select
-                value={draft.diagram.theme}
-                onChange={(event) => patch("diagram", { theme: event.target.value })}
-              >
-                <option value="auto">{t("跟随系统")}</option>
-                <option value="light">{t("浅色")}</option>
-                <option value="dark">{t("深色")}</option>
-              </select>
-            </label>
-            <label className="settings-row">
               <span>{t("内存缓存上限（条）")}</span>
               <input
                 type="number"
@@ -300,16 +289,10 @@ export function SettingsDialog({
         </div>
 
         <footer className="modal-footer">
-          <button type="button" className="button ghost" onClick={onClose}>
-            {t("取消")}
-          </button>
           <button
             type="button"
             className="button primary"
-            onClick={() => {
-              onSave(draft);
-              onClose();
-            }}
+            onClick={() => onSave(draft)}
           >
             {t("保存")}
           </button>

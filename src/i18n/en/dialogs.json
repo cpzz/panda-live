@@ -22,7 +22,6 @@
   "单美元内联公式（$…$）": "Single-dollar inline math ($…$)",
   "关闭后仅识别 $$…$$ 与 \\(…\\)，避免货币符号被误当作公式。": "When off, only $$…$$ and \\(…\\) are recognized, so currency signs are not mistaken for math.",
   "图表": "Diagram",
-  "图表主题": "Diagram theme",
   "内存缓存上限（条）": "In-memory cache limit (entries)",
   "LaTeX": "LaTeX",
   "引擎命令": "Engine command",
