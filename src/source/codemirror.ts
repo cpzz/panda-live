@@ -205,7 +205,9 @@ function languageExtension(language: SourceLanguage): Extension {
   switch (language) {
     case "markdown": {
       const lang = markdown();
-      return [lang, markdownFolding, commentTokensData(lang, language)];
+      // PlantUML 折叠服务与标题/围栏折叠并存：md 文档里（围栏内外）的
+      // @startuml…@enduml 块也可折叠。见 doc/design.md §11.4。
+      return [lang, markdownFolding, plantumlFolding, commentTokensData(lang, language)];
     }
     case "xml":
       return [xml(), commentTokensData(xml(), language)];

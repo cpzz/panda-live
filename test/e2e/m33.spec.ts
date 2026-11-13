@@ -27,6 +27,15 @@ test("M33：源码编辑器支持语法折叠、标题分节与章节折叠", as
       "",
       "更多正文",
       "",
+      "## 图表",
+      "",
+      "```plantuml",
+      "@startuml",
+      "用户 -> 编辑器: 输入",
+      "编辑器 --> 用户: 预览",
+      "@enduml",
+      "```",
+      "",
     ].join("\n"),
     "utf8",
   );
@@ -75,15 +84,21 @@ test("M33：源码编辑器支持语法折叠、标题分节与章节折叠", as
     // gutter 含一个 visibility:hidden 的宽度占位 span，用 :visible 过滤真实标记。
     const gutter = page.locator(".pane:not([hidden]) .cm-foldGutter span:visible");
     await expect(gutter.first()).toBeVisible({ timeout: 15_000 });
-    await expect(gutter).toHaveCount(3); // # 折叠（分节到文末）、围栏代码块、## 子节（分节到文末）
+    await expect(gutter).toHaveCount(6); // # 折叠、```js 围栏、## 子节、## 图表、```plantuml 围栏、@startuml
     // 第一个标记：标题分节折叠，再次点击展开。
     await gutter.first().click();
     await expect(page.locator(".pane:not([hidden]) .cm-foldPlaceholder")).toBeVisible();
     await gutter.first().click();
     await expect(page.locator(".pane:not([hidden]) .cm-foldPlaceholder")).toHaveCount(0);
-    // 第二个标记：围栏代码块折叠（第三个为 ## 子节）。
+    // 第二个标记：围栏代码块折叠（其后依次为 ## 子节、```plantuml 围栏、@startuml）。
     await gutter.nth(1).click();
     await expect(page.locator(".pane:not([hidden]) .cm-foldPlaceholder")).toBeVisible();
+    await expect(page.locator(".pane:not([hidden]) .cm-foldPlaceholder")).toHaveCount(1);
+    // Markdown 内 PlantUML：@startuml…@enduml 块折叠（与围栏折叠嵌套并存）。
+    await gutter.last().click();
+    await expect(page.locator(".pane:not([hidden]) .cm-foldPlaceholder")).toHaveCount(2);
+    await gutter.last().click();
+    await expect(page.locator(".pane:not([hidden]) .cm-foldPlaceholder")).toHaveCount(1);
 
     // JSON：语法树原生折叠。
     await app.evaluate(({ dialog }, target) => {
