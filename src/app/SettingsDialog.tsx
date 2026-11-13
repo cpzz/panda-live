@@ -73,6 +73,8 @@ export function SettingsDialog({
   };
 
   const activeTitle = SECTIONS.find((item) => item.key === section)?.title ?? "";
+  // draft 与已保存设置一致时禁用保存，避免无改动写盘（draft 由 settings 展开，键序一致，可安全序列化比较）。
+  const dirty = JSON.stringify(draft) !== JSON.stringify(settings);
 
   return (
     <div className="modal-backdrop" role="presentation" onClick={onClose}>
@@ -349,7 +351,7 @@ export function SettingsDialog({
 
         <footer className="modal-footer">
           <span className="settings-footer-hint">{t("修改需点击保存后生效")}</span>
-          <button type="button" className="button primary" onClick={() => onSave(draft)}>
+          <button type="button" className="button primary" disabled={!dirty} onClick={() => onSave(draft)}>
             {t("保存")}
           </button>
         </footer>

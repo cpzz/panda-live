@@ -28,8 +28,12 @@ test("M17：保存换行符与行号设置生效", async () => {
 
     await page.getByRole("button", { name: "设置", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "设置" });
+    // 无改动时保存禁用；修改后可用。
+    const saveButton = dialog.getByRole("button", { name: "保存", exact: true });
+    await expect(saveButton).toBeDisabled();
     await dialog.getByRole("button", { name: "编辑" }).click();
     await dialog.getByLabel("保存换行符").selectOption("lf");
+    await expect(saveButton).toBeEnabled();
     await dialog.getByLabel("显示行号").uncheck();
     await dialog.getByLabel("Tab 宽度").fill("4");
     await dialog.getByRole("button", { name: "保存", exact: true }).click();
