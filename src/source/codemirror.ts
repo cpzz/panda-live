@@ -110,6 +110,7 @@ export type SourceLanguage =
   | "stex"
   | "ini"
   | "toml"
+  | "plantuml"
   | "plain";
 
 /** 源码模式的 diff 行标记；`delete` 表示该行之前有删除内容。 */
@@ -263,6 +264,9 @@ function languageExtension(language: SourceLanguage): Extension {
       return streamLanguage(iniStreamParser, language);
     case "toml":
       return streamLanguage(toml, language);
+    case "plantuml":
+      // PlantUML 无现成高亮模式；提供 @startuml…@enduml 块折叠。
+      return plantumlFolding;
     default:
       return [];
   }
@@ -409,6 +413,28 @@ const stexFolding: Extension = foldService.of(
       }
     }
     return state.doc.length > line.to ? { from: line.to, to: state.doc.length } : null;
+  },
+);
+
+/** PlantUML 折叠：`@startuml…@enduml` 块隐藏中间内容，保留首尾指令行。见 doc/design.md §11.4。 */
+const PLANTUML_START = /^@startuml\b/iu;
+const PLANTUML_END = /^@enduml\b/iu;
+
+const plantumlFolding: Extension = foldService.of(
+  (state: EditorState, from: number): { from: number; to: number } | null => {
+    const line = state.doc.lineAt(from);
+    if (!PLANTUML_START.test(line.text.trim())) return null;
+    for (let number = line.number + 1; number <= state.doc.lines; number += 1) {
+      const current = state.doc.line(number);
+      const text = current.text.trim();
+      // 未闭合就出现新的 @startuml：语法异常，不在起点提供折叠。
+      if (PLANTUML_START.test(text)) return null;
+      if (PLANTUML_END.test(text)) {
+        // 仅相邻一行（无内容）时不提供折叠。
+        return current.number > line.number + 1 ? { from: line.to, to: current.from } : null;
+      }
+    }
+    return null;
   },
 );
 

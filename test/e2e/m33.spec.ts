@@ -40,6 +40,23 @@ test("M33：源码编辑器支持语法折叠、标题分节与章节折叠", as
     ),
     "utf8",
   );
+  const pumlPath = path.join(tempDir, "blocks.puml");
+  await fs.writeFile(
+    pumlPath,
+    [
+      "@startuml",
+      "用户 -> 编辑器: 打开",
+      "编辑器 --> 用户: 渲染",
+      "@enduml",
+      "",
+      "@startuml",
+      "A -> B: 消息",
+      "B -> C: 转发",
+      "@enduml",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
 
   const app = await electron.launch({
     args: ["."],
@@ -89,6 +106,19 @@ test("M33：源码编辑器支持语法折叠、标题分节与章节折叠", as
     await expect(texGutter).toHaveCount(3, { timeout: 15_000 });
     await texGutter.first().click();
     await expect(page.locator(".pane:not([hidden]) .cm-foldPlaceholder")).toBeVisible();
+
+    // PlantUML：@startuml…@enduml 块折叠（保留首尾指令行）。
+    await app.evaluate(({ dialog }, target) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
+    }, pumlPath);
+    await page.getByRole("button", { name: "打开", exact: true }).click();
+    await expect(page.locator(".tab-item.active .tab-name")).toHaveText("blocks.puml");
+    const pumlGutter = page.locator(".pane:not([hidden]) .cm-foldGutter span:visible");
+    await expect(pumlGutter).toHaveCount(2, { timeout: 15_000 });
+    await pumlGutter.first().click();
+    await expect(page.locator(".pane:not([hidden]) .cm-foldPlaceholder")).toBeVisible();
+    await pumlGutter.first().click();
+    await expect(page.locator(".pane:not([hidden]) .cm-foldPlaceholder")).toHaveCount(0);
   } finally {
     await app.close();
     await fs.rm(tempDir, { recursive: true, force: true });

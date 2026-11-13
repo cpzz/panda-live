@@ -838,7 +838,7 @@ MyST 不需要正则预处理。外层围栏（例如六个反引号 + `{tab-set
 | 语法高亮 | `@codemirror/lang-markdown`（叠加 GFM）、`@codemirror/legacy-modes/mode/stex`（`.tex`）、`@codemirror/lang-xml`（MathML） |
 | 行号与当前行 | `lineNumbers`、`highlightActiveLineGutter`、`highlightActiveLine` |
 | 缩进与括号 | `indentOnInput`、`bracketMatching`、`closeBrackets`、缩进参考线（自定义装饰器） |
-| 折叠 | `foldGutter` + 语法树原生折叠（主流编程语言）；Markdown 标题分节与围栏代码块折叠；LaTeX 章节命令折叠；流式解析语言按缩进兜底 |
+| 折叠 | `foldGutter` + 语法树原生折叠（主流编程语言）；Markdown 标题分节与围栏代码块折叠；LaTeX 章节命令折叠；PlantUML `@startuml…@enduml` 块折叠；流式解析语言按缩进兜底 |
 | 多光标 | `allowMultipleSelections`；`Alt+Click` 加光标，`Ctrl+Alt+↑/↓` 上下加光标 |
 | 矩形选择 | `rectangularSelection` + `crosshairCursor`；`Shift+Alt+拖拽` 进入列模式 |
 | 查找替换 | `@codemirror/search`；高亮全部匹配、显示匹配计数，支持区分大小写/正则/全词/循环 |
@@ -1444,7 +1444,7 @@ form-action 'none';
 - 标签支持拖拽排序、中键关闭、未保存标记圆点；列表溢出时横向滚动，右侧提供左右滚动箭头、「关闭全部」（≥2 个文档时显示，点击先确认，关闭中遇到「取消」即中止剩余）与「全部标签」下拉；下拉列出全部文档（图标、未保存点、名称、当前标记）并带行内关闭按钮，选择或切换文档时活动标签自动滚动进可视区。
 - 模式切换使用 WYSIWYG / 源码 / 双栏三段式控件，不使用循环切换按钮。
 - 源码模式显示行号、折叠槽与缩进参考线；搜索面板停靠在编辑区顶部，不遮挡正文。
-- 源码支持语法折叠：按语言语法树提供折叠范围（CodeMirror foldGutter + 快捷键）；Markdown 标题分节与围栏代码块折叠，LaTeX 章节命令折叠，流式解析语言按缩进兜底折叠。
+- 源码支持语法折叠：按语言语法树提供折叠范围（CodeMirror foldGutter + 快捷键）；Markdown 标题分节与围栏代码块折叠，LaTeX 章节命令折叠，PlantUML `@startuml…@enduml` 块折叠，流式解析语言按缩进兜底折叠。
 - 渲染预览的代码块右上角提供复制按钮：悬停显示，点击复制代码内容（复制后短暂显示成功态）；差异视图自带「复制原文」，不重复提供。
 - 源码编辑器支持多光标与列选择，状态栏显示当前多光标数量。
 - 表格获得焦点时显示行列操作工具条（增删行列、对齐、删除表格）。
