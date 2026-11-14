@@ -95,6 +95,7 @@
   "确定关闭全部 {0} 个文档吗？其中 {1} 个有未保存修改，关闭时将逐个询问。": "Close all {0} documents? {1} of them have unsaved changes and will prompt one by one.",
   "PDF 预览": "PDF preview",
   "PDF 文件已在外部更新": "The PDF file was updated externally",
+  "文件已在外部更新": "The file was updated externally",
   "当前": "Current",
   "（本地修改于 {0}）": " (locally modified at {0})",
   "重新加载": "Reload",

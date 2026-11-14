@@ -8,6 +8,7 @@ import {
 import type { DiagramKind } from "../../render/diagram/types";
 import { t } from "../../i18n";
 import { problemStore } from "../../services/problem-store";
+import { DIAGRAM_OPEN_EVENT } from "../../render/markdown/diagram-preview";
 
 const EDIT_COMMIT_DELAY_MS = 300;
 
@@ -30,6 +31,8 @@ export class DiagramNodeView implements NodeView {
   private textarea: HTMLTextAreaElement | null = null;
   private commitTimer: ReturnType<typeof setTimeout> | null = null;
   private destroyed = false;
+  /** 最近一次成功渲染的 SVG（已消毒）；「放大查看」直接复用，不重新渲染。 */
+  private lastSvg: string | null = null;
 
   constructor(
     node: PMNode,
@@ -58,7 +61,18 @@ export class DiagramNodeView implements NodeView {
     sourceButton.textContent = t("查看源码");
     sourceButton.addEventListener("mousedown", (event) => event.preventDefault());
     sourceButton.addEventListener("click", () => this.startEditing());
-    actions.append(sourceButton);
+    const expandButton = document.createElement("button");
+    expandButton.type = "button";
+    expandButton.className = "button small ghost";
+    expandButton.textContent = t("放大查看");
+    expandButton.addEventListener("mousedown", (event) => event.preventDefault());
+    expandButton.addEventListener("click", () => {
+      if (!this.lastSvg) return;
+      window.dispatchEvent(
+        new CustomEvent(DIAGRAM_OPEN_EVENT, { detail: { svg: this.lastSvg } }),
+      );
+    });
+    actions.append(sourceButton, expandButton);
     this.header.append(label, actions);
 
     this.body = document.createElement("div");
@@ -144,6 +158,7 @@ export class DiagramNodeView implements NodeView {
 
   private showPlaceholder(): void {
     if (this.editing) return;
+    this.lastSvg = null;
     this.body.replaceChildren();
     const placeholder = document.createElement("pre");
     placeholder.className = "diagram-placeholder-source";
@@ -174,6 +189,7 @@ export class DiagramNodeView implements NodeView {
     if (this.destroyed || token !== this.token || key !== this.key) return;
 
     if (result.ok) {
+      this.lastSvg = result.svg;
       this.body.replaceChildren();
       const svgHost = document.createElement("div");
       svgHost.className = "diagram-svg";
@@ -228,6 +244,7 @@ export class DiagramNodeView implements NodeView {
     if (this.editing || this.destroyed) return;
     this.editing = true;
     this.renderKey = null;
+    this.lastSvg = null;
 
     const textarea = document.createElement("textarea");
     textarea.className = "diagram-source-editor";

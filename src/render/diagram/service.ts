@@ -18,6 +18,14 @@ export interface DiagramRenderer {
   render(request: RenderRequest, signal: AbortSignal): Promise<RenderResponse>;
 }
 
+/**
+ * 消毒逻辑版本：参与缓存键计算。
+ * IndexedDB 持久缓存里存的是「消毒后」的 SVG，消毒规则变化后旧条目必须失效，
+ * 否则命中旧缓存会绕过新逻辑（例如 Mermaid 内联 max-width 未被转写，图表无法放大）。
+ * 修改 sanitizeDiagramSvg 的行为时递增此值。
+ */
+const DIAGRAM_SANITIZE_VERSION = "sanitize2";
+
 export interface DiagramRenderInput {
   /** 节点 ID；同一 ID 的新请求会取消旧请求。 */
   id: string;
@@ -65,7 +73,9 @@ export class DiagramRenderService {
 
     const engineVersion = input.engineVersion ?? DIAGRAM_ENGINE_VERSION;
     const cacheKey = sha256Hex(
-      [input.kind, input.theme, engineVersion, normalized.source].join("\u0000"),
+      [input.kind, input.theme, engineVersion, DIAGRAM_SANITIZE_VERSION, normalized.source].join(
+        "\u0000",
+      ),
     );
 
     // 先登记取消控制器，再等待缓存：这样同步调用 cancel() 也能中断后续渲染。

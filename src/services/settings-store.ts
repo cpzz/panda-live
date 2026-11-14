@@ -8,8 +8,6 @@ export class SettingsStore {
   private state: Settings = DEFAULT_SETTINGS;
   private readonly listeners = new Set<() => void>();
   private loaded = false;
-  /** 状态栏「当前显示」宽度覆盖；null 跟随全局设置。仅影响 CSS 变量，不落盘。 */
-  private viewWidthOverride: number | null = null;
   private systemDarkQuery: MediaQueryList | null = null;
   private readonly onSystemThemeChange = (): void => {
     if (this.state.appearance.theme === "system") this.apply();
@@ -58,28 +56,17 @@ export class SettingsStore {
     return this.state;
   }
 
-  /**
-   * 状态栏 / Ctrl+滚轮的宽度调整只作用于当前显示（会话内），不写入全局设置。
-   * 传 null 恢复跟随「设置 → 外观 → 内容宽度」。见 doc/design.md §21.15 说明。
-   */
-  setViewWidthOverride(value: number | null): void {
-    const next = value === null ? null : Math.min(1000, Math.max(30, Math.round(value)));
-    if (next === this.viewWidthOverride) return;
-    this.viewWidthOverride = next;
-    this.apply();
-  }
-
   private apply(): void {
     // Node 环境（单元测试）无 DOM，跳过 CSS 应用。
     if (typeof document === "undefined") return;
     const root = document.documentElement;
     const { theme, fontSize } = this.state.appearance;
-    const width = this.viewWidthOverride ?? this.state.appearance.lineWidth;
     const dark = theme === "dark" || (theme === "system" && this.systemDarkQuery?.matches);
     root.dataset["theme"] = dark ? "dark" : "light";
+    // 图表适配宽度：勾选时图表显示封顶面板宽度，取消后按自然宽度显示（CSS 按此分支）。
+    root.dataset["diagramFit"] = this.state.appearance.diagramFitWidth ? "on" : "off";
     root.style.setProperty("--editor-font-size", `${fontSize}px`);
     root.style.setProperty("--prose-font-size", `${fontSize}px`);
-    root.style.setProperty("--prose-max-width", `${width}%`);
     root.style.setProperty("--cm-tab-size", String(this.state.editor.tabSize));
   }
 

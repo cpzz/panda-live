@@ -14,8 +14,11 @@ export interface Settings {
     theme: "system" | "light" | "dark";
     /** 编辑器正文字号（px） */
     fontSize: number;
-    /** 正文内容宽度，占渲染面板宽度的百分比（30–1000）。 */
-    lineWidth: number;
+    /**
+     * 图表适配宽度：勾选时打开图表预览/放大查看窗口自动适配面板宽度（工具栏按钮可重新适配）；
+     * 取消后按图表自然宽度显示。图表不跟随内容宽度百分比。
+     */
+    diagramFitWidth: boolean;
     /** 界面语言；默认中文，可切换英文或跟随系统。 */
     language: LanguagePreference;
   };
@@ -66,7 +69,7 @@ export const SETTINGS_SCHEMA_VERSION = 1;
 
 export const DEFAULT_SETTINGS: Settings = {
   schemaVersion: SETTINGS_SCHEMA_VERSION,
-  appearance: { theme: "system", fontSize: 15, lineWidth: 100, language: "zh" },
+  appearance: { theme: "system", fontSize: 15, diagramFitWidth: true, language: "zh" },
   editor: { autoSave: true, tabSize: 2, insertSpaces: true, showLineNumbers: true, eol: "preserve" },
   math: {
     // KaTeX 内置已支持 \Pr，这里作为默认示例展示宏写法（design.md §9.2）。
@@ -116,16 +119,17 @@ export function mergeSettings(raw: unknown): Settings {
     schemaVersion: SETTINGS_SCHEMA_VERSION,
     appearance: (() => {
       const rest = { ...appearance };
+      // 内容宽度（lineWidth / lineWidthUnit）已移除：正文固定占满面板宽度。
+      delete rest.lineWidth;
       delete rest.lineWidthUnit;
-      // 旧版按像素保存的宽度无法直接换算为百分比，统一回退到 100%。
-      const legacyPx = appearance.lineWidthUnit === "px";
       return {
         ...rest,
         theme: pickEnum(appearance.theme, ["system", "light", "dark"] as const, "system"),
         fontSize: pickNumber(appearance.fontSize, DEFAULT_SETTINGS.appearance.fontSize, 12, 28),
-        lineWidth: legacyPx
-          ? DEFAULT_SETTINGS.appearance.lineWidth
-          : pickNumber(appearance.lineWidth, DEFAULT_SETTINGS.appearance.lineWidth, 30, 1000),
+        diagramFitWidth:
+          typeof appearance.diagramFitWidth === "boolean"
+            ? appearance.diagramFitWidth
+            : DEFAULT_SETTINGS.appearance.diagramFitWidth,
         language: pickEnum(
           appearance.language,
           ["system", "zh", "en"] as const,

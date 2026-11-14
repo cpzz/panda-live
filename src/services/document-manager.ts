@@ -88,7 +88,7 @@ function formatTime(ms: number): string {
 }
 
 /** 具有渲染预览的内置格式；扩展格式由扩展自身提供预览。 */
-const PREVIEW_FORMATS = new Set(["markdown", "latex", "mathml", "plantuml", "mermaid"]);
+const PREVIEW_FORMATS = new Set(["markdown", "latex", "mathml", "plantuml", "mermaid", "image"]);
 
 function supportsPreview(formatId: string): boolean {
   return PREVIEW_FORMATS.has(formatId) || Boolean(getFormatEntry(formatId)?.extensionId);
@@ -340,6 +340,10 @@ export class DocumentManager {
       this.notify("info", t("PDF 文档为只读预览，无需保存"));
       return;
     }
+    if (doc.format === "image") {
+      this.notify("info", t("图片文档为只读预览，无需保存"));
+      return;
+    }
     if (!doc.path) {
       await this.saveDocumentAs(id);
       return;
@@ -388,6 +392,10 @@ export class DocumentManager {
     // PDF 是二进制只读文档：content 不代表磁盘内容，另存为会写坏目标文件。
     if (doc.format === "pdf") {
       this.notify("error", t("PDF 文档为只读预览，不支持另存为"));
+      return;
+    }
+    if (doc.format === "image") {
+      this.notify("error", t("图片文档为只读预览，不支持另存为"));
       return;
     }
     try {
@@ -660,9 +668,10 @@ export class DocumentManager {
       ) {
         return;
       }
-      // PDF 是二进制文档：不读文本，只读元数据并以只读预览打开。
-      const isPdf = detectFormatEntry(ref.name)?.id === "pdf";
-      const data = isPdf ? null : await window.panda.fs.readText({ path: ref.path });
+      // PDF/图片是二进制文档：不读文本，只读元数据并以只读预览打开。
+      const formatId = detectFormatEntry(ref.name)?.id ?? "text";
+      const isBinary = formatId === "pdf" || formatId === "image";
+      const data = isBinary ? null : await window.panda.fs.readText({ path: ref.path });
       const watchId = await this.watchFile(ref.path);
       let forceSource = policy.preferSource;
       let blockLimit = false;
@@ -680,14 +689,14 @@ export class DocumentManager {
         name: ref.name,
         path: ref.path,
         rootId: ref.rootId || null,
-        format: detectFormatEntry(ref.name)?.id ?? "text",
+        format: formatId,
         content: data ? data.content : "",
         savedContent: data ? data.content : "",
         dirty: false,
         eol: data ? data.eol : "lf",
         bom: data ? data.bom : false,
         encoding: data ? data.encoding : "utf-8",
-        // PDF 以只读预览打开，不允许编辑与写回。
+        // PDF/图片以只读预览打开，不允许编辑与写回。
         readOnly: data ? data.readOnly : true,
         hash: data ? data.hash : "",
         mtimeMs: data ? data.mtimeMs : stats.mtimeMs,
@@ -699,7 +708,7 @@ export class DocumentManager {
       this.commit({
         documents: [...this.state.documents, document],
         activeId: document.id,
-        mode: isPdf
+        mode: isBinary
           ? "preview"
           : !supportsPreview(document.format)
             ? "source"
@@ -743,12 +752,12 @@ export class DocumentManager {
       return;
     }
     if (!doc.path) return;
-    // PDF 是二进制只读文档：外部修改只更新元数据并提示重新打开，不做文本重读。
-    if (doc.format === "pdf") {
+    // PDF/图片是二进制只读文档：外部修改只更新元数据并提示重新打开，不做文本重读。
+    if (doc.format === "pdf" || doc.format === "image") {
       try {
         const stats = await window.panda.fs.stat({ path: doc.path });
         this.patchDocument(doc.id, () => ({ mtimeMs: stats.mtimeMs, size: stats.size }));
-        this.notify("info", t("PDF 文件已在外部更新"));
+        this.notify("info", t(doc.format === "pdf" ? "PDF 文件已在外部更新" : "文件已在外部更新"));
       } catch {
         // 文件消失由 unlink 分支处理
       }

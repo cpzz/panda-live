@@ -4,7 +4,12 @@ import { sha256Hex } from "../../src/render/diagram/hash";
 import { normalizeDiagramSource } from "../../src/render/diagram/normalize";
 import type { DiagramRenderer } from "../../src/render/diagram/service";
 import { DiagramRenderService } from "../../src/render/diagram/service";
-import { MAX_DIAGRAM_SOURCE_LENGTH, type RenderRequest, type RenderResponse } from "../../src/render/diagram/types";
+import {
+  DIAGRAM_ENGINE_VERSION,
+  MAX_DIAGRAM_SOURCE_LENGTH,
+  type RenderRequest,
+  type RenderResponse,
+} from "../../src/render/diagram/types";
 
 class FakeRenderer implements DiagramRenderer {
   readonly calls: RenderRequest[] = [];
@@ -79,6 +84,36 @@ describe("图表渲染服务", () => {
     const second = await service.render({ ...input, id: "n2" });
     expect(second.ok).toBe(true);
     expect(renderer.calls).toHaveLength(1);
+  });
+
+  it("消毒版本变化后不命中历史持久缓存（旧 SVG 带内联 max-width）", async () => {
+    const source = "graph TD\nA --> B";
+    const historicalSvg =
+      '<svg xmlns="http://www.w3.org/2000/svg" width="100%" style="max-width: 480px;"></svg>';
+    // 旧缓存键：kind + theme + engineVersion + source（不含消毒版本）。
+    const legacyKey = sha256Hex(["mermaid", "light", DIAGRAM_ENGINE_VERSION, source].join("\u0000"));
+    const storage: DiagramCacheStorage = {
+      get: (key) => Promise.resolve(key === legacyKey ? historicalSvg : null),
+      set: () => Promise.resolve(),
+    };
+    const renderer = new FakeRenderer((request) =>
+      Promise.resolve({ id: request.id, ok: true, svg: '<svg width="480"></svg>' }),
+    );
+    // 消毒替身：模拟「转写内联 max-width」的新行为，验证结果确实来自重新渲染。
+    const service = createService({
+      renderer,
+      cache: new DiagramCache(storage),
+      sanitize: (svg) => svg.replace(/max-width: 480px;/u, "").replace('width="100%"', 'width="480"'),
+    });
+
+    const result = await service.render({ id: "n1", kind: "mermaid", source, theme: "light" });
+    expect(result.ok).toBe(true);
+    // 旧键未被命中：渲染器被调用一次。
+    expect(renderer.calls).toHaveLength(1);
+    if (result.ok) {
+      expect(result.svg).not.toContain("max-width");
+      expect(result.svg).not.toBe(historicalSvg);
+    }
   });
 
   it("超时返回 E_RENDER_TIMEOUT", async () => {

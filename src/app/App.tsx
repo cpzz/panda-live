@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from "react";
 import type { EditorState } from "@codemirror/state";
 import { renderMarkdownToHtml } from "../formats/markdown/preview";
 import { parseMarkdown } from "../formats/markdown/parse";
@@ -39,6 +39,15 @@ import type { DiffBase, DiffViewMode } from "../shared/diff";
 import { Icon, PandaMark, fileIconForPath, type IconName } from "./icons";
 import { OutlinePanel } from "./OutlinePanel";
 import { PdfPreview, PdfDocumentPreview } from "./PdfPreview";
+import {
+  DiagramZoomToolbar,
+  DiagramViewerDialog,
+  clampDiagramZoom,
+  diagramViewerWidth,
+  useDiagramZoomShortcuts,
+} from "./DiagramViewerDialog";
+import { svgNaturalWidth } from "../render/diagram/sanitize";
+import { DIAGRAM_OPEN_EVENT } from "../render/markdown/diagram-preview";
 import { PerformanceOverlay } from "./PerformanceOverlay";
 import { ProblemPanel } from "./ProblemPanel";
 import { SettingsDialog } from "./SettingsDialog";
@@ -63,7 +72,7 @@ const MODE_ICONS: Record<EditorMode, IconName> = {
 };
 
 /** 具有渲染预览的内置格式；扩展格式由扩展自身提供预览。 */
-const PREVIEW_FORMATS = new Set(["markdown", "latex", "mathml", "plantuml", "mermaid"]);
+const PREVIEW_FORMATS = new Set(["markdown", "latex", "mathml", "plantuml", "mermaid", "image"]);
 
 function formatSupportsPreview(formatId: string): boolean {
   return PREVIEW_FORMATS.has(formatId) || Boolean(getFormatEntry(formatId)?.extensionId);
@@ -102,8 +111,7 @@ interface SavedEditorState {
   language: SourceLanguage;
 }
 
-/** 状态栏宽度滑块的刻度（可点击）；位置按 (值-30)/970 线性分布，奇偶交错避免重叠。 */
-const WIDTH_TICKS = [30, 100, 300, 600, 1000];
+/** 内容宽度与滑块刻度的旧实现已移除；图表/图片缩放快捷键见 useDiagramZoomShortcuts。 */
 
 function SourcePane({
   document,
@@ -363,6 +371,11 @@ function DiagramPreviewPane({ document, enabled }: { document: DocumentState; en
   const [svg, setSvg] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [theme, setTheme] = useState(currentDiagramTheme);
+  // 独立图表预览的缩放：会话级，不落盘；100% = 自然尺寸。
+  // 适配宽度为一次性动作；首图渲染后按全局设置自动适配一次，之后缩放自由。
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const fittedRef = useRef<string | null>(null);
+  const [zoom, setZoom] = useState(100);
   const kind = document.format === "mermaid" ? "mermaid" : "plantuml";
   const requestId = `preview:${document.id}`;
 
@@ -402,12 +415,119 @@ function DiagramPreviewPane({ document, enabled }: { document: DocumentState; en
     );
   }, [document.id, error, enabled]);
 
+  const natural = useMemo(() => (svg ? svgNaturalWidth(svg) : 0), [svg]);
+  // 图表/图片缩放快捷键：仅在支持缩放的显示里生效。
+  useDiagramZoomShortcuts(zoom, setZoom);
+
+  /** 适配宽度：按视口可用宽度与自然宽度计算缩放比（≤100%）。 */
+  const applyFit = useCallback((): void => {
+    const body = bodyRef.current;
+    if (!body || natural <= 0) return;
+    const style = getComputedStyle(body);
+    const available =
+      body.clientWidth - Number.parseFloat(style.paddingLeft) - Number.parseFloat(style.paddingRight);
+    if (!(available > 0)) return;
+    setZoom(clampDiagramZoom(Math.min(100, Math.round((available / natural) * 100))));
+  }, [natural]);
+
+  // 每个文档首图渲染后按「设置 → 外观 → 图表适配宽度」自动适配一次。
+  useEffect(() => {
+    if (fittedRef.current === document.id || natural <= 0) return;
+    fittedRef.current = document.id;
+    if (settingsStore.getState().appearance.diagramFitWidth) applyFit();
+  }, [document.id, natural, applyFit]);
+
+  const width = natural > 0 ? diagramViewerWidth(natural, zoom) : undefined;
+
   return (
-    <div className="preview-pane">
+    <div className="preview-pane diagram-pane">
       {error ? (
         <p className="placeholder">{t("图表诊断：{0}", error)}</p>
       ) : (
-        <div className="diagram-svg-preview" dangerouslySetInnerHTML={{ __html: svg }} />
+        <div className="diagram-viewer">
+          <DiagramZoomToolbar zoom={zoom} onZoomChange={setZoom} onFit={applyFit} />
+          <div className="diagram-viewer-body" ref={bodyRef}>
+            <div
+              className="diagram-viewer-sizing"
+              style={width ? { width } : undefined}
+              dangerouslySetInnerHTML={{ __html: svg }}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 图片文件预览：readBase64 读取磁盘字节，缩放/适配与图表视图共用同一工具栏。 */
+function ImagePreviewPane({ document }: { document: DocumentState }) {
+  const [src, setSrc] = useState("");
+  const [natural, setNatural] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const [zoom, setZoom] = useState(100);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const path = document.path;
+
+  useEffect(() => {
+    if (!path) return;
+    let cancelled = false;
+    setSrc("");
+    setNatural(0);
+    setError(null);
+    void (async () => {
+      try {
+        const file = await window.panda.fs.readBase64({ path });
+        if (cancelled) return;
+        setSrc(`data:${file.mime};base64,${file.data}`);
+      } catch (reason) {
+        if (!cancelled) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [path, document.mtimeMs]);
+
+  /** 适配宽度：按视口可用宽度与图片自然宽度计算缩放比（≤100%）。 */
+  const applyFit = useCallback((): void => {
+    const body = bodyRef.current;
+    if (!body || natural <= 0) return;
+    const style = getComputedStyle(body);
+    const available =
+      body.clientWidth - Number.parseFloat(style.paddingLeft) - Number.parseFloat(style.paddingRight);
+    if (!(available > 0)) return;
+    setZoom(clampDiagramZoom(Math.min(100, Math.round((available / natural) * 100))));
+  }, [natural]);
+
+  // 每个文档加载后按「设置 → 外观 → 图表适配宽度」自动适配一次；后续缩放由用户控制。
+  useEffect(() => {
+    if (natural <= 0) return;
+    if (settingsStore.getState().appearance.diagramFitWidth) applyFit();
+  }, [natural, applyFit]);
+
+  const width = natural > 0 ? diagramViewerWidth(natural, zoom) : undefined;
+  // 图片缩放快捷键：仅在支持缩放的显示里生效。
+  useDiagramZoomShortcuts(zoom, setZoom);
+
+  return (
+    <div className="preview-pane diagram-pane">
+      {error ? (
+        <p className="placeholder">{t("图片加载失败：{0}", error)}</p>
+      ) : (
+        <div className="diagram-viewer">
+          <DiagramZoomToolbar zoom={zoom} onZoomChange={setZoom} onFit={applyFit} />
+          <div className="diagram-viewer-body" ref={bodyRef}>
+            <div className="diagram-viewer-sizing" style={width ? { width } : undefined}>
+              <img
+                src={src}
+                alt={document.name}
+                onLoad={(event) => setNatural(event.currentTarget.naturalWidth)}
+              />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -734,45 +854,12 @@ export function App() {
     applyDiagramMemoryLimit();
   }, [settings.diagram.memoryCacheLimit]);
 
-  // 内容宽度：状态栏滑块、数字输入、Ctrl+滚轮与 Ctrl +/- 只调整「当前显示」，
-  // 不写入全局设置；全局默认在 设置 → 外观，Ctrl+0 恢复跟随全局。见 §21.15 说明。
-  const widthPercent = settings.appearance.lineWidth;
-  const [viewWidth, setViewWidth] = useState<number | null>(null);
-  const widthDraft = viewWidth ?? widthPercent;
-  const [widthInput, setWidthInput] = useState<string | null>(null);
-  const [widthOpen, setWidthOpen] = useState(false);
-  const widthRef = useRef<HTMLDivElement>(null);
-  const applyWidthValue = (value: number): void => {
-    setViewWidth(Math.min(1000, Math.max(30, Math.round(value / 5) * 5)));
-  };
-  // 滑块/刻度/快捷键路径：清掉输入框的临时文本，让输入框跟随新值。
-  const applyContentWidth = (value: number): void => {
-    setWidthInput(null);
-    applyWidthValue(value);
-  };
-  const applyContentWidthRef = useRef(applyContentWidth);
-  applyContentWidthRef.current = applyContentWidth;
-  const widthDraftRef = useRef(widthDraft);
-  widthDraftRef.current = widthDraft;
-  useEffect(() => {
-    settingsStore.setViewWidthOverride(viewWidth);
-  }, [viewWidth]);
-  // 弹层打开时点击外部关闭。
-  useEffect(() => {
-    if (!widthOpen) return;
-    const onPointerDown = (event: PointerEvent): void => {
-      if (widthRef.current && !widthRef.current.contains(event.target as Node)) {
-        setWidthOpen(false);
-      }
-    };
-    window.addEventListener("pointerdown", onPointerDown);
-    return () => window.removeEventListener("pointerdown", onPointerDown);
-  }, [widthOpen]);
-
   const [cursor, setCursor] = useState<SelectionInfo>({ line: 1, column: 1 });
   const [searchSignal, setSearchSignal] = useState(0);
   const [compileSignal, setCompileSignal] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // 「放大查看」对话框：承载内嵌图表块的放大视图；svg 已由图表服务消毒。
+  const [diagramViewer, setDiagramViewer] = useState<{ svg: string; title: string } | null>(null);
   const [recoveries, setRecoveries] = useState<DraftEntry[]>([]);
   const [recent, setRecent] = useState<RecentEntry[]>([]);
   const [perfVisible, setPerfVisible] = useState(false);
@@ -821,10 +908,25 @@ export function App() {
   const active = state.documents.find((doc) => doc.id === state.activeId) ?? null;
   // PDF 是二进制只读文档：所有编辑/预览面板隐藏，由专用 PDF 面板展示。
   const activeIsPdf = active?.format === "pdf";
+  // 图片同理：二进制只读，由专用图片面板展示。
+  const activeIsImage = active?.format === "image";
+  const activeIsBinary = activeIsPdf || activeIsImage;
   const activeRef = useRef(active);
   activeRef.current = active;
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
+
+  // 内嵌图表块（预览与 WYSIWYG）通过窗口事件请求打开放大查看对话框。
+  useEffect(() => {
+    const onOpen = (event: Event): void => {
+      const svg = (event as CustomEvent<{ svg?: string }>).detail?.svg;
+      if (!svg) return;
+      setDiagramViewer({ svg, title: activeRef.current?.name ?? "" });
+    };
+    window.addEventListener(DIAGRAM_OPEN_EVENT, onOpen);
+    return () => window.removeEventListener(DIAGRAM_OPEN_EVENT, onOpen);
+  }, []);
+
   const conflict = state.conflict;
   const activeContent = active?.content ?? "";
   const activeFormat = active?.format ?? "";
@@ -893,7 +995,7 @@ export function App() {
   const diffState = useDocumentDiff({
     document: active,
     // PDF 是二进制只读文档，不参与差异对比。
-    enabled: diffEnabled && !activeIsPdf,
+    enabled: diffEnabled && !activeIsBinary,
     base: diffBase,
     ref: diffRef,
     refreshKey: diffRefresh,
@@ -1393,23 +1495,6 @@ export function App() {
       if (!(event.ctrlKey || event.metaKey)) return;
       const key = event.key.toLowerCase();
       if (key === "p" && event.shiftKey) return;
-      if (key === "=" || key === "+") {
-        event.preventDefault();
-        applyContentWidthRef.current(widthDraftRef.current + 10);
-        return;
-      }
-      if (key === "-" || key === "_") {
-        event.preventDefault();
-        applyContentWidthRef.current(widthDraftRef.current - 10);
-        return;
-      }
-      if (key === "0") {
-        event.preventDefault();
-        // Ctrl+0 恢复跟随全局设置（不一定是 100%）。
-        setWidthInput(null);
-        setViewWidth(null);
-        return;
-      }
       if (key === "n" && !event.shiftKey) {
         event.preventDefault();
         void manager.runMenuCommand("file.new");
@@ -1436,20 +1521,6 @@ export function App() {
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [manager, workspaces]);
-
-  // Ctrl/Cmd + 滚轮调整内容宽度（缩放渲染内容）。
-  useEffect(() => {
-    const app = appRef.current;
-    if (!app) return;
-    const onWheel = (event: WheelEvent): void => {
-      if (!(event.ctrlKey || event.metaKey)) return;
-      event.preventDefault();
-      const step = event.deltaY < 0 ? 5 : -5;
-      applyContentWidthRef.current(widthDraftRef.current + step);
-    };
-    app.addEventListener("wheel", onWheel, { passive: false });
-    return () => app.removeEventListener("wheel", onWheel);
-  }, []);
 
   // 改动导航：Ctrl+Shift+D 开关，F7 / Shift+F7 在改动间循环。见 §21.8.8。
   useEffect(() => {
@@ -1711,7 +1782,7 @@ export function App() {
               onClick={() => manager.setMode(mode)}
               disabled={
                 !active ||
-                activeIsPdf ||
+                activeIsBinary ||
                 (mode === "wysiwyg" && active.format !== "markdown") ||
                 ((mode === "split" || mode === "preview") &&
                   !formatSupportsPreview(active.format))
@@ -2040,7 +2111,7 @@ export function App() {
           <main ref={workspacePaneRef} className={`workspace mode-${state.mode}`}>
             <section
               className="pane wysiwyg-pane"
-              hidden={activeIsPdf || state.mode !== "wysiwyg"}
+              hidden={activeIsBinary || state.mode !== "wysiwyg"}
               aria-label={t("所见即所得编辑")}
             >
               <WysiwygPane
@@ -2056,7 +2127,7 @@ export function App() {
             <section
               className="pane source-pane"
               hidden={
-                activeIsPdf ||
+                activeIsBinary ||
                 state.mode === "preview" ||
                 state.mode === "wysiwyg" ||
                 state.mode === "git"
@@ -2080,7 +2151,7 @@ export function App() {
                 onFolds={(lines) => manager.updateFolds(active.id, lines)}
               />
             </section>
-            {state.mode === "split" && !activeIsPdf && (
+            {state.mode === "split" && !activeIsBinary && (
               <div
                 className="resizer split-resizer"
                 role="separator"
@@ -2092,7 +2163,7 @@ export function App() {
             <section
               className="pane"
               hidden={
-                activeIsPdf ||
+                activeIsBinary ||
                 state.mode === "source" ||
                 state.mode === "wysiwyg" ||
                 state.mode === "git"
@@ -2101,7 +2172,7 @@ export function App() {
             >
               <PreviewPane
                 document={active}
-                enabled={(state.mode === "split" || state.mode === "preview") && !activeIsPdf}
+                enabled={(state.mode === "split" || state.mode === "preview") && !activeIsBinary}
                 compileSignal={compileSignal}
                 diff={previewDiff}
                 mathKey={mathOptionsSignature()}
@@ -2115,13 +2186,13 @@ export function App() {
             </section>
             <section
               className="pane git-pane"
-              hidden={activeIsPdf || state.mode !== "git"}
+              hidden={activeIsBinary || state.mode !== "git"}
               aria-label={t("Git 差异")}
             >
               <GitPane
                 key={active.id}
                 document={active}
-                active={state.mode === "git" && !activeIsPdf}
+                active={state.mode === "git" && !activeIsBinary}
               />
             </section>
             <section
@@ -2132,6 +2203,13 @@ export function App() {
               {activeIsPdf && active?.path ? (
                 <PdfDocumentPreview path={active.path} mtimeMs={active.mtimeMs} />
               ) : null}
+            </section>
+            <section
+              className="pane image-pane"
+              hidden={!activeIsImage}
+              aria-label={t("图片预览")}
+            >
+              {activeIsImage ? <ImagePreviewPane document={active} /> : null}
             </section>
           </main>
         ) : (
@@ -2240,7 +2318,7 @@ export function App() {
           </span>
         )}
         <span className="statusbar-spacer" />
-        {active && !activeIsPdf && (
+        {active && !activeIsBinary && (
           <span className="statusbar-meta">
             {formatSize(active.size)}
             {" · "}
@@ -2249,7 +2327,7 @@ export function App() {
               : t("行 {0}，列 {1}", cursor.line, cursor.column)}
           </span>
         )}
-        {active && !activeIsPdf && (
+        {active && !activeIsBinary && (
           <span className="statusbar-meta" role="status">
             {active.dirty ? t(" · 未保存") : t(" · 已保存")}
           </span>
@@ -2261,99 +2339,12 @@ export function App() {
               ? (workspace.roots[0]?.root.name ?? t("无工作区"))
               : t("{0} 个工作区", workspace.roots.length)}
         </span>
-        <div className="statusbar-width" ref={widthRef}>
-          <button
-            type="button"
-            className={widthOpen ? "statusbar-width-button active" : "statusbar-width-button"}
-            aria-label={t("内容宽度")}
-            aria-expanded={widthOpen}
-            title={t("内容宽度")}
-            onClick={() => setWidthOpen((value) => !value)}
-          >
-            <span className="statusbar-width-value">{widthDraft}%</span>
-          </button>
-          {widthOpen && (
-            <div className="statusbar-popover" role="group" aria-label={t("内容宽度")}>
-              <div className="statusbar-width-row">
-                <input
-                  type="number"
-                  className="statusbar-width-input"
-                  min={30}
-                  max={1000}
-                  step={5}
-                  value={widthInput ?? String(widthDraft)}
-                  aria-label={t("内容宽度")}
-                  onChange={(event) => {
-                    const raw = event.target.value;
-                    setWidthInput(raw);
-                    const parsed = Number(raw);
-                    if (raw.trim() !== "" && Number.isFinite(parsed) && parsed >= 30) {
-                      applyWidthValue(parsed);
-                    }
-                  }}
-                  onBlur={() => setWidthInput(null)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") event.currentTarget.blur();
-                  }}
-                />
-                <span className="settings-suffix">%</span>
-                <button
-                  type="button"
-                  className="button small ghost"
-                  onClick={() => {
-                    setWidthInput(null);
-                    setViewWidth(null);
-                  }}
-                >
-                  {t("重置")}
-                </button>
-              </div>
-              <input
-                type="range"
-                className="statusbar-width-range"
-                min={30}
-                max={1000}
-                step={5}
-                list="width-scale-ticks"
-                value={widthDraft}
-                aria-label={t("内容宽度")}
-                onChange={(event) => applyContentWidth(Number(event.target.value))}
-              />
-              <datalist id="width-scale-ticks">
-                <option value="30" />
-                <option value="100" />
-                <option value="300" />
-                <option value="600" />
-                <option value="1000" />
-              </datalist>
-              <div className="statusbar-width-ticks" aria-hidden="true">
-                {WIDTH_TICKS.map((tick, index) => (
-                  <button
-                    key={tick}
-                    type="button"
-                    className="statusbar-width-tick"
-                    style={{
-                      left: `${((tick - 30) / 970) * 100}%`,
-                      top: index % 2 === 0 ? 0 : "13px",
-                    }}
-                    onClick={() => applyContentWidth(tick)}
-                  >
-                    {tick}
-                  </button>
-                ))}
-              </div>
-              <span className="statusbar-popover-note">
-                {t("仅调整当前显示；全局默认在 设置 → 外观 中修改")}
-              </span>
-            </div>
-          )}
-        </div>
         <DiffControls
-          enabled={diffEnabled && !activeIsPdf}
+          enabled={diffEnabled && !activeIsBinary}
           state={diffState}
           items={diffItems}
           currentIndex={diffIndex}
-          disabled={!active || activeIsPdf}
+          disabled={!active || activeIsBinary}
           dirty={active?.dirty ?? false}
           mode={diffMode}
           modeAvailable={state.mode !== "wysiwyg"}
@@ -2439,6 +2430,14 @@ export function App() {
         }}
         onClose={() => setRecoveries([])}
       />
+
+      {diagramViewer && (
+        <DiagramViewerDialog
+          svg={diagramViewer.svg}
+          title={diagramViewer.title}
+          onClose={() => setDiagramViewer(null)}
+        />
+      )}
 
       {perfVisible && <PerformanceOverlay onClose={() => setPerfVisible(false)} />}
     </div>

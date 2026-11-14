@@ -166,6 +166,30 @@ const ICONS = {
       <path d="M8 11h6" />
     </>
   ),
+  /** 图表查看工具栏：最大化 / 还原 / 适配宽度 */
+  maximize: (
+    <>
+      <path d="M8 3H5a2 2 0 0 0-2 2v3" />
+      <path d="M21 8V5a2 2 0 0 0-2-2h-3" />
+      <path d="M3 16v3a2 2 0 0 0 2 2h3" />
+      <path d="M16 21h3a2 2 0 0 0 2-2v-3" />
+    </>
+  ),
+  minimize: (
+    <>
+      <path d="M4 14h6v6" />
+      <path d="M20 10h-6V4" />
+      <path d="m14 10 7-7" />
+      <path d="m3 21 7-7" />
+    </>
+  ),
+  "fit-width": (
+    <>
+      <polyline points="18 8 22 12 18 16" />
+      <polyline points="6 8 2 12 6 16" />
+      <line x1="2" y1="12" x2="22" y2="12" />
+    </>
+  ),
   list: (
     <>
       <path d="M3 5h18" />

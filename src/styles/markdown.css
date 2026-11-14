@@ -1,7 +1,5 @@
 .markdown-body {
-  /* 按面板宽度百分比布局；超过 100% 时内容加宽并由面板横向滚动。 */
-  width: var(--prose-max-width, 100%);
-  max-width: none;
+  /* 正文占满渲染面板宽度，居中由面板内边距决定。 */
   margin: 0 auto;
   color: var(--fg);
   font-size: var(--prose-font-size, 15px);
@@ -83,6 +81,9 @@
 /* 复制按钮的外层包装：按钮固定于代码块右上角，不随横向滚动移动。 */
 .markdown-body .code-block {
   position: relative;
+  /* 背景按代码内容自然宽度收缩，不撑满内容区；上限见下方适配规则。 */
+  width: max-content;
+  max-width: min(100%, 100cqw);
 }
 
 .preview-copy {
@@ -119,6 +120,36 @@
   color: var(--accent);
 }
 
+/* 图表块「放大查看」按钮：悬停图表块时出现在右上角。 */
+.diagram-expand {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--muted);
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 120ms ease, color 120ms ease;
+}
+
+.markdown-body .preview-diagram:hover .diagram-expand,
+.diagram-expand:focus-visible {
+  opacity: 1;
+}
+
+.diagram-expand:hover {
+  color: var(--fg);
+}
+
 .markdown-body pre code {
   padding: 0;
   border: 0;
@@ -128,6 +159,7 @@
 
 /* 预览中的图表围栏与语法高亮代码块 */
 .markdown-body .preview-diagram {
+  position: relative;
   margin: 0.9em 0;
   padding: 14px 16px;
   border: 1px solid var(--border);
@@ -139,6 +171,7 @@
 }
 
 .markdown-body .preview-diagram svg {
+  /* 默认适配内容宽：不超过容器宽度即可，小图保持自然尺寸。 */
   max-width: 100%;
   height: auto;
 }
@@ -154,6 +187,15 @@
   border-radius: 4px;
   overflow: auto;
   line-height: 1.6;
+  /* 自然宽度：短代码块贴合内容；超宽时由 max-width 截断并内部滚动。 */
+  width: max-content;
+  max-width: min(100%, 100cqw);
+}
+
+/* 取消「图表适配宽度」时，代码块跟随内容宽度（可随内容宽度百分比加宽）。 */
+:root[data-diagram-fit="off"] .markdown-body .code-block,
+:root[data-diagram-fit="off"] .markdown-body pre.shiki {
+  max-width: 100%;
 }
 
 .markdown-body blockquote {
@@ -348,7 +390,15 @@
 
 .prose-editor .math-node-block {
   padding: 8px 12px;
-  text-align: center;
+  text-align: left;
+}
+
+/* 显示公式默认左对齐（KaTeX 自带样式为居中）；行内公式不受影响。 */
+.markdown-body .katex-display,
+.markdown-body .katex-display > .katex,
+.prose-editor .katex-display,
+.prose-editor .katex-display > .katex {
+  text-align: left;
 }
 
 .prose-editor .math-node-error {
@@ -420,6 +470,7 @@
 
 .diagram-svg svg,
 .diagram-svg-preview svg {
+  /* 默认适配：不超过容器宽度，小图保持自然尺寸（WYSIWYG 节点与内嵌预览块）。 */
   max-width: 100%;
   height: auto;
 }
@@ -469,8 +520,128 @@
 
 .diagram-svg-preview {
   display: flex;
-  justify-content: center;
+  justify-content: flex-start;
   padding: 24px;
+}
+
+/* 图表/图片缩放视图：独立文件预览与「放大查看」对话框共用。
+   sizing 层由 JS 按 自然尺寸×缩放 控制；适配宽度时用 min(px, 100%) 封顶。 */
+.diagram-viewer {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* 承载缩放视图的预览面板：滚动只发生在 .diagram-viewer-body 内，
+   工具栏固定在面板顶端，不随图表下翻。 */
+.preview-pane.diagram-pane {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+.preview-pane.diagram-pane > .placeholder {
+  padding: 24px 40px;
+}
+
+.diagram-viewer-toolbar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.diagram-viewer-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  justify-content: safe center;
+  padding: 24px;
+  overflow: auto;
+}
+
+.diagram-viewer-body svg,
+.diagram-viewer-body img {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+}
+
+/* sizing 层按内容宽度定宽；溢出时由视口滚动，不能被 flex 压缩。 */
+.diagram-viewer-sizing {
+  flex-shrink: 0;
+}
+
+.diagram-zoom-range {
+  flex: 1 1 140px;
+  max-width: 280px;
+  accent-color: var(--accent);
+}
+
+.diagram-zoom-input {
+  width: 72px;
+  text-align: right;
+}
+
+.diagram-zoom-label {
+  min-width: 42px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+  user-select: none;
+}
+
+/* 「放大查看」对话框：可拖拽调整大小（右下角拖拽柄）+ 标题栏最大化；工具栏 + 视口占满模态。 */
+.diagram-viewer-modal {
+  width: min(960px, 94vw);
+  height: min(86vh, 900px);
+  max-height: 86vh;
+  min-width: 420px;
+  min-height: 300px;
+  resize: both;
+}
+
+.diagram-viewer-modal.maximized {
+  resize: none;
+  border-radius: 0;
+}
+
+.diagram-viewer-modal .modal-header {
+  flex-shrink: 0;
+}
+
+.modal-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.diagram-viewer-modal .diagram-viewer-body {
+  padding: 16px;
+}
+
+/* 图表适配宽度（设置 → 外观）：勾选时内嵌图表显示封顶面板宽度（100cqw 取自
+   .preview-pane 尺寸容器，随面板/分栏实时变化）；取消后按自然宽度显示。
+   背景块跟随图表自然宽度（max-content 收缩包裹），不撑满内容区。 */
+.preview-pane {
+  container-type: inline-size;
+}
+
+.markdown-body .preview-diagram.diagram-svg-preview {
+  width: max-content;
+  max-width: min(100%, 100cqw);
+  margin: 0.9em 0;
+}
+
+:root[data-diagram-fit="off"] .markdown-body .preview-diagram.diagram-svg-preview {
+  max-width: none;
 }
 
 /* MyST 容器：tab-set / grid */

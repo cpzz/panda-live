@@ -5,6 +5,7 @@ export type BuiltinDocumentFormat =
   | "plantuml"
   | "mermaid"
   | "pdf"
+  | "image"
   | "text"
   | "cpp"
   | "java"
@@ -51,6 +52,13 @@ const EXTENSION_MAP: Record<string, BuiltinDocumentFormat> = {
   mermaid: "mermaid",
   // PDF：二进制文档，只读预览
   pdf: "pdf",
+  // 图片：二进制文档，只读预览
+  png: "image",
+  jpg: "image",
+  jpeg: "image",
+  gif: "image",
+  webp: "image",
+  bmp: "image",
   // 主流代码格式
   c: "cpp",
   h: "cpp",

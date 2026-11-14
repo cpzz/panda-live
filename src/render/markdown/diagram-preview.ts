@@ -10,6 +10,13 @@ const DIAGRAM_LANGUAGES: Record<string, DiagramKind> = {
   mmd: "mermaid",
 };
 
+/** 「放大查看」按钮图标：与全局线性图标（Lucide）风格一致。 */
+const EXPAND_ICON =
+  '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>';
+
+/** 打开放大查看对话框的窗口事件；App 侧监听并承载对话框。 */
+export const DIAGRAM_OPEN_EVENT = "panda-diagram-open";
+
 /** 围栏语言是否对应图表；与 §10.2 的别名保持一致。 */
 export function diagramKindForLanguage(language: string | null): DiagramKind | null {
   if (!language) return null;
@@ -61,6 +68,17 @@ export async function renderPreviewDiagrams(
     if (result.ok) {
       host.classList.add("diagram-svg-preview");
       host.innerHTML = result.svg;
+      // 「放大查看」：悬停显示的右上角按钮，打开独立缩放对话框。
+      const expand = document.createElement("button");
+      expand.type = "button";
+      expand.className = "diagram-expand";
+      expand.setAttribute("aria-label", t("放大查看"));
+      expand.title = t("放大查看");
+      expand.innerHTML = EXPAND_ICON;
+      expand.addEventListener("click", () => {
+        window.dispatchEvent(new CustomEvent(DIAGRAM_OPEN_EVENT, { detail: { svg: result.svg } }));
+      });
+      host.append(expand);
     } else if (result.code !== "E_CANCELLED") {
       host.textContent = t("图表渲染失败：{0}", result.error);
       host.classList.add("preview-diagram-error");

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Settings } from "../shared/settings";
 import { t } from "../i18n";
 import { ExtensionSettings } from "./ExtensionSettings";
@@ -46,12 +46,15 @@ export function SettingsDialog({
   const [draft, setDraft] = useState<Settings>(settings);
   const [section, setSection] = useState<SettingsSectionKey>("appearance");
   const dialogRef = useFocusTrap(open);
+  const wasOpen = useRef(false);
 
   useEffect(() => {
     if (open) {
       setDraft(settings);
-      setSection("appearance");
+      // 仅在「打开」瞬间回到默认分类；保存后 settings 变化不应打断当前浏览的分类。
+      if (!wasOpen.current) setSection("appearance");
     }
+    wasOpen.current = open;
   }, [open, settings]);
 
   useEffect(() => {
@@ -145,21 +148,15 @@ export function SettingsDialog({
                   />
                 </label>
                 <label className="settings-row">
-                  <span>{t("内容宽度")}</span>
-                  <span className="settings-inline">
-                    <input
-                      type="number"
-                      min={30}
-                      max={1000}
-                      step={5}
-                      value={draft.appearance.lineWidth}
-                      onChange={(event) => patch("appearance", { lineWidth: Number(event.target.value) })}
-                    />
-                    <span className="settings-suffix">%</span>
-                  </span>
+                  <span>{t("图表适配宽度")}</span>
+                  <input
+                    type="checkbox"
+                    checked={draft.appearance.diagramFitWidth}
+                    onChange={(event) => patch("appearance", { diagramFitWidth: event.target.checked })}
+                  />
                 </label>
                 <p className="settings-note">
-                  {t("按当前渲染面板宽度的百分比计算；超过 100% 时内容会加宽并出现水平滚动条，超宽表格与代码块也会在内容区内部滚动。")}
+                  {t("勾选时打开独立图表预览或「放大查看」窗口时自动适配面板宽度（工具栏按钮可随时重新适配）；取消后按图表自然宽度显示，超出部分横向滚动。图表不跟随内容宽度百分比。")}
                 </p>
               </>
             )}

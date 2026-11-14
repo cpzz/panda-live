@@ -10,13 +10,12 @@ describe("设置合并", () => {
 
   it("非法值被校正到默认值与范围内", () => {
     const merged = mergeSettings({
-      appearance: { theme: "purple", fontSize: 100, lineWidth: 100 },
+      appearance: { theme: "purple", fontSize: 100 },
       editor: { autoSave: "yes", tabSize: 0, eol: "crlf-ish" },
       privacy: { logLevel: "verbose" },
     });
     expect(merged.appearance.theme).toBe("system");
     expect(merged.appearance.fontSize).toBe(28);
-    expect(merged.appearance.lineWidth).toBe(100);
     expect(merged.editor.autoSave).toBe(true);
     expect(merged.editor.tabSize).toBe(1);
     expect(merged.editor.eol).toBe("preserve");
@@ -36,15 +35,8 @@ describe("设置合并", () => {
     expect(mergeSettings({ editor: { insertSpaces: false } }).editor.insertSpaces).toBe(false);
   });
 
-  it("内容宽度为百分比并校正范围，旧版像素配置回退为 100%", () => {
-    expect(mergeSettings({ appearance: { lineWidth: 120 } }).appearance).toMatchObject({
-      lineWidth: 120,
-    });
-    expect(mergeSettings({ appearance: { lineWidth: 1200 } }).appearance.lineWidth).toBe(1000);
-    expect(mergeSettings({ appearance: { lineWidth: 10 } }).appearance.lineWidth).toBe(30);
-    expect(
-      mergeSettings({ appearance: { lineWidth: 860, lineWidthUnit: "px" } }).appearance,
-    ).toMatchObject({ lineWidth: 100 });
+  it("已移除的内容宽度字段在读取时被丢弃", () => {
+    expect(mergeSettings({ appearance: { lineWidth: 120 } }).appearance).not.toHaveProperty("lineWidth");
     expect(
       mergeSettings({ appearance: { lineWidth: 860, lineWidthUnit: "px" } }).appearance,
     ).not.toHaveProperty("lineWidthUnit");
@@ -67,10 +59,9 @@ describe("设置合并", () => {
 
   it("补丁按分组深度合并", () => {
     const base = mergeSettings({ appearance: { fontSize: 18, theme: "dark" } });
-    const patched = patchSettings(base, { appearance: { lineWidth: 2000 }, editor: { autoSave: false } });
-    expect(patched.appearance.fontSize).toBe(18);
+    const patched = patchSettings(base, { appearance: { fontSize: 20 }, editor: { autoSave: false } });
+    expect(patched.appearance.fontSize).toBe(20);
     expect(patched.appearance.theme).toBe("dark");
-    expect(patched.appearance.lineWidth).toBe(1000);
     expect(patched.editor.autoSave).toBe(false);
   });
 

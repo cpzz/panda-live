@@ -27,6 +27,8 @@ const BUILTIN_CAPABILITIES: Record<BuiltinDocumentFormat, FormatCapabilities> = 
   mermaid: { source: true, wysiwyg: false, preview: "inline", outline: false, exportHtml: false },
   // PDF：二进制只读，不支持源码编辑
   pdf: { source: false, wysiwyg: false, preview: "none", outline: false, exportHtml: false },
+  // 图片：二进制只读，不支持源码编辑
+  image: { source: false, wysiwyg: false, preview: "none", outline: false, exportHtml: false },
   text: { source: true, wysiwyg: false, preview: "none", outline: false, exportHtml: false },
   cpp: CODE_CAPABILITIES,
   java: CODE_CAPABILITIES,
@@ -63,6 +65,7 @@ const BUILTIN_EXTENSIONS: Record<BuiltinDocumentFormat, string[]> = {
   plantuml: [".puml", ".plantuml"],
   mermaid: [".mmd", ".mermaid"],
   pdf: [".pdf"],
+  image: [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"],
   text: [],
   cpp: [".c", ".h", ".cc", ".cpp", ".cxx", ".hh", ".hpp", ".hxx", ".ino"],
   java: [".java"],
@@ -100,6 +103,7 @@ const BUILTIN_SYNTAX: Record<BuiltinDocumentFormat, LanguageSyntax> = {
   plantuml: "plain",
   mermaid: "plain",
   pdf: "plain",
+  image: "plain",
   text: "plain",
   cpp: "cpp",
   java: "java",
