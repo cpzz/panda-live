@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import { t } from "../i18n";
 import { onThemeChange, resolveTheme, type AppTheme } from "../services/theme";
-import { Icon } from "./icons";
+import { DiagramZoomToolbar, useDiagramZoomShortcuts } from "./DiagramViewerDialog";
 
 interface PageSlot {
   pageNumber: number;
@@ -224,6 +224,17 @@ export function PdfPreview({ source }: { source: PdfSource }) {
     };
   }, [slots, zoom]);
 
+  // 缩放快捷键与工具栏一致：Ctrl += 放大、Ctrl -= 缩小、Ctrl+0 复位、Ctrl+滚轮缩放。
+  useDiagramZoomShortcuts(
+    Math.round(zoom * 100),
+    (value) => setZoom(clampZoom(value / 100)),
+    {
+      min: Math.round(ZOOM_MIN * 100),
+      max: Math.round(ZOOM_MAX * 100),
+      step: Math.round(ZOOM_STEP * 100),
+    },
+  );
+
   /** 跳转到指定页（表单提交；越界夹取）。 */
   const goToPage = (raw: string): void => {
     const target = Number.parseInt(raw, 10);
@@ -264,36 +275,17 @@ export function PdfPreview({ source }: { source: PdfSource }) {
             />
             <span className="pdf-page-total">/ {total}</span>
           </form>
-          <span className="pdf-toolbar-separator" aria-hidden="true" />
-          <button
-            type="button"
-            className="icon-button"
-            aria-label={t("缩小")}
-            title={t("缩小")}
-            disabled={zoom <= ZOOM_MIN}
-            onClick={() => setZoom((value) => clampZoom(value - ZOOM_STEP))}
-          >
-            <Icon name="zoom-out" />
-          </button>
-          <span className="pdf-zoom-label">{Math.round(zoom * 100)}%</span>
-          <button
-            type="button"
-            className="icon-button"
-            aria-label={t("放大")}
-            title={t("放大")}
-            disabled={zoom >= ZOOM_MAX}
-            onClick={() => setZoom((value) => clampZoom(value + ZOOM_STEP))}
-          >
-            <Icon name="zoom-in" />
-          </button>
-          <button
-            type="button"
-            className="button small ghost"
-            disabled={zoom === 1}
-            onClick={() => setZoom(1)}
-          >
-            {t("适配宽度")}
-          </button>
+          {/* 缩放控件与图表/图片预览保持一致：输入框、滑块、±图标与复位动作。 */}
+          <DiagramZoomToolbar
+            className="pdf-zoom-controls"
+            label={t("页面缩放")}
+            zoom={Math.round(zoom * 100)}
+            min={Math.round(ZOOM_MIN * 100)}
+            max={Math.round(ZOOM_MAX * 100)}
+            step={Math.round(ZOOM_STEP * 100)}
+            onZoomChange={(value) => setZoom(clampZoom(value / 100))}
+            onFit={() => setZoom(1)}
+          />
         </div>
       )}
       <div className={`pdf-viewer${invert ? " pdf-invert" : ""}`} ref={scrollRef}>

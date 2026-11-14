@@ -11,7 +11,8 @@ Panda Live 是一个本地优先的桌面文档编辑器。源码与渲染结果
 - **Git 兼容参数** —— `-w`（忽略空白）、`--ignore-blank-lines`（忽略空行）与 `--ignore-cr-at-eol`（忽略行尾 CR）各自独立开关。
 - **Markdown 渲染管线** —— GFM、Front Matter、数学公式（KaTeX）、语法高亮（Shiki）与 HTML 净化。
 - **LaTeX 预览** —— 支持 Tectonic、latexmk 或 xelatex 编译，诊断汇入问题面板。
-- **图表** —— PlantUML 与 Mermaid 预览，支持缓存与明暗主题。
+- **图表** —— PlantUML 与 Mermaid 预览，支持缓存、明暗主题与缩放查看：独立文件预览与文档内嵌图表都可在工具栏或 Ctrl +/-、Ctrl+滚轮缩放，支持复位到自然宽度。
+- **图片预览** —— PNG、JPEG、GIF、WebP、BMP 以只读方式打开，支持与图表一致的缩放查看。
 - **中英文双语界面** —— 中文与英文可随时切换。
 - **桌面集成** —— 工作区侧栏、大纲、崩溃恢复草稿、最近文件、HTML/PDF/SVG 导出与可安装的格式扩展。
 
@@ -19,9 +20,10 @@ Panda Live 是一个本地优先的桌面文档编辑器。源码与渲染结果
 
 | 类型 | 格式 |
 |---|---|
-| 文档 | Markdown、纯文本 |
+| 文档 | Markdown、纯文本、PDF（只读预览） |
 | 标记 / 数学 | LaTeX（`.tex`）、MathML、HTML、XML |
 | 图表 | PlantUML、Mermaid |
+| 图片 | PNG、JPEG、GIF、WebP、BMP（只读预览） |
 | 代码 | C/C++、Java、JavaScript/TypeScript、JSON、YAML、CSS、Python、SQL、PHP、Rust、C#、Go、Ruby、Kotlin、Swift、R、Scala、Shell、Dart、Lua、Perl、Objective-C、INI、TOML |
 
 扩展还可以贡献额外的格式、预览与命令。

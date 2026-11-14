@@ -11,7 +11,8 @@ Panda Live is a local-first desktop document editor. It keeps source and rendere
 - **Git-compatible diff options** — `-w` (ignore whitespace), `--ignore-blank-lines`, and `--ignore-cr-at-eol` are available as independent toggles.
 - **Markdown pipeline** — GFM, front matter, math (KaTeX), syntax highlighting (Shiki), and sanitized HTML.
 - **LaTeX preview** — compile with Tectonic, latexmk or xelatex; diagnostics are collected in the Problems panel.
-- **Diagrams** — PlantUML and Mermaid preview with caching and theme support.
+- **Diagrams** — PlantUML and Mermaid preview with caching, theme support and a zoomable viewer: standalone files and diagrams embedded in Markdown zoom via the toolbar or Ctrl +/- and Ctrl+wheel, with a reset to natural width.
+- **Image preview** — PNG, JPEG, GIF, WebP and BMP open read-only with the same zoomable viewer.
 - **Bilingual UI** — Chinese and English, switchable at runtime.
 - **Desktop integration** — workspace sidebar, outline, recovery drafts, recent files, HTML/PDF/SVG export, and installable format extensions.
 
@@ -19,9 +20,10 @@ Panda Live is a local-first desktop document editor. It keeps source and rendere
 
 | Kind | Formats |
 |---|---|
-| Documents | Markdown, plain text |
+| Documents | Markdown, plain text, PDF (read-only preview) |
 | Markup / math | LaTeX (`.tex`), MathML, HTML, XML |
 | Diagrams | PlantUML, Mermaid |
+| Images | PNG, JPEG, GIF, WebP, BMP (read-only preview) |
 | Code | C/C++, Java, JavaScript/TypeScript, JSON, YAML, CSS, Python, SQL, PHP, Rust, C#, Go, Ruby, Kotlin, Swift, R, Scala, Shell, Dart, Lua, Perl, Objective-C, INI, TOML |
 
 Extensions can contribute additional formats, previews and commands.

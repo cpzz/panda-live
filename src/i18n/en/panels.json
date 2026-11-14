@@ -113,7 +113,6 @@
   "性能浮层": "Performance overlay",
   "性能": "Performance",
   "重置": "Reset",
-  "仅调整当前显示；全局默认在 设置 → 外观 中修改": "Applies to the current view only; change the global default in Settings → Appearance.",
   "长任务": "Long tasks",
   "{0} 次 / {1} ms": "{0} times / {1} ms",
   "图表缓存": "Diagram cache",

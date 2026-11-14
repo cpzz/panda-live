@@ -183,11 +183,11 @@ const ICONS = {
       <path d="m3 21 7-7" />
     </>
   ),
-  "fit-width": (
+  /** 缩放工具栏：复位（恢复自然宽度 / 100%） */
+  reset: (
     <>
-      <polyline points="18 8 22 12 18 16" />
-      <polyline points="6 8 2 12 6 16" />
-      <line x1="2" y1="12" x2="22" y2="12" />
+      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+      <path d="M3 3v5h5" />
     </>
   ),
   list: (

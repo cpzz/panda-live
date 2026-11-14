@@ -18,19 +18,33 @@ export function clampDiagramZoom(value: number): number {
  * 图表/图片缩放快捷键：Ctrl+= 放大、Ctrl+- 缩小、Ctrl+0 重置为 100%、Ctrl+滚轮缩放。
  * 仅在调用方挂载期间生效；对话框传 capture=true 抢占事件，避免底层预览同时响应。
  */
+export interface DiagramZoomShortcutOptions {
+  /** 抢占事件（对话框用），避免底层视图同时响应。 */
+  capture?: boolean;
+  /** 缩放下限（百分比），默认 30。 */
+  min?: number;
+  /** 缩放上限（百分比），默认 1000。 */
+  max?: number;
+  /** 缩放步进（百分比），默认 10。 */
+  step?: number;
+}
+
 export function useDiagramZoomShortcuts(
   zoom: number,
   onZoomChange: (zoom: number) => void,
-  capture = false,
+  options: DiagramZoomShortcutOptions = {},
 ): void {
+  const { capture = false, min = DIAGRAM_ZOOM_MIN, max = DIAGRAM_ZOOM_MAX, step = ZOOM_STEP } =
+    options;
   const zoomRef = useRef(zoom);
   zoomRef.current = zoom;
   const changeRef = useRef(onZoomChange);
   changeRef.current = onZoomChange;
 
   useEffect(() => {
-    const step = (delta: number): void => {
-      changeRef.current(clampDiagramZoom(zoomRef.current + delta));
+    const clamp = (value: number): number => Math.min(max, Math.max(min, Math.round(value)));
+    const stepBy = (delta: number): void => {
+      changeRef.current(clamp(zoomRef.current + delta));
     };
     const onKeyDown = (event: KeyboardEvent): void => {
       if (!(event.ctrlKey || event.metaKey)) return;
@@ -38,22 +52,22 @@ export function useDiagramZoomShortcuts(
       if (key === "=" || key === "+") {
         event.preventDefault();
         if (capture) event.stopPropagation();
-        step(ZOOM_STEP);
+        stepBy(step);
       } else if (key === "-" || key === "_") {
         event.preventDefault();
         if (capture) event.stopPropagation();
-        step(-ZOOM_STEP);
+        stepBy(-step);
       } else if (key === "0") {
         event.preventDefault();
         if (capture) event.stopPropagation();
-        changeRef.current(100);
+        changeRef.current(clamp(100));
       }
     };
     const onWheel = (event: WheelEvent): void => {
       if (!(event.ctrlKey || event.metaKey)) return;
       event.preventDefault();
       if (capture) event.stopPropagation();
-      step(event.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP);
+      stepBy(event.deltaY < 0 ? step : -step);
     };
     window.addEventListener("keydown", onKeyDown, capture);
     window.addEventListener("wheel", onWheel, { passive: false, capture });
@@ -61,7 +75,7 @@ export function useDiagramZoomShortcuts(
       window.removeEventListener("keydown", onKeyDown, capture);
       window.removeEventListener("wheel", onWheel, capture);
     };
-  }, [capture]);
+  }, [capture, min, max, step]);
 }
 
 /** 缩放视图的内容宽度：自然尺寸 × 缩放百分比；超出视口时由视口滚动。 */
@@ -73,37 +87,58 @@ export interface DiagramZoomControls {
   /** 缩放百分比；100 = 自然尺寸。 */
   zoom: number;
   onZoomChange(zoom: number): void;
-  /** 适配宽度（一次性动作）：恢复自然宽度显示且不超过视口宽度，超宽图表按比例缩小。 */
+  /** 复位（一次性动作）：恢复自然宽度显示且不超过视口宽度，超宽图表按比例缩小。 */
   onFit(): void;
+  /** 缩放下限（百分比），默认 30。 */
+  min?: number;
+  /** 缩放上限（百分比），默认 1000。 */
+  max?: number;
+  /** 缩放步进（百分比），默认 10。 */
+  step?: number;
+  /** 工具栏容器类名；PDF 等复用时传入自己的布局类。 */
+  className?: string;
+  /** 缩放控件的无障碍标签（默认「图表缩放」）。 */
+  label?: string;
 }
 
 /**
- * 缩放工具栏（右对齐）：百分比输入框、滑块、放大/缩小图标按钮与适配宽度动作按钮。
- * 独立图表/图片预览与「放大查看」对话框共用。
+ * 缩放工具栏（右对齐）：百分比输入框、滑块、放大/缩小图标按钮与复位动作按钮。
+ * 独立图表/图片预览、「放大查看」对话框与 PDF 预览共用。
  */
-export function DiagramZoomToolbar({ zoom, onZoomChange, onFit }: DiagramZoomControls) {
+export function DiagramZoomToolbar({
+  zoom,
+  onZoomChange,
+  onFit,
+  min = DIAGRAM_ZOOM_MIN,
+  max = DIAGRAM_ZOOM_MAX,
+  step = ZOOM_STEP,
+  className = "diagram-viewer-toolbar",
+  label = t("图表缩放"),
+}: DiagramZoomControls) {
   const [input, setInput] = useState(String(zoom));
   // 外部 zoom 变化（滑块/±/适配）时同步输入框；输入过程中以本地文本为准。
   useEffect(() => setInput(String(zoom)), [zoom]);
 
+  const clamp = (value: number): number => Math.min(max, Math.max(min, Math.round(value)));
+
   const commit = (): void => {
     const parsed = Number(input);
     if (input.trim() !== "" && Number.isFinite(parsed)) {
-      onZoomChange(clampDiagramZoom(parsed));
+      onZoomChange(clamp(parsed));
     } else {
       setInput(String(zoom));
     }
   };
 
   return (
-    <div className="diagram-viewer-toolbar">
+    <div className={className}>
       <input
         type="number"
         className="diagram-zoom-input"
-        min={DIAGRAM_ZOOM_MIN}
-        max={DIAGRAM_ZOOM_MAX}
+        min={min}
+        max={max}
         value={input}
-        aria-label={t("图表缩放")}
+        aria-label={label}
         onChange={(event) => setInput(event.target.value)}
         onBlur={commit}
         onKeyDown={(event) => {
@@ -117,20 +152,20 @@ export function DiagramZoomToolbar({ zoom, onZoomChange, onFit }: DiagramZoomCon
       <input
         type="range"
         className="diagram-zoom-range"
-        min={DIAGRAM_ZOOM_MIN}
-        max={DIAGRAM_ZOOM_MAX}
-        step={10}
+        min={min}
+        max={max}
+        step={step}
         value={zoom}
-        aria-label={t("图表缩放")}
-        onChange={(event) => onZoomChange(Number(event.target.value))}
+        aria-label={label}
+        onChange={(event) => onZoomChange(clamp(Number(event.target.value)))}
       />
       <button
         type="button"
         className="icon-button"
         aria-label={t("放大")}
         title={t("放大")}
-        disabled={zoom >= DIAGRAM_ZOOM_MAX}
-        onClick={() => onZoomChange(clampDiagramZoom(zoom + ZOOM_STEP))}
+        disabled={zoom >= max}
+        onClick={() => onZoomChange(clamp(zoom + step))}
       >
         <Icon name="zoom-in" />
       </button>
@@ -139,13 +174,13 @@ export function DiagramZoomToolbar({ zoom, onZoomChange, onFit }: DiagramZoomCon
         className="icon-button"
         aria-label={t("缩小")}
         title={t("缩小")}
-        disabled={zoom <= DIAGRAM_ZOOM_MIN}
-        onClick={() => onZoomChange(clampDiagramZoom(zoom - ZOOM_STEP))}
+        disabled={zoom <= min}
+        onClick={() => onZoomChange(clamp(zoom - step))}
       >
         <Icon name="zoom-out" />
       </button>
-      <button type="button" className="icon-button" aria-label={t("适配宽度")} title={t("适配宽度")} onClick={onFit}>
-        <Icon name="fit-width" />
+      <button type="button" className="icon-button" aria-label={t("复位")} title={t("复位")} onClick={onFit}>
+        <Icon name="reset" />
       </button>
     </div>
   );
@@ -170,7 +205,7 @@ export function DiagramViewerDialog({ svg, title, onClose }: DiagramViewerDialog
   const [maximized, setMaximized] = useState(false);
   const natural = useMemo(() => svgNaturalWidth(svg), [svg]);
   // 对话框独占缩放快捷键，避免底层预览同时响应。
-  useDiagramZoomShortcuts(zoom, setZoom, true);
+  useDiagramZoomShortcuts(zoom, setZoom, { capture: true });
 
   /** 适配宽度：按视口可用宽度与自然宽度计算缩放比（≤100%），之后缩放仍可自由放大。 */
   const applyFit = useCallback((): void => {

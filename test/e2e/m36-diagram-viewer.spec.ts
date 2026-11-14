@@ -80,10 +80,10 @@ test("M36：图表缩放与持久缓存回归", async () => {
           .evaluate((element) => element.scrollLeft + element.scrollTop),
       ).toBe(0);
 
-      // 适配宽度：恢复自然宽度显示且不超过视口。
+      // 复位：恢复自然宽度显示且不超过视口。
       await page
         .locator(".diagram-viewer-toolbar")
-        .getByRole("button", { name: "适配宽度", exact: true })
+        .getByRole("button", { name: "复位", exact: true })
         .click();
       await expect.poll(widthAt, { timeout: 5_000 }).toBeLessThanOrEqual(initialWidth + 1);
 

@@ -2777,18 +2777,21 @@ body.resizing * {
   font-size: 12px;
 }
 
-.pdf-toolbar-separator {
-  width: 1px;
-  height: 16px;
-  margin: 0 4px;
-  background: var(--border);
+/* PDF 缩放控件：与图表/图片预览共用 DiagramZoomToolbar，右对齐在页码之后。
+   固定单行：缩放项较多，换行会把「适配宽度」挤到第二行。 */
+.pdf-zoom-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-left: auto;
+  flex-wrap: nowrap;
 }
 
-.pdf-zoom-label {
-  min-width: 40px;
-  color: var(--muted);
-  font-size: 12px;
-  text-align: center;
+.pdf-zoom-controls .diagram-zoom-range {
+  flex: 1 1 auto;
+  min-width: 60px;
+  max-width: 240px;
 }
 
 .pdf-pages {

@@ -10,8 +10,6 @@
   "界面语言": "Interface language",
   "中文": "Chinese",
   "字号（px）": "Font size (px)",
-  "内容宽度": "Content width",
-  "按当前渲染面板宽度的百分比计算；超过 100% 时内容会加宽并出现水平滚动条，超宽表格与代码块也会在内容区内部滚动。": "Relative to the current preview pane width; above 100% the content widens and scrolls horizontally, and very wide tables and code blocks scroll inside the content area.",
   "图表适配宽度": "Fit diagrams to width",
   "勾选时打开独立图表预览或「放大查看」窗口时自动适配面板宽度（工具栏按钮可随时重新适配）；取消后按图表自然宽度显示，超出部分横向滚动。图表不跟随内容宽度百分比。": "When checked, the standalone preview and the viewer dialog fit diagrams to the pane width on open (the toolbar button re-fits anytime); when unchecked, diagrams show at their natural width and scroll horizontally when wider. Diagrams do not follow the content width percentage.",
   "最大化": "Maximize",
@@ -123,5 +121,5 @@
   "PDF 加载失败：{0}": "Failed to load PDF: {0}",
   "正在加载 PDF…": "Loading PDF…",
   "跳转到页": "Go to page",
-  "适配宽度": "Fit width"
+  "复位": "Reset"
 }
