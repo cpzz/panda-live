@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360" role="img" aria-labelledby="title desc">
+  <title id="title">Panda Live SVG 示例</title>
+  <desc id="desc">深绿色渐变背景上的熊猫头像与 Panda Live 标题</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#093a4a"/>
+      <stop offset="1" stop-color="#0b6b4f"/>
+    </linearGradient>
+  </defs>
+  <rect width="640" height="360" fill="url(#bg)"/>
+  <circle cx="90" cy="70" r="150" fill="#ffffff" opacity="0.11"/>
+  <circle cx="600" cy="360" r="130" fill="#ffffff" opacity="0.11"/>
+  <g>
+    <circle cx="151" cy="127" r="39" fill="#181a1e"/>
+    <circle cx="271" cy="127" r="39" fill="#181a1e"/>
+    <circle cx="211" cy="202" r="111" fill="#ffffff"/>
+    <ellipse cx="169" cy="196" rx="29" ry="36" fill="#181a1e"/>
+    <ellipse cx="253" cy="196" rx="29" ry="36" fill="#181a1e"/>
+    <circle cx="167" cy="193" r="9" fill="#fafafa"/>
+    <circle cx="251" cy="193" r="9" fill="#fafafa"/>
+    <ellipse cx="211" cy="244" rx="14" ry="9" fill="#181a1e"/>
+  </g>
+  <text x="352" y="186" font-family="'Segoe UI', system-ui, sans-serif" font-size="34" font-weight="700" fill="#ffffff">Panda Live</text>
+  <text x="356" y="214" font-family="'Segoe UI', system-ui, sans-serif" font-size="16" fill="#d6e8e2">Image format sample</text>
+  <g>
+    <rect x="356" y="238" width="118" height="34" fill="#ffffff"/>
+    <text x="370" y="261" font-family="Consolas, monospace" font-size="15" font-weight="700" fill="#0b6b4f">SVG</text>
+  </g>
+</svg>

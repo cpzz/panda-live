@@ -933,6 +933,22 @@ button {
   overflow: auto;
 }
 
+/* 纯文本/代码格式的预览：只读原文，保留缩进与换行。 */
+.text-preview-pane {
+  padding: 24px 32px 80px;
+}
+
+.text-preview {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--fg);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  tab-size: 4;
+}
+
 /* Git 差异视图 */
 .git-pane {
   display: flex;

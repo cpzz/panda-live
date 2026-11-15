@@ -77,6 +77,20 @@ const CODE_EXTENSIONS = [
 
 const MARKDOWN_EXTENSIONS = ["md", "markdown", "mdown", "mkd", "qmd", "rmd", "mdx"];
 
+/** 以只读图片预览打开的扩展名。 */
+const IMAGE_EXTENSIONS = [
+  "png",
+  "apng",
+  "jpg",
+  "jpeg",
+  "jfif",
+  "gif",
+  "webp",
+  "bmp",
+  "ico",
+  "avif",
+];
+
 /** 允许转存的图片类型；SVG 不在此列，避免把可执行脚本带入文档目录。 */
 const IMAGE_MIME_EXTENSIONS: Record<string, string> = {
   "image/png": "png",
@@ -96,8 +110,9 @@ function timestamp(date: Date): string {
 
 function markdownFilters(): FileFilter[] {
   return [
-    { name: t("所有支持的文件"), extensions: [...MARKDOWN_EXTENSIONS, ...CODE_EXTENSIONS, "tex", "latex", "pdf"] },
+    { name: t("所有支持的文件"), extensions: [...MARKDOWN_EXTENSIONS, ...CODE_EXTENSIONS, ...IMAGE_EXTENSIONS, "tex", "latex", "pdf"] },
     { name: "PDF", extensions: ["pdf"] },
+    { name: t("图片"), extensions: IMAGE_EXTENSIONS },
     { name: t("代码文件"), extensions: CODE_EXTENSIONS },
     { name: "Markdown", extensions: MARKDOWN_EXTENSIONS },
     { name: t("文本文件"), extensions: ["txt", "log", "puml", "mmd"] },

@@ -6,6 +6,7 @@ export type BuiltinDocumentFormat =
   | "mermaid"
   | "pdf"
   | "image"
+  | "svg"
   | "text"
   | "cpp"
   | "java"
@@ -52,13 +53,19 @@ const EXTENSION_MAP: Record<string, BuiltinDocumentFormat> = {
   mermaid: "mermaid",
   // PDF：二进制文档，只读预览
   pdf: "pdf",
-  // 图片：二进制文档，只读预览
+  // 图片：二进制文档，只读预览（SVG 是文本，按独立格式处理）
   png: "image",
   jpg: "image",
   jpeg: "image",
+  jfif: "image",
   gif: "image",
   webp: "image",
   bmp: "image",
+  ico: "image",
+  avif: "image",
+  apng: "image",
+  // SVG：文本格式，源码可编辑，预览经消毒后渲染
+  svg: "svg",
   // 主流代码格式
   c: "cpp",
   h: "cpp",
@@ -98,7 +105,6 @@ const EXTENSION_MAP: Record<string, BuiltinDocumentFormat> = {
   phtml: "php",
   rs: "rust",
   xml: "xml",
-  svg: "xml",
   xsd: "xml",
   xsl: "xml",
   xslt: "xml",
@@ -142,7 +148,7 @@ export function detectFormat(fileName: string): BuiltinDocumentFormat {
   return builtinFormatFor(fileName) ?? "text";
 }
 
-/** 纯代码格式：只有源码编辑，没有渲染预览与大纲。 */
+/** 纯代码格式：无专属渲染器，预览为只读原文，且不提供大纲。 */
 export const CODE_FORMATS: ReadonlySet<BuiltinDocumentFormat> = new Set([
   "cpp",
   "java",

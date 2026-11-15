@@ -71,13 +71,6 @@ const MODE_ICONS: Record<EditorMode, IconName> = {
   git: "git",
 };
 
-/** 具有渲染预览的内置格式；扩展格式由扩展自身提供预览。 */
-const PREVIEW_FORMATS = new Set(["markdown", "latex", "mathml", "plantuml", "mermaid", "image"]);
-
-function formatSupportsPreview(formatId: string): boolean {
-  return PREVIEW_FORMATS.has(formatId) || Boolean(getFormatEntry(formatId)?.extensionId);
-}
-
 const ENCODING_LABELS: Record<string, string> = {
   "utf-8": "UTF-8",
   "utf-8-bom": "UTF-8 (BOM)",
@@ -460,6 +453,85 @@ function DiagramPreviewPane({ document, enabled }: { document: DocumentState; en
   );
 }
 
+/** SVG 源码 → data URL：在 `<img>` 中渲染，脚本与内部样式不会进入应用文档。 */
+function svgDataUrl(source: string): string {
+  const bytes = new TextEncoder().encode(source);
+  let binary = "";
+  for (let index = 0; index < bytes.length; index += 0x2000) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + 0x2000));
+  }
+  return `data:image/svg+xml;base64,${btoa(binary)}`;
+}
+
+/** SVG 文档预览：源码按 XML 编辑，预览用隔离的图片视图渲染。 */
+function SvgPreviewPane({ document, enabled }: { document: DocumentState; enabled: boolean }) {
+  const [src, setSrc] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [zoom, setZoom] = useState(100);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const fittedRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!enabled) return;
+    const timer = setTimeout(() => {
+      if (!document.content.trim()) {
+        setSrc("");
+        setError(t("SVG 内容为空"));
+        return;
+      }
+      setSrc(svgDataUrl(document.content));
+      setError(null);
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [document.content, enabled]);
+
+  const natural = useMemo(
+    () => (document.content.trim() ? svgNaturalWidth(document.content) : 0),
+    [document.content],
+  );
+  // 图片视图缩放快捷键：仅在支持缩放的显示里生效。
+  useDiagramZoomShortcuts(zoom, setZoom);
+
+  /** 适配宽度：按视口可用宽度与 SVG 自然宽度计算缩放比（≤100%）。 */
+  const applyFit = useCallback((): void => {
+    const body = bodyRef.current;
+    if (!body || natural <= 0) return;
+    const style = getComputedStyle(body);
+    const available =
+      body.clientWidth - Number.parseFloat(style.paddingLeft) - Number.parseFloat(style.paddingRight);
+    if (!(available > 0)) return;
+    setZoom(clampDiagramZoom(Math.min(100, Math.round((available / natural) * 100))));
+  }, [natural]);
+
+  // 每个文档首次渲染后按「设置 → 外观 → 图表适配宽度」自动适配一次。
+  useEffect(() => {
+    if (fittedRef.current === document.id || natural <= 0) return;
+    fittedRef.current = document.id;
+    if (settingsStore.getState().appearance.diagramFitWidth) applyFit();
+  }, [document.id, natural, applyFit]);
+
+  const width = natural > 0 ? diagramViewerWidth(natural, zoom) : undefined;
+
+  return (
+    <div className="preview-pane diagram-pane">
+      {error ? (
+        <p className="placeholder">{t("图表诊断：{0}", error)}</p>
+      ) : (
+        <div className="diagram-viewer">
+          <DiagramZoomToolbar zoom={zoom} onZoomChange={setZoom} onFit={applyFit} />
+          <div className="diagram-viewer-body" ref={bodyRef}>
+            <div className="diagram-viewer-sizing" style={width ? { width } : undefined}>
+              {src ? (
+                <img src={src} alt={document.name} onError={() => setError(t("SVG 解析失败"))} />
+              ) : null}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** 图片文件预览：readBase64 读取磁盘字节，缩放/适配与图表视图共用同一工具栏。 */
 function ImagePreviewPane({ document }: { document: DocumentState }) {
   const [src, setSrc] = useState("");
@@ -746,6 +818,15 @@ function TexPreviewPane({
   );
 }
 
+/** 纯文本/代码格式的预览：只读展示原文，保留缩进与换行。 */
+function TextPreviewPane({ content }: { content: string }) {
+  return (
+    <div className="preview-pane text-preview-pane">
+      <pre className="text-preview">{content}</pre>
+    </div>
+  );
+}
+
 function PreviewPane({
   document,
   enabled,
@@ -803,12 +884,11 @@ function PreviewPane({
   if (document.format === "plantuml" || document.format === "mermaid") {
     return <DiagramPreviewPane document={document} enabled={enabled} />;
   }
+  if (document.format === "svg") {
+    return <SvgPreviewPane key={document.id} document={document} enabled={enabled} />;
+  }
   if (!supported) {
-    return (
-      <div className="preview-pane">
-        <p className="placeholder">{t("该格式暂不支持渲染预览")}</p>
-      </div>
-    );
+    return <TextPreviewPane content={document.content} />;
   }
 
   return (
@@ -934,8 +1014,8 @@ export function App() {
   const activeContent = active?.content ?? "";
   const activeFormat = active?.format ?? "";
   const activeId = active?.id ?? "";
-  // 模式条：只对有渲染预览的文本格式显示；二进制（PDF/图片）与纯代码文件只有源码视图。
-  const modeBarVisible = Boolean(active) && !activeIsBinary && formatSupportsPreview(activeFormat);
+  // 模式条：所有文本格式都提供 源码 / 分栏 / 预览；二进制（PDF/图片）由专用只读面板展示。
+  const modeBarVisible = Boolean(active) && !activeIsBinary;
   const modeBarModes: EditorMode[] =
     active?.format === "markdown"
       ? ["source", "split", "preview", "wysiwyg"]
@@ -2126,11 +2206,7 @@ export function App() {
                       aria-label={t(MODE_LABELS[mode]!)}
                       data-tip={t(MODE_LABELS[mode]!)}
                       onClick={() => manager.setMode(mode)}
-                      disabled={
-                        (mode === "wysiwyg" && active.format !== "markdown") ||
-                        ((mode === "split" || mode === "preview") &&
-                          !formatSupportsPreview(active.format))
-                      }
+                      disabled={mode === "wysiwyg" && active.format !== "markdown"}
                     >
                       <Icon name={MODE_ICONS[mode]} />
                     </button>
@@ -2349,15 +2425,17 @@ export function App() {
           <span className="statusbar-meta">
             {active.format === "pdf"
               ? `PDF · ${formatSize(active.size)} · ${t("只读")}`
-              : [
-                  t(ENCODING_LABELS[active.encoding] ?? active.encoding),
-                  active.eol.toUpperCase(),
-                  active.bom ? "BOM" : "",
-                  active.readOnly ? t("只读") : "",
-                  active.format,
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
+              : active.format === "image"
+                ? `${t("图片")} · ${formatSize(active.size)} · ${t("只读")}`
+                : [
+                    t(ENCODING_LABELS[active.encoding] ?? active.encoding),
+                    active.eol.toUpperCase(),
+                    active.bom ? "BOM" : "",
+                    active.readOnly ? t("只读") : "",
+                    active.format,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
           </span>
         )}
         <span className="statusbar-spacer" />

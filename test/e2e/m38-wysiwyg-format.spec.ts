@@ -684,10 +684,23 @@ test("M38：模式条布局与默认模式", async () => {
     await page.getByRole("button", { name: "源码", exact: true }).click();
     await expect(bar.locator(".block-toolbar")).toHaveCount(0);
 
-    // 打开 .txt：不支持预览，模式条隐藏。
+    // 打开 .txt：文本格式同样提供 源码 / 分栏 / 预览，不显示「所见即所得」。
     await mockOpen(textPath);
     await page.getByRole("button", { name: "打开", exact: true }).click();
-    await expect(page.locator(".mode-bar")).toHaveCount(0);
+    const textBar = page.locator(".mode-bar");
+    await expect(textBar).toBeVisible();
+    const textModes = textBar.locator(".mode-bar-modes button");
+    await expect(textModes).toHaveCount(3);
+    await expect(textModes.nth(0)).toHaveAccessibleName("源码");
+    await expect(textModes.nth(1)).toHaveAccessibleName("分栏");
+    await expect(textModes.nth(2)).toHaveAccessibleName("预览");
+    // 纯文本预览为只读原文，不再显示「暂不支持渲染预览」占位。
+    await textModes.nth(2).click();
+    await expect(page.locator(".text-preview")).toHaveText("纯文本");
+    await expect(page.locator(".mode-bar-modes button[aria-label='预览']")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
 
     // 从 .txt（源码）再打开 Markdown：仍然默认所见即所得。
     await mockOpen(secondPath);

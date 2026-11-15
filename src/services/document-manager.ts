@@ -11,7 +11,7 @@ import type {
   TextEncoding,
   WorkspaceSessionState,
 } from "../shared/ipc";
-import { detectFormatEntry, getFormatEntry } from "../extensions/registry";
+import { detectFormatEntry } from "../extensions/registry";
 import { parseMarkdown } from "../formats/markdown/parse";
 import type { SaveEol } from "../shared/settings";
 import { decideOpenPolicy, preferSourceByBlocks } from "./open-policy";
@@ -87,17 +87,12 @@ function formatTime(ms: number): string {
   return new Date(ms).toLocaleString("zh-CN", { hour12: false });
 }
 
-/** 具有渲染预览的内置格式；扩展格式由扩展自身提供预览。 */
-const PREVIEW_FORMATS = new Set(["markdown", "latex", "mathml", "plantuml", "mermaid", "image"]);
-
-function supportsPreview(formatId: string): boolean {
-  return PREVIEW_FORMATS.has(formatId) || Boolean(getFormatEntry(formatId)?.extensionId);
-}
-
 /** 视图模式是否适用于指定格式；不适用时切换标签要回落到源码模式。 */
 function modeSupported(mode: EditorMode, formatId: string): boolean {
   if (mode === "wysiwyg") return formatId === "markdown";
-  if (mode === "split" || mode === "preview") return supportsPreview(formatId);
+  // PDF/图片是二进制只读文档，固定使用只读预览面板。
+  if (formatId === "pdf" || formatId === "image") return mode === "preview";
+  // 其余文本格式（含代码与纯文本）都支持 源码 / 分栏 / 预览。
   return true;
 }
 
@@ -224,10 +219,6 @@ export class DocumentManager {
     const active = this.findDocument(this.state.activeId ?? "");
     if (mode === "wysiwyg" && active && active.format !== "markdown") {
       this.notify("error", t("该格式不支持所见即所得编辑，请使用源码模式"));
-      return;
-    }
-    if ((mode === "preview" || mode === "split") && active && !supportsPreview(active.format)) {
-      this.notify("error", t("该格式没有渲染预览，请使用源码模式"));
       return;
     }
     const firstSwitch = !this.modeSwitchNoticeShown;

@@ -1,0 +1,59 @@
+%PDF-1.4
+1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj
+2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj
+3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]/Resources<</Font<</F1 5 0 R/F2 6 0 R>>>>/Contents 4 0 R>>endobj
+4 0 obj<</Length 904>>
+stream
+0.043 0.42 0.31 rg
+0 792 595 50 re f
+1 1 1 rg
+BT /F1 20 Tf 40 807 Td (Panda Live) Tj ET
+0.14 0.16 0.18 rg
+BT
+/F2 12 Tf
+40 730 Td
+(PDF sample document) Tj
+0 -22 Td
+(This file verifies the read-only PDF preview in Panda Live.) Tj
+0 -22 Td
+(Try zoom, page navigation and Fit width in the PDF toolbar.) Tj
+ET
+0.043 0.42 0.31 RG
+0.8 w
+40 690 m 555 690 l S
+0.14 0.16 0.18 rg
+BT
+/F2 11 Tf
+40 650 Td
+(Panda Live supports the following document types:) Tj
+0 -22 Td
+(- Markdown: WYSIWYG, source, split and preview modes) Tj
+0 -19 Td
+(- LaTeX, MathML, PlantUML and Mermaid) Tj
+0 -19 Td
+(- Images: PNG, JPG, JPEG, GIF, WEBP, BMP, ICO and AVIF) Tj
+0 -19 Td
+(- SVG: source editing with sanitized preview) Tj
+0 -19 Td
+(- PDF: read-only preview with zoom controls) Tj
+0 -19 Td
+(- Text and code files: source, split and preview modes) Tj
+ET
+0.42 0.45 0.5 rg
+BT /F2 9 Tf 40 44 Td (Generated for the examples folder.) Tj ET
+endstreamendobj
+5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica-Bold>>endobj
+6 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj
+xref
+0 7
+0000000000 65535 f 
+0000000009 00000 n 
+0000000052 00000 n 
+0000000101 00000 n 
+0000000220 00000 n 
+0000001171 00000 n 
+0000001237 00000 n 
+trailer<</Size 7/Root 1 0 R>>
+startxref
+1298
+%%EOF

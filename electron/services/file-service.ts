@@ -16,12 +16,16 @@ import { decodeText, encodeText, sha256Hex } from "./text-codec";
 
 const BINARY_MIME: Record<string, string> = {
   ".png": "image/png",
+  ".apng": "image/apng",
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
+  ".jfif": "image/jpeg",
   ".gif": "image/gif",
   ".webp": "image/webp",
   ".bmp": "image/bmp",
   ".svg": "image/svg+xml",
+  ".ico": "image/x-icon",
+  ".avif": "image/avif",
   ".woff": "font/woff",
   ".woff2": "font/woff2",
 };
