@@ -148,7 +148,17 @@ export function detectFormat(fileName: string): BuiltinDocumentFormat {
   return builtinFormatFor(fileName) ?? "text";
 }
 
-/** 纯代码格式：无专属渲染器，预览为只读原文，且不提供大纲。 */
+/** 内置格式中具有渲染预览的集合；扩展格式由扩展自身提供预览。 */
+export const PREVIEW_FORMATS: ReadonlySet<string> = new Set([
+  "markdown",
+  "latex",
+  "mathml",
+  "plantuml",
+  "mermaid",
+  "svg",
+]);
+
+/** 纯代码格式：只有源码编辑，没有渲染预览与大纲。 */
 export const CODE_FORMATS: ReadonlySet<BuiltinDocumentFormat> = new Set([
   "cpp",
   "java",

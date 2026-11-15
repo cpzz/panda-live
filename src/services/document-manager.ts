@@ -11,7 +11,7 @@ import type {
   TextEncoding,
   WorkspaceSessionState,
 } from "../shared/ipc";
-import { detectFormatEntry } from "../extensions/registry";
+import { detectFormatEntry, formatHasPreview } from "../extensions/registry";
 import { parseMarkdown } from "../formats/markdown/parse";
 import type { SaveEol } from "../shared/settings";
 import { decideOpenPolicy, preferSourceByBlocks } from "./open-policy";
@@ -90,9 +90,10 @@ function formatTime(ms: number): string {
 /** 视图模式是否适用于指定格式；不适用时切换标签要回落到源码模式。 */
 function modeSupported(mode: EditorMode, formatId: string): boolean {
   if (mode === "wysiwyg") return formatId === "markdown";
-  // PDF/图片是二进制只读文档，固定使用只读预览面板。
+  // PDF/图片是二进制只读文档，固定使用专用预览面板。
   if (formatId === "pdf" || formatId === "image") return mode === "preview";
-  // 其余文本格式（含代码与纯文本）都支持 源码 / 分栏 / 预览。
+  // 分栏/预览只对具有渲染预览的格式开放；代码与纯文本只有源码模式。
+  if (mode === "split" || mode === "preview") return formatHasPreview(formatId);
   return true;
 }
 
@@ -221,6 +222,11 @@ export class DocumentManager {
       this.notify("error", t("该格式不支持所见即所得编辑，请使用源码模式"));
       return;
     }
+    const isBinary = active?.format === "pdf" || active?.format === "image";
+    if ((mode === "preview" || mode === "split") && active && !isBinary && !formatHasPreview(active.format)) {
+      this.notify("error", t("该格式没有渲染预览，请使用源码模式"));
+      return;
+    }
     const firstSwitch = !this.modeSwitchNoticeShown;
     this.modeSwitchNoticeShown = true;
     if (this.state.activeId) this.modeByDocument.set(this.state.activeId, mode);
@@ -228,6 +234,15 @@ export class DocumentManager {
     if (firstSwitch) {
       this.notify("info", t("撤销历史不跨模式共享，已为目标模式建立新的撤销基线"));
     }
+  }
+
+  /** 格式能力变化（另存为、扩展禁用）后校正当前模式，不支持的视图回落源码。 */
+  revalidateActiveMode(): void {
+    const active = this.findDocument(this.state.activeId ?? "");
+    if (!active) return;
+    if (modeSupported(this.state.mode, active.format)) return;
+    this.modeByDocument.set(active.id, "source");
+    this.commit({ mode: "source" });
   }
 
   /** 记住当前文档的视图模式，供切回该标签时恢复。 */
@@ -454,6 +469,8 @@ export class DocumentManager {
         size: data.size,
         watchId,
       }));
+      // 另存为可能改变格式（如 .md → .py）；当前模式不再适用时回落源码。
+      this.revalidateActiveMode();
       await this.dropDraft(id);
       this.commit({ conflict: null });
       this.scheduleSessionSave();

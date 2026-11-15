@@ -684,23 +684,10 @@ test("M38：模式条布局与默认模式", async () => {
     await page.getByRole("button", { name: "源码", exact: true }).click();
     await expect(bar.locator(".block-toolbar")).toHaveCount(0);
 
-    // 打开 .txt：文本格式同样提供 源码 / 分栏 / 预览，不显示「所见即所得」。
+    // 打开 .txt：没有渲染预览，只有源码模式，模式条隐藏。
     await mockOpen(textPath);
     await page.getByRole("button", { name: "打开", exact: true }).click();
-    const textBar = page.locator(".mode-bar");
-    await expect(textBar).toBeVisible();
-    const textModes = textBar.locator(".mode-bar-modes button");
-    await expect(textModes).toHaveCount(3);
-    await expect(textModes.nth(0)).toHaveAccessibleName("源码");
-    await expect(textModes.nth(1)).toHaveAccessibleName("分栏");
-    await expect(textModes.nth(2)).toHaveAccessibleName("预览");
-    // 纯文本预览为只读原文，不再显示「暂不支持渲染预览」占位。
-    await textModes.nth(2).click();
-    await expect(page.locator(".text-preview")).toHaveText("纯文本");
-    await expect(page.locator(".mode-bar-modes button[aria-label='预览']")).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    await expect(page.locator(".mode-bar")).toHaveCount(0);
 
     // 从 .txt（源码）再打开 Markdown：仍然默认所见即所得。
     await mockOpen(secondPath);
@@ -772,6 +759,45 @@ test("M38：图表代码编辑开关", async () => {
     await page.keyboard.press("Escape");
     await expect(codeEditor).toBeHidden();
     await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  } finally {
+    await app.close();
+    await fs.rm(tempDir, { recursive: true, force: true });
+    await fs.rm(userDataDir, { recursive: true, force: true });
+  }
+});
+
+/** M38：另存为无渲染预览的格式后，当前视图模式回落到源码。 */
+test("M38：另存为代码格式后回落源码模式", async () => {
+  test.setTimeout(120_000);
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "panda-saveas-"));
+  const userDataDir = await fs.mkdtemp(path.join(os.tmpdir(), "panda-saveas-ud-"));
+  const markdownPath = path.join(tempDir, "note.md");
+  const targetPath = path.join(tempDir, "note.py");
+  await fs.writeFile(markdownPath, "# 标题\n\n正文\n", "utf8");
+
+  const app = await electron.launch({
+    args: ["."],
+    cwd: CWD,
+    env: { ...process.env, PANDA_USER_DATA_DIR: userDataDir },
+  });
+  try {
+    const page = await app.firstWindow();
+    await app.evaluate(({ dialog }, target) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
+    }, markdownPath);
+    await page.getByRole("button", { name: "打开", exact: true }).click();
+    await expect(page.locator(".prose-editor")).toBeVisible();
+
+    await app.evaluate(({ dialog }, target) => {
+      dialog.showSaveDialog = async () => ({ canceled: false, filePath: target });
+    }, targetPath);
+    await page.keyboard.press("Control+Shift+S");
+    await expect(page.locator(".tab-item.active .tab-name")).toHaveText("note.py");
+
+    // Python 没有渲染预览：自动切到源码，模式条隐藏。
+    await expect(page.locator(".pane.source-pane")).toBeVisible();
+    await expect(page.locator(".cm-content")).toContainText("标题");
+    await expect(page.locator(".mode-bar")).toHaveCount(0);
   } finally {
     await app.close();
     await fs.rm(tempDir, { recursive: true, force: true });

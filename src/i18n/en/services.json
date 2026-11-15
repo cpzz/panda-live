@@ -1,5 +1,6 @@
 {
   "该格式不支持所见即所得编辑，请使用源码模式": "This format does not support WYSIWYG editing, use source mode instead",
+  "该格式没有渲染预览，请使用源码模式": "This format has no rendered preview, use source mode instead",
   "撤销历史不跨模式共享，已为目标模式建立新的撤销基线": "Undo history is not shared between modes; a new undo baseline has been created for the target mode",
   "该文档以只读方式打开，请使用“另存为”保存副本": "This document is open read-only; use “Save As” to save a copy",
   "PDF 文档为只读预览，不支持另存为": "PDF documents are read-only previews; Save As is not available",

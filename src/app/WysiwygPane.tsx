@@ -8,6 +8,7 @@ import { buildWysiwygDiff } from "../diff/wysiwyg";
 import { computeLineDiff, normalizeDiffText } from "../diff/compute";
 import type { PreviewDiffModel } from "../diff/preview";
 import type { DocumentState, EditorMode } from "../services/document-manager";
+import type { SearchRequest } from "../services/search";
 import { resolveRelativePath } from "../utils/paths";
 import { describeError } from "../shared/errors";
 import { SearchPanel } from "./SearchPanel";
@@ -24,7 +25,7 @@ interface SavedWysiwygState {
 export function WysiwygPane({
   document,
   mode,
-  searchSignal,
+  searchRequest,
   jump,
   diff,
   diffJump,
@@ -36,7 +37,7 @@ export function WysiwygPane({
 }: {
   document: DocumentState;
   mode: EditorMode;
-  searchSignal: number;
+  searchRequest: SearchRequest | null;
   jump: { index: number; token: number } | null;
   diff: PreviewDiffModel | null;
   diffJump: { line: number; token: number } | null;
@@ -287,7 +288,7 @@ export function WysiwygPane({
     <div className="wysiwyg-wrap">
       <SearchPanel
         editor={editorRef.current}
-        openSignal={mode === "wysiwyg" ? searchSignal : 0}
+        request={mode === "wysiwyg" ? searchRequest : null}
         onClose={() => undefined}
       />
       <div className="wysiwyg-host" ref={hostRef} />

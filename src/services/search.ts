@@ -9,6 +9,15 @@ export interface SearchOptions {
   wholeWord: boolean;
 }
 
+/** 查找面板模式：仅查找，或展开替换行。 */
+export type SearchMode = "find" | "replace";
+
+/** 一次查找/替换请求；token 递增用于重复按快捷键时重新聚焦。 */
+export interface SearchRequest {
+  mode: SearchMode;
+  token: number;
+}
+
 export interface MatchRange {
   start: number;
   end: number;

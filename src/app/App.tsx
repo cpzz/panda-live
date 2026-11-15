@@ -5,7 +5,7 @@ import { parseMarkdown } from "../formats/markdown/parse";
 import { buildOutline, type OutlineItem } from "../formats/outline";
 import { EMPTY_PROBLEMS, problemStore, type Problem } from "../services/problem-store";
 import { mathOptionsSignature } from "../services/math-settings";
-import { getFormatEntry, refreshExtensionFormats } from "../extensions/registry";
+import { formatHasPreview, getFormatEntry, refreshExtensionFormats } from "../extensions/registry";
 import { sanitizeHtml } from "../render/html";
 import { RenderedMarkdown } from "./RenderedMarkdown";
 import {
@@ -14,6 +14,7 @@ import {
   type EditorMode,
 } from "../services/document-manager";
 import { settingsStore } from "../services/settings-store";
+import type { SearchMode, SearchRequest } from "../services/search";
 import { WorkspaceStore } from "../services/workspace-store";
 import { SourceEditor, type DiffLineMarker, type SelectionInfo, type SourceLanguage } from "../source/codemirror";
 import { sourceLanguageForFormat } from "../source/language";
@@ -71,6 +72,9 @@ const MODE_ICONS: Record<EditorMode, IconName> = {
   git: "git",
 };
 
+/** macOS 使用 Cmd+F；系统占用 Cmd+H，替换只通过面板与命令面板进入。 */
+const IS_MAC = typeof navigator !== "undefined" && navigator.platform.startsWith("Mac");
+
 const ENCODING_LABELS: Record<string, string> = {
   "utf-8": "UTF-8",
   "utf-8-bom": "UTF-8 (BOM)",
@@ -109,7 +113,7 @@ interface SavedEditorState {
 function SourcePane({
   document,
   mode,
-  searchSignal,
+  searchRequest,
   jump,
   tabSize,
   insertSpaces,
@@ -121,7 +125,7 @@ function SourcePane({
 }: {
   document: DocumentState;
   mode: EditorMode;
-  searchSignal: number;
+  searchRequest: SearchRequest | null;
   jump: { line: number; column: number; token: number } | null;
   tabSize: number;
   /** Tab 键输出空格（false = 硬制表符）。 */
@@ -170,12 +174,6 @@ function SourcePane({
       editorRef.current = null;
     };
   }, []);
-
-  useEffect(() => {
-    if (searchSignal > 0 && mode !== "wysiwyg" && mode !== "preview" && mode !== "git") {
-      editorRef.current?.openSearch();
-    }
-  }, [searchSignal, mode]);
 
   // 大纲跳转：按行定位源码光标。
   useEffect(() => {
@@ -227,6 +225,18 @@ function SourcePane({
       host.removeEventListener("keydown", onKeyDown, true);
     };
   }, []);
+
+  // 跳转行浮层：Esc 取消，不需要额外的取消按钮。
+  useEffect(() => {
+    if (!gotoOpen) return;
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setGotoOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [gotoOpen]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -283,6 +293,13 @@ function SourcePane({
     // 只响应标签切换、模式切换、外部重载与只读变化；普通输入由编辑器自身维护。
   }, [document.id, document.revision, document.readOnly, mode, language, document.content]);
 
+  // 查找请求在编辑器创建之后处理，避免首次挂载时 editorRef 尚未赋值。
+  useEffect(() => {
+    if (!searchRequest) return;
+    if (mode === "wysiwyg" || mode === "preview" || mode === "git") return;
+    editorRef.current?.openSearch(searchRequest.mode);
+  }, [searchRequest, mode]);
+
   return (
     <div className="source-wrap">
       {gotoOpen && (
@@ -309,18 +326,9 @@ function SourcePane({
             aria-label={t("跳转到行")}
             value={gotoValue}
             onChange={(event) => setGotoValue(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") {
-                event.preventDefault();
-                setGotoOpen(false);
-              }
-            }}
           />
           <button type="submit" className="button small">
             {t("跳转")}
-          </button>
-          <button type="button" className="button small ghost" onClick={() => setGotoOpen(false)}>
-            {t("取消")}
           </button>
         </form>
       )}
@@ -818,15 +826,6 @@ function TexPreviewPane({
   );
 }
 
-/** 纯文本/代码格式的预览：只读展示原文，保留缩进与换行。 */
-function TextPreviewPane({ content }: { content: string }) {
-  return (
-    <div className="preview-pane text-preview-pane">
-      <pre className="text-preview">{content}</pre>
-    </div>
-  );
-}
-
 function PreviewPane({
   document,
   enabled,
@@ -888,7 +887,11 @@ function PreviewPane({
     return <SvgPreviewPane key={document.id} document={document} enabled={enabled} />;
   }
   if (!supported) {
-    return <TextPreviewPane content={document.content} />;
+    return (
+      <div className="preview-pane">
+        <p className="placeholder">{t("该格式暂不支持渲染预览")}</p>
+      </div>
+    );
   }
 
   return (
@@ -936,7 +939,10 @@ export function App() {
   }, [settings.diagram.memoryCacheLimit]);
 
   const [cursor, setCursor] = useState<SelectionInfo>({ line: 1, column: 1 });
-  const [searchSignal, setSearchSignal] = useState(0);
+  const [searchRequest, setSearchRequest] = useState<SearchRequest | null>(null);
+  const requestSearch = useCallback((mode: SearchMode): void => {
+    setSearchRequest((current) => ({ mode, token: (current?.token ?? 0) + 1 }));
+  }, []);
   const [compileSignal, setCompileSignal] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
   /** 模式条左侧的块级工具栏挂载点；由 React 回调 ref 写入。 */
@@ -1014,8 +1020,8 @@ export function App() {
   const activeContent = active?.content ?? "";
   const activeFormat = active?.format ?? "";
   const activeId = active?.id ?? "";
-  // 模式条：所有文本格式都提供 源码 / 分栏 / 预览；二进制（PDF/图片）由专用只读面板展示。
-  const modeBarVisible = Boolean(active) && !activeIsBinary;
+  // 模式条：只对支持渲染预览的文本格式显示；二进制（PDF/图片）由专用只读面板展示。
+  const modeBarVisible = Boolean(active) && !activeIsBinary && formatHasPreview(activeFormat);
   const modeBarModes: EditorMode[] =
     active?.format === "markdown"
       ? ["source", "split", "preview", "wysiwyg"]
@@ -1545,7 +1551,10 @@ export function App() {
     return window.panda.onMenuCommand((command) => {
       switch (command) {
         case "view.find":
-          setSearchSignal((value) => value + 1);
+          requestSearch("find");
+          return;
+        case "view.replace":
+          requestSearch("replace");
           return;
         case "view.settings":
           setSettingsOpen(true);
@@ -1578,7 +1587,7 @@ export function App() {
           void manager.runMenuCommand(command);
       }
     });
-  }, [manager, workspaces]);
+  }, [manager, workspaces, requestSearch]);
 
   // 原生窗口菜单已关闭，常用快捷键改由渲染层统一处理。
   useEffect(() => {
@@ -1600,7 +1609,10 @@ export function App() {
         void manager.runMenuCommand("file.close");
       } else if (key === "f") {
         event.preventDefault();
-        setSearchSignal((value) => value + 1);
+        requestSearch("find");
+      } else if (key === "h" && !IS_MAC) {
+        event.preventDefault();
+        requestSearch("replace");
       } else if (key === "b") {
         event.preventDefault();
         setCompileSignal((value) => value + 1);
@@ -1611,7 +1623,7 @@ export function App() {
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [manager, workspaces]);
+  }, [manager, workspaces, requestSearch]);
 
   // 改动导航：Ctrl+Shift+D 开关，F7 / Shift+F7 在改动间循环。见 §21.8.8。
   useEffect(() => {
@@ -1689,9 +1701,15 @@ export function App() {
     { id: "file.exportSvg", title: t("导出图表 SVG…"), run: () => void exportSvgActive() },
     {
       id: "view.find",
-      title: t("查找替换"),
-      shortcut: "Ctrl+F",
-      run: () => setSearchSignal((value) => value + 1),
+      title: t("查找"),
+      shortcut: IS_MAC ? "⌘F" : "Ctrl+F",
+      run: () => requestSearch("find"),
+    },
+    {
+      id: "view.replace",
+      title: t("替换"),
+      shortcut: IS_MAC ? "" : "Ctrl+H",
+      run: () => requestSearch("replace"),
     },
     {
       id: "diff.toggle",
@@ -2223,7 +2241,7 @@ export function App() {
               <WysiwygPane
                 document={active}
                 mode={state.mode}
-                searchSignal={searchSignal}
+                searchRequest={searchRequest}
                 jump={wysiwygJump}
                 diff={previewDiff}
                 diffJump={wysiwygDiffJump}
@@ -2255,7 +2273,7 @@ export function App() {
               <SourcePane
                 document={active}
                 mode={state.mode}
-                searchSignal={searchSignal}
+                searchRequest={searchRequest}
                 jump={sourceJump}
                 tabSize={settings.editor.tabSize}
                 insertSpaces={settings.editor.insertSpaces}
@@ -2535,7 +2553,7 @@ export function App() {
           });
         }}
         onExtensionsChanged={() => {
-          void refreshExtensionFormats();
+          void refreshExtensionFormats().then(() => manager.revalidateActiveMode());
         }}
       />
 

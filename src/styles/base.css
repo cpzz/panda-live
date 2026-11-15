@@ -933,22 +933,6 @@ button {
   overflow: auto;
 }
 
-/* 纯文本/代码格式的预览：只读原文，保留缩进与换行。 */
-.text-preview-pane {
-  padding: 24px 32px 80px;
-}
-
-.text-preview {
-  margin: 0;
-  font-family: var(--font-mono);
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--fg);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  tab-size: 4;
-}
-
 /* Git 差异视图 */
 .git-pane {
   display: flex;
@@ -2264,6 +2248,55 @@ body.resizing * {
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+/* 源码模式查找面板：悬浮在编辑区右上角，不占满宽度，也不推挤正文。 */
+.cm-panels.cm-panels-top:has(.source-search-panel) {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 0;
+  overflow: visible;
+  border: 0;
+  background: transparent;
+  pointer-events: none;
+}
+
+.cm-panels-top .source-search-panel {
+  position: absolute;
+  top: 8px;
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: min(440px, calc(100% - 32px));
+  padding: 6px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  pointer-events: auto;
+}
+
+.source-search-panel .search-replace-row[hidden] {
+  display: none;
+}
+
+.search-text-button {
+  flex: 0 0 auto;
+  height: 22px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--fg);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.search-text-button:hover {
+  background: var(--surface-hover);
 }
 
 .search-input {

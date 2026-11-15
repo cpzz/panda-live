@@ -172,3 +172,93 @@ test("M4：强制退出后从草稿恢复", async () => {
     await fs.rm(userDataDir, { recursive: true, force: true });
   }
 });
+
+test("M4：查找与替换模式、快捷键与按钮提示", async () => {
+  test.setTimeout(120_000);
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "panda-m4-find-"));
+  const userDataDir = await prepareUserData(false);
+  const filePath = path.join(tempDir, "find.md");
+  await fs.writeFile(filePath, "# 查找\n\nAlpha Beta Alpha\n", "utf8");
+
+  const app = await launch(userDataDir);
+  try {
+    const page = await app.firstWindow();
+    await openSample(app, page, filePath);
+    await expect(page.locator(".prose-editor")).toBeVisible();
+
+    // Ctrl+F 只打开查找：没有替换行，也没有关闭按钮。
+    await page.keyboard.press("Control+f");
+    const panel = page.locator(".search-panel");
+    await expect(panel).toBeVisible();
+    await expect(panel.getByLabel("查找内容")).toBeVisible();
+    await expect(panel.getByLabel("替换内容")).toHaveCount(0);
+    await expect(panel.getByRole("button", { name: "关闭查找" })).toHaveCount(0);
+    const expand = panel.getByRole("button", { name: "展开替换" });
+    await expect(expand).toHaveAttribute("title", "展开替换（Ctrl+H）");
+
+    // 面板内展开替换并输入文本；Ctrl+F 收起后，Ctrl+H 再展开仍保留替换文本。
+    await expand.click();
+    await expect(panel.getByLabel("替换内容")).toBeVisible();
+    await panel.getByLabel("替换内容").fill("Omega");
+    await page.keyboard.press("Control+f");
+    await expect(panel.getByLabel("替换内容")).toHaveCount(0);
+    await page.keyboard.press("Control+h");
+    await expect(panel.getByLabel("替换内容")).toHaveValue("Omega");
+
+    // 替换仍然生效：查找 Alpha 并替换当前匹配。
+    await panel.getByLabel("查找内容").fill("Alpha");
+    await expect(panel.locator(".search-count")).toContainText("1 /");
+    await panel.getByRole("button", { name: "替换", exact: true }).click();
+    await expect(page.locator(".prose-editor")).toContainText("Omega");
+
+    // 图标按钮提示包含快捷键；Esc 关闭面板。
+    await expect(panel.getByRole("button", { name: "上一个" })).toHaveAttribute(
+      "title",
+      "上一个（Shift+Enter）",
+    );
+    await expect(panel.getByRole("button", { name: "下一个" })).toHaveAttribute(
+      "title",
+      "下一个（Enter）",
+    );
+    await page.keyboard.press("Escape");
+    await expect(panel).toHaveCount(0);
+
+    // 源码模式使用同一套查找/替换语义。
+    await page.getByRole("button", { name: "源码", exact: true }).click();
+    await page.keyboard.press("Control+f");
+    const sourcePanel = page.locator(".cm-panel.source-search-panel");
+    await expect(sourcePanel).toBeVisible();
+    // 与 VS Code 一致：悬浮在编辑区右上角，贴近顶部且不占满宽度。
+    const sourcePanelBox = await sourcePanel.boundingBox();
+    const editorBox = await page.locator(".cm-editor").boundingBox();
+    expect(sourcePanelBox).not.toBeNull();
+    expect(editorBox).not.toBeNull();
+    expect(sourcePanelBox!.width).toBeLessThan(editorBox!.width * 0.9);
+    expect(sourcePanelBox!.y - editorBox!.y).toBeLessThan(20);
+    const sourceReplace = sourcePanel.locator('input[name="replace"]');
+    await expect(sourceReplace).toBeHidden();
+    await expect(sourcePanel.getByRole("button", { name: "关闭查找" })).toHaveCount(0);
+    await expect(sourcePanel.locator('button[name="prev"]')).toHaveAttribute(
+      "title",
+      "上一个（Shift+Enter）",
+    );
+    await sourcePanel.locator('button[name="toggleReplace"]').click();
+    await expect(sourceReplace).toBeVisible();
+    await sourceReplace.fill("Omega");
+    await page.keyboard.press("Control+f");
+    await expect(sourceReplace).toBeHidden();
+    await page.keyboard.press("Control+h");
+    await expect(sourceReplace).toBeVisible();
+    await expect(sourceReplace).toHaveValue("Omega");
+    // 源码面板的替换按钮同样生效。
+    await sourcePanel.locator('input[name="search"]').fill("Alpha");
+    await sourcePanel.locator('button[name="replace"]').click();
+    await expect(page.locator(".cm-content")).toContainText("Omega");
+    await page.keyboard.press("Escape");
+    await expect(sourcePanel).toHaveCount(0);
+  } finally {
+    await app.close();
+    await fs.rm(tempDir, { recursive: true, force: true });
+    await fs.rm(userDataDir, { recursive: true, force: true });
+  }
+});

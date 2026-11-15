@@ -95,7 +95,7 @@ test("M5：示例扩展新增 .adoc 格式，禁用后回退纯文本", async ()
     }, path0);
     await page.getByRole("button", { name: "打开", exact: true }).click();
     await expect(page.locator(".tab-name")).toHaveText("sample.adoc");
-    await expect(page.locator(".preview-pane .text-preview")).toContainText("更新标题", {
+    await expect(page.locator(".preview-pane .placeholder")).toContainText("暂不支持渲染预览", {
       timeout: 15_000,
     });
   } finally {

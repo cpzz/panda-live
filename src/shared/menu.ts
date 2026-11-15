@@ -11,6 +11,7 @@ export const MENU_COMMANDS = [
   "file.exportSvg",
   "workspace.open",
   "view.find",
+  "view.replace",
   "view.settings",
   "view.performance",
   "view.commandPalette",

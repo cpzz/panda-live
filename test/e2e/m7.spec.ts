@@ -37,6 +37,13 @@ test("M7：源码模式 Ctrl+G 跳转行", async () => {
     await page.keyboard.press("Control+G");
     const input = page.getByLabel("跳转到行");
     await expect(input).toBeVisible();
+    // 不提供「取消」按钮；焦点回到编辑器后 Esc 也能关闭。
+    await expect(page.getByRole("button", { name: "取消", exact: true })).toHaveCount(0);
+    await page.locator(".cm-content").click();
+    await page.keyboard.press("Escape");
+    await expect(input).toBeHidden();
+    await page.keyboard.press("Control+G");
+    await expect(input).toBeVisible();
     await input.fill("3:2");
     await input.press("Enter");
     await expect(page.locator(".statusbar")).toContainText("行 3，列 2", { timeout: 10_000 });

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { buildSearchRegex, type SearchOptions } from "../services/search";
+import { buildSearchRegex, type SearchMode, type SearchOptions, type SearchRequest } from "../services/search";
 import { DEFAULT_SEARCH_OPTIONS } from "../editor/search";
 import type { PandaEditor } from "../editor/editor";
 import { t } from "../i18n";
@@ -7,25 +7,33 @@ import { Icon } from "./icons";
 
 interface SearchPanelProps {
   editor: PandaEditor | null;
-  /** 每次递增表示“打开查找面板”。 */
-  openSignal: number;
+  /** 查找/替换请求；token 递增表示重新聚焦，mode 决定是否显示替换行。 */
+  request: SearchRequest | null;
   onClose(): void;
 }
 
 /** WYSIWYG 查找替换面板：匹配高亮由 ProseMirror 插件提供。见 doc/design.md §11.5。 */
-export function SearchPanel({ editor, openSignal, onClose }: SearchPanelProps) {
+export function SearchPanel({ editor, request, onClose }: SearchPanelProps) {
   const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<SearchMode>("find");
   const [term, setTerm] = useState("");
   const [replacement, setReplacement] = useState("");
   const [options, setOptions] = useState<SearchOptions>(DEFAULT_SEARCH_OPTIONS);
   const [info, setInfo] = useState({ active: 0, total: 0 });
   const inputRef = useRef<HTMLInputElement>(null);
+  const replaceInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (openSignal === 0) return;
+    if (!request) return;
     setOpen(true);
-    inputRef.current?.focus();
-  }, [openSignal]);
+    setMode(request.mode);
+    // 替换模式聚焦替换框；状态更新后再取 ref。
+    const frame = requestAnimationFrame(() => {
+      const target = request.mode === "replace" ? replaceInputRef.current : inputRef.current;
+      target?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [request]);
 
   useEffect(() => {
     if (!open || !editor) return;
@@ -53,9 +61,13 @@ export function SearchPanel({ editor, openSignal, onClose }: SearchPanelProps) {
       close();
     } else if (event.key === "Enter") {
       event.preventDefault();
-      if (editor) {
-        const result = editor.findNext(event.shiftKey ? -1 : 1);
-        setInfo(result);
+      if (!editor) return;
+      // 查找框 Enter 跳到下一个匹配；替换框 Enter 替换当前匹配。
+      if (event.target === replaceInputRef.current) {
+        editor.replaceCurrent(replacement);
+        setInfo(editor.search(term, options));
+      } else {
+        setInfo(editor.findNext(event.shiftKey ? -1 : 1));
       }
     }
   };
@@ -63,6 +75,29 @@ export function SearchPanel({ editor, openSignal, onClose }: SearchPanelProps) {
   return (
     <div className="search-panel" role="search" onKeyDown={onKeyDown}>
       <div className="search-row">
+        <button
+          type="button"
+          className="find-toggle"
+          aria-label={mode === "replace" ? t("收起替换") : t("展开替换")}
+          aria-expanded={mode === "replace"}
+          title={
+            mode === "replace"
+              ? t("收起替换（Ctrl+F）")
+              : navigator.platform.startsWith("Mac")
+                ? t("展开替换")
+                : t("展开替换（Ctrl+H）")
+          }
+          onClick={() => {
+            const next = mode === "replace" ? "find" : "replace";
+            setMode(next);
+            // 展开后聚焦替换框，收起后回到查找框。
+            requestAnimationFrame(() => {
+              (next === "replace" ? replaceInputRef.current : inputRef.current)?.focus();
+            });
+          }}
+        >
+          <Icon name={mode === "replace" ? "chevron-down" : "chevron-right"} size={14} />
+        </button>
         <input
           ref={inputRef}
           className="search-input"
@@ -124,47 +159,47 @@ export function SearchPanel({ editor, openSignal, onClose }: SearchPanelProps) {
         >
           <Icon name="arrow-down" size={14} />
         </button>
-        <button type="button" className="find-icon" aria-label={t("关闭查找")} title={t("关闭")} onClick={close}>
-          <Icon name="close" size={14} />
-        </button>
       </div>
-      <div className="search-row">
-        <input
-          className="search-input"
-          placeholder={t("替换为")}
-          value={replacement}
-          aria-label={t("替换内容")}
-          onChange={(event) => setReplacement(event.target.value)}
-        />
-        <button
-          type="button"
-          className="find-icon"
-          aria-label={t("替换")}
-          title={t("替换")}
-          disabled={info.total === 0}
-          onClick={() => {
-            if (!editor) return;
-            editor.replaceCurrent(replacement);
-            setInfo(editor.search(term, options));
-          }}
-        >
-          <Icon name="replace" size={14} />
-        </button>
-        <button
-          type="button"
-          className="find-icon"
-          aria-label={t("全部替换")}
-          title={t("全部替换")}
-          disabled={info.total === 0}
-          onClick={() => {
-            if (!editor) return;
-            editor.replaceAll(replacement);
-            setInfo(editor.search(term, options));
-          }}
-        >
-          <Icon name="replace-all" size={14} />
-        </button>
-      </div>
+      {mode === "replace" && (
+        <div className="search-row search-replace-row">
+          <input
+            ref={replaceInputRef}
+            className="search-input"
+            placeholder={t("替换为")}
+            value={replacement}
+            aria-label={t("替换内容")}
+            onChange={(event) => setReplacement(event.target.value)}
+          />
+          <button
+            type="button"
+            className="find-icon"
+            aria-label={t("替换")}
+            title={t("替换（Enter）")}
+            disabled={info.total === 0}
+            onClick={() => {
+              if (!editor) return;
+              editor.replaceCurrent(replacement);
+              setInfo(editor.search(term, options));
+            }}
+          >
+            <Icon name="replace" size={14} />
+          </button>
+          <button
+            type="button"
+            className="find-icon"
+            aria-label={t("全部替换")}
+            title={t("全部替换")}
+            disabled={info.total === 0}
+            onClick={() => {
+              if (!editor) return;
+              editor.replaceAll(replacement);
+              setInfo(editor.search(term, options));
+            }}
+          >
+            <Icon name="replace-all" size={14} />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

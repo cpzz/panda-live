@@ -1,5 +1,5 @@
 import type { ExtensionFormatInfo, FormatCapabilities, LanguageSyntax } from "../shared/extensions";
-import { builtinFormatFor, type BuiltinDocumentFormat } from "../formats/registry";
+import { builtinFormatFor, PREVIEW_FORMATS, type BuiltinDocumentFormat } from "../formats/registry";
 
 export interface FormatEntry {
   id: string;
@@ -206,4 +206,9 @@ export function getFormatEntry(formatId: string): FormatEntry | null {
   ).find((item) => item === formatId);
   if (builtin) return builtinEntry(builtin);
   return getExtensionFormatEntries().find((entry) => entry.id === formatId) ?? null;
+}
+
+/** 格式是否提供渲染预览：内置预览集合或扩展贡献的格式。 */
+export function formatHasPreview(formatId: string): boolean {
+  return PREVIEW_FORMATS.has(formatId) || Boolean(getFormatEntry(formatId)?.extensionId);
 }

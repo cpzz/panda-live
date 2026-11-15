@@ -39,7 +39,7 @@ import {
   unfoldEffect,
   type Language,
 } from "@codemirror/language";
-import { closeSearchPanel, openSearchPanel, search } from "@codemirror/search";
+import { closeSearchPanel, search } from "@codemirror/search";
 import {
   EditorState,
   Compartment,
@@ -74,7 +74,9 @@ import { lintKeymap } from "@codemirror/lint";
 import { tags } from "@lezer/highlight";
 import type { SyntaxNode } from "@lezer/common";
 import { t } from "../i18n";
+import type { SearchMode } from "../services/search";
 import { iniStreamParser } from "./ini-mode";
+import { createSourceSearchPanel, openSourceSearch } from "./search-panel";
 
 export interface SelectionInfo {
   line: number;
@@ -709,8 +711,8 @@ function createState(
       pandaSetup,
       EditorState.phrases.of(buildPhrases()),
       languageExtension(language),
-      // 源码模式的查找替换复用 CodeMirror 搜索面板与匹配装饰（§11.5）。
-      search({ top: true }),
+      // 源码模式的查找替换使用与 WYSIWYG 一致的自绘面板（§11.5）。
+      search({ top: true, createPanel: createSourceSearchPanel }),
       EditorView.lineWrapping,
       // 自动缩进与 Tab 输出使用一致的单位（空格或硬制表符）。
       tabSizeCompartment.of(buildIndentExtension(tabSize, insertSpaces)),
@@ -851,8 +853,8 @@ export class SourceEditor {
     this.view.focus();
   }
 
-  openSearch(): void {
-    openSearchPanel(this.view);
+  openSearch(mode: SearchMode = "find"): void {
+    openSourceSearch(this.view, mode);
   }
 
   closeSearch(): void {
