@@ -46,7 +46,7 @@
   "文件已被外部修改": "The file was modified externally",
   "文件已被外部删除或移动": "The file was deleted or moved externally",
   "不支持写回编码：{0}": "Writing back encoding {0} is not supported",
-  "未找到 Git 命令「{0}」：请在设置 → 改动对比 指定 Git 路径，或填写 wsl git": "Git command “{0}” was not found: specify the Git path in Settings → Changes, or enter wsl git",
+  "未找到 Git 命令「{0}」：请在设置 → Git 指定 Git 路径，或填写 wsl git": "Git command “{0}” was not found: specify the Git path in Settings → Git, or enter wsl git",
   "Git 命令超时，请稍后重试": "Git command timed out; try again later",
   "Git 输出超过大小上限": "Git output exceeds the size limit",
   "提交引用不合法：{0}": "Invalid commit reference: {0}",

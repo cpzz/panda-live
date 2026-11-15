@@ -112,7 +112,7 @@ export function GitPane({
               newText: "",
             });
             if (!result.inRepo) {
-              throw new Error(t("未检测到 Git 仓库，请检查设置 → 改动对比 中的 Git 命令"));
+              throw new Error(t("未检测到 Git 仓库，请检查设置 → Git 中的 Git 命令"));
             }
             if (result.reason === "invalid-ref") {
               throw new Error(t("无法解析提交「{0}」", ref.trim()));

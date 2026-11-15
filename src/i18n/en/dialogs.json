@@ -23,7 +23,7 @@
   "关闭时按纯文本插入；开启后识别标题、列表、链接等 Markdown 语法。": "When off, plain text is inserted as-is; when on, Markdown syntax such as headings, lists and links is recognized.",
   "保存换行符": "Line endings",
   "沿用文件": "Preserve",
-  "改动对比": "Diff",
+  "Git": "Git",
   "数学": "Math",
   "KaTeX 宏定义": "KaTeX macros",
   "每行一条，格式": "One per line, format",

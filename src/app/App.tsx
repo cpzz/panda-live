@@ -104,6 +104,16 @@ function textLineCount(text: string): number {
   return normalized.split("\n").length;
 }
 
+/** 判断路径是否位于指定目录内（跨 Windows/POSIX 分隔符）。 */
+function isPathUnder(filePath: string, root: string): boolean {
+  const normalizedRoot = root.replace(/[\\/]+$/u, "");
+  return (
+    filePath === normalizedRoot ||
+    filePath.startsWith(`${normalizedRoot}\\`) ||
+    filePath.startsWith(`${normalizedRoot}/`)
+  );
+}
+
 interface SavedEditorState {
   state: EditorState;
   revision: number;
@@ -1048,11 +1058,37 @@ export function App() {
   const showModeBarDivider =
     modeBarVisible && state.mode === "wysiwyg" && active?.format === "markdown" && !active.readOnly;
 
-  // 源代码管理：以当前文件目录或首个工作区根探测仓库。
-  const gitProbePath = useMemo(() => {
-    if (active?.path) return active.path.replace(/[\\/][^\\/]+$/u, "");
-    return workspace.roots[0]?.root.path ?? null;
-  }, [active?.path, workspace.roots]);
+  // 源代码管理：默认跟随当前文件所在仓库，也可在多根工作区中手动切换。
+  const [gitRepoChoice, setGitRepoChoice] = useState<string | null>(null);
+  const gitActiveDir = active?.path ? active.path.replace(/[\\/][^\\/]+$/u, "") : null;
+  const gitRepoOptions = useMemo(() => {
+    const options = workspace.roots.map((entry) => ({
+      path: entry.root.path,
+      name: entry.root.name,
+      probe: entry.root.path,
+    }));
+    if (!gitActiveDir) return options;
+    const owner = options.find((option) => isPathUnder(gitActiveDir, option.path));
+    if (owner) {
+      return options.map((option) =>
+        option.path === owner.path ? { ...option, probe: gitActiveDir } : option,
+      );
+    }
+    // 当前文件不在任何工作区根内：把它所在目录作为额外候选。
+    const name = gitActiveDir.split(/[\\/]/u).filter(Boolean).pop() ?? gitActiveDir;
+    return [{ path: gitActiveDir, name, probe: gitActiveDir }, ...options];
+  }, [workspace.roots, gitActiveDir]);
+  // 切换文档时回到该文档所属仓库，避免上一个手动选择影响新文件。
+  useEffect(() => {
+    setGitRepoChoice(null);
+  }, [gitActiveDir]);
+  const gitRepoSelected = gitRepoOptions.some((option) => option.path === gitRepoChoice)
+    ? gitRepoChoice
+    : (gitRepoOptions.find((option) => option.probe === gitActiveDir)?.path ??
+      gitRepoOptions[0]?.path ??
+      null);
+  const gitProbePath =
+    gitRepoOptions.find((option) => option.path === gitRepoSelected)?.probe ?? null;
   useEffect(() => {
     void git.setPath(gitProbePath);
   }, [git, gitProbePath]);
@@ -1762,12 +1798,12 @@ export function App() {
     },
     {
       id: "git.open",
-      title: t("打开源代码管理"),
+      title: t("打开 Git"),
       run: openSourceControl,
     },
     {
       id: "git.refresh",
-      title: t("刷新源代码管理"),
+      title: t("刷新 Git"),
       run: () => void git.refresh(),
     },
     {
@@ -2031,6 +2067,9 @@ export function App() {
                   store={git}
                   state={gitState}
                   dirtyCount={gitDirtyCount}
+                  repos={gitRepoOptions}
+                  selectedRepo={gitRepoSelected}
+                  onSelectRepo={setGitRepoChoice}
                   onSaveAll={async () => {
                     if (!gitRoot) return;
                     await manager.saveDocumentsInRoot(gitRoot);
@@ -2563,7 +2602,7 @@ export function App() {
           <button
             type="button"
             className="statusbar-button git-status-button"
-            title={t("打开源代码管理")}
+            title={t("打开 Git")}
             onClick={openSourceControl}
           >
             <Icon name="git" size={12} />

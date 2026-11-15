@@ -232,7 +232,7 @@ export function useDocumentDiff({
           const code = getErrorCode(error);
           if (code === "E_GIT_MISSING") {
             fallbackHintRef.current = t(
-              "未找到 Git，已改用上次保存；可在 设置 → 改动对比 指定 Git 路径或填写 wsl git",
+              "未找到 Git，已改用上次保存；可在 设置 → Git 指定 Git 路径或填写 wsl git",
             );
             onFallbackRef.current();
             return;

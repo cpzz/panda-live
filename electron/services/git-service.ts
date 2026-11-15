@@ -135,7 +135,7 @@ function runGit(
             new PandaError(
               "E_GIT_MISSING",
               t(
-                "未找到 Git 命令「{0}」：请在设置 → 改动对比 指定 Git 路径，或填写 wsl git",
+                "未找到 Git 命令「{0}」：请在设置 → Git 指定 Git 路径，或填写 wsl git",
                 git.label,
               ),
             ),

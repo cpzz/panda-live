@@ -3768,6 +3768,29 @@ body.resizing * {
   overflow-wrap: anywhere;
 }
 
+/* 多根工作区的仓库切换器。 */
+.git-repo-picker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px 0;
+  color: var(--muted);
+}
+
+.git-repo-select {
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--fg);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
 .git-panel-header {
   display: flex;
   align-items: center;

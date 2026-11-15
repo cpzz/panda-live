@@ -30,7 +30,7 @@ const SECTIONS: { key: SettingsSectionKey; title: string }[] = [
   { key: "math", title: "数学" },
   { key: "diagram", title: "图表" },
   { key: "latex", title: "LaTeX" },
-  { key: "diff", title: "改动对比" },
+  { key: "diff", title: "Git" },
   { key: "extensions", title: "扩展" },
   { key: "privacy", title: "隐私" },
 ];
@@ -314,7 +314,7 @@ export function SettingsDialog({
 
             {section === "diff" && (
               <>
-                <h3 className="settings-pane-title">{t("改动对比")}</h3>
+                <h3 className="settings-pane-title">{t("Git")}</h3>
                 <label className="settings-row">
                   <span>{t("新打开文档默认显示 Git 改动")}</span>
                   <input

@@ -385,7 +385,7 @@ export function WorkspacePanel({
               onClick={() => setTab("source-control")}
             >
               <Icon name="git" size={14} />
-              {t("源代码管理")}
+              {t("Git")}
               {(sourceControlCount ?? 0) > 0 && (
                 <span className="sidebar-tab-badge">{sourceControlCount}</span>
               )}

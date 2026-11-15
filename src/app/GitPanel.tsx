@@ -11,6 +11,10 @@ interface GitPanelProps {
   onOpenFile(path: string): void;
   /** 仓库内未保存文档数量；>0 时提示 Git 只读取磁盘内容。 */
   dirtyCount: number;
+  /** 可切换的工作区目录（多根工作区与工作区外的当前文件目录）。 */
+  repos: Array<{ path: string; name: string }>;
+  selectedRepo: string | null;
+  onSelectRepo(path: string): void;
   onSaveAll(): Promise<void>;
 }
 
@@ -104,6 +108,9 @@ export function GitPanel({
   state,
   onOpenFile,
   dirtyCount,
+  repos,
+  selectedRepo,
+  onSelectRepo,
   onSaveAll,
 }: GitPanelProps) {
   const [tab, setTab] = useState<"changes" | "history">("changes");
@@ -152,9 +159,31 @@ export function GitPanel({
     };
   }, [branchOpen]);
 
+  // 多根工作区：允许切换到其他目录对应的仓库。
+  const repoPicker =
+    repos.length > 1 ? (
+      <label className="git-repo-picker">
+        <Icon name="folder" size={12} />
+        <select
+          className="git-repo-select"
+          aria-label={t("选择仓库")}
+          title={repos.find((repo) => repo.path === selectedRepo)?.path ?? ""}
+          value={selectedRepo ?? ""}
+          onChange={(event) => onSelectRepo(event.target.value)}
+        >
+          {repos.map((repo) => (
+            <option key={repo.path} value={repo.path}>
+              {repo.name}
+            </option>
+          ))}
+        </select>
+      </label>
+    ) : null;
+
   if (!snapshot || !root) {
     return (
       <div className="git-panel">
+        {repoPicker}
         <div className="git-empty">
           <Icon name="git" size={20} />
           <p>{state.loading ? t("读取 Git 状态…") : t("当前工作区不是 Git 仓库")}</p>
@@ -208,6 +237,7 @@ export function GitPanel({
 
   return (
     <div className="git-panel">
+      {repoPicker}
       <div className="git-panel-header">
         <div className="git-branch-wrap" ref={branchWrapRef}>
           <button
@@ -356,7 +386,7 @@ export function GitPanel({
         </div>
       )}
 
-      <div className="git-panel-tabs" role="tablist" aria-label={t("源代码管理视图")}>
+      <div className="git-panel-tabs" role="tablist" aria-label={t("Git 视图")}>
         <button
           type="button"
           role="tab"

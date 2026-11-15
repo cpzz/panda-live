@@ -56,7 +56,7 @@ test("M39：源代码管理变更、提交与分支", async () => {
   try {
     const page = await app.firstWindow();
     await openFolder(page, app, repo);
-    await page.getByRole("tab", { name: "源代码管理" }).click();
+    await page.getByRole("tab", { name: "Git", exact: true }).click();
 
     const branchButton = page.locator(".git-branch-button");
     await expect(branchButton).toContainText("main", { timeout: 20_000 });
@@ -141,7 +141,7 @@ test("M39：fetch、pull 与 push", async () => {
   try {
     const page = await app.firstWindow();
     await openFolder(page, app, repo);
-    await page.getByRole("tab", { name: "源代码管理" }).click();
+    await page.getByRole("tab", { name: "Git", exact: true }).click();
     await expect(page.locator(".git-branch-button")).toContainText("main", { timeout: 20_000 });
 
     // fetch 后显示落后 1 个提交。
@@ -175,6 +175,57 @@ test("M39：fetch、pull 与 push", async () => {
   }
 });
 
+/** M39：多根工作区可以在源代码管理面板切换仓库。 */
+test("M39：多根工作区切换仓库", async () => {
+  test.setTimeout(180_000);
+  const base = await fs.mkdtemp(path.join(os.tmpdir(), "panda-multi-"));
+  const alpha = path.join(base, "alpha");
+  const beta = path.join(base, "beta");
+  const userDataDir = await fs.mkdtemp(path.join(os.tmpdir(), "panda-multi-ud-"));
+
+  await initRepo(alpha);
+  await fs.writeFile(path.join(alpha, "a.md"), "# alpha\n", "utf8");
+  await git(alpha, ["add", "."]);
+  await git(alpha, ["commit", "-m", "alpha 提交"]);
+
+  await initRepo(beta);
+  await git(beta, ["checkout", "-b", "beta"]);
+  await fs.writeFile(path.join(beta, "b.md"), "# beta\n", "utf8");
+  await git(beta, ["add", "."]);
+  await git(beta, ["commit", "-m", "beta 提交"]);
+
+  const app = await electron.launch({
+    args: ["."],
+    cwd: CWD,
+    env: { ...process.env, PANDA_USER_DATA_DIR: userDataDir },
+  });
+  try {
+    const page = await app.firstWindow();
+    await openFolder(page, app, alpha);
+    await openFolder(page, app, beta);
+    await page.getByRole("tab", { name: "Git", exact: true }).click();
+
+    const picker = page.locator(".git-repo-select");
+    await expect(picker).toBeVisible({ timeout: 20_000 });
+    await expect(picker.locator("option")).toHaveCount(2);
+    const branchButton = page.locator(".git-branch-button");
+    // 默认使用第一个工作区目录 alpha。
+    await expect(branchButton).toContainText("main", { timeout: 20_000 });
+
+    // 切换到 beta：分支与仓库路径随之切换。
+    await picker.selectOption({ label: "beta" });
+    await expect(branchButton).toContainText("beta", { timeout: 20_000 });
+
+    // 再次切回 alpha。
+    await picker.selectOption({ label: "alpha" });
+    await expect(branchButton).toContainText("main", { timeout: 20_000 });
+  } finally {
+    await app.close();
+    await fs.rm(base, { recursive: true, force: true });
+    await fs.rm(userDataDir, { recursive: true, force: true });
+  }
+});
+
 /** M39：非 Git 仓库时给出明确空状态。 */
 test("M39：非仓库降级提示", async () => {
   test.setTimeout(120_000);
@@ -190,7 +241,7 @@ test("M39：非仓库降级提示", async () => {
   try {
     const page = await app.firstWindow();
     await openFolder(page, app, dir);
-    await page.getByRole("tab", { name: "源代码管理" }).click();
+    await page.getByRole("tab", { name: "Git", exact: true }).click();
     await expect(page.locator(".git-empty")).toContainText("当前工作区不是 Git 仓库", {
       timeout: 20_000,
     });
