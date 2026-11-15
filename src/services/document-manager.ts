@@ -94,6 +94,13 @@ function supportsPreview(formatId: string): boolean {
   return PREVIEW_FORMATS.has(formatId) || Boolean(getFormatEntry(formatId)?.extensionId);
 }
 
+/** 视图模式是否适用于指定格式；不适用时切换标签要回落到源码模式。 */
+function modeSupported(mode: EditorMode, formatId: string): boolean {
+  if (mode === "wysiwyg") return formatId === "markdown";
+  if (mode === "split" || mode === "preview") return supportsPreview(formatId);
+  return true;
+}
+
 /**
  * 渲染进程侧的文档管理：标签、脏标记、保存、冲突、自动保存、草稿与会话。
  * 所有文件操作经 `window.panda` 转交主进程。见 doc/design.md §7.3、§12.2–§12.4。
@@ -115,6 +122,8 @@ export class DocumentManager {
   private autoSaveEnabled = true;
   private saveEol: SaveEol = "preserve";
   private modeSwitchNoticeShown = false;
+  /** 每个文档最近一次使用的视图模式；切换标签时恢复，模式不适用时回落源码。 */
+  private readonly modeByDocument = new Map<string, EditorMode>();
 
   readonly getState = (): AppState => this.state;
 
@@ -180,17 +189,19 @@ export class DocumentManager {
       draftKey: null,
       watchId: null,
     };
+    this.rememberActiveMode();
     this.commit({
       documents: [...this.state.documents, document],
       activeId: id,
-      mode: this.state.mode === "preview" ? "wysiwyg" : this.state.mode,
+      mode: "wysiwyg",
     });
     this.scheduleSessionSave();
   }
 
   setActive(id: string): void {
     if (!this.state.documents.some((doc) => doc.id === id)) return;
-    this.commit({ activeId: id });
+    this.rememberActiveMode();
+    this.commit({ activeId: id, mode: this.activationMode(id) });
     this.scheduleSessionSave();
   }
 
@@ -221,10 +232,25 @@ export class DocumentManager {
     }
     const firstSwitch = !this.modeSwitchNoticeShown;
     this.modeSwitchNoticeShown = true;
+    if (this.state.activeId) this.modeByDocument.set(this.state.activeId, mode);
     this.commit({ mode });
     if (firstSwitch) {
       this.notify("info", t("撤销历史不跨模式共享，已为目标模式建立新的撤销基线"));
     }
+  }
+
+  /** 记住当前文档的视图模式，供切回该标签时恢复。 */
+  private rememberActiveMode(): void {
+    if (!this.state.activeId) return;
+    this.modeByDocument.set(this.state.activeId, this.state.mode);
+  }
+
+  /** 激活指定文档时的视图模式：优先该文档上次的模式，不支持其格式时回落源码。 */
+  private activationMode(id: string): EditorMode {
+    const doc = this.findDocument(id);
+    const preferred = this.modeByDocument.get(id) ?? this.state.mode;
+    if (!doc) return preferred;
+    return modeSupported(preferred, doc.format) ? preferred : "source";
   }
 
   updateContent(id: string, content: string): void {
@@ -326,10 +352,16 @@ export class DocumentManager {
       }
     }
     await this.releaseDocumentResources(doc);
+    this.rememberActiveMode();
+    this.modeByDocument.delete(id);
     const documents = this.state.documents.filter((item) => item.id !== id);
     const activeId =
       this.state.activeId === id ? (documents[documents.length - 1]?.id ?? null) : this.state.activeId;
-    this.commit({ documents, activeId });
+    this.commit({
+      documents,
+      activeId,
+      mode: activeId ? this.activationMode(activeId) : this.state.mode,
+    });
     this.scheduleSessionSave();
   }
 
@@ -518,6 +550,12 @@ export class DocumentManager {
       format: detectFormatEntry(ref.name)?.id ?? "text",
       watchId,
     }));
+    // 重命名可能改变格式（如 .md → .txt）；当前模式不适用时回落源码，避免面板全部隐藏。
+    const renamed = this.findDocument(doc.id);
+    if (renamed && renamed.id === this.state.activeId && !modeSupported(this.state.mode, renamed.format)) {
+      this.modeByDocument.set(renamed.id, "source");
+      this.commit({ mode: "source" });
+    }
   }
 
   /** 工作区删除文件后关闭对应标签；本地仍有未保存修改时保留标签以免丢数据。 */
@@ -532,7 +570,13 @@ export class DocumentManager {
     await this.releaseDocumentResources(doc);
     const documents = this.state.documents.filter((item) => item.id !== doc.id);
     const activeId = this.state.activeId === doc.id ? (documents[documents.length - 1]?.id ?? null) : this.state.activeId;
-    this.commit({ documents, activeId });
+    this.rememberActiveMode();
+    this.modeByDocument.delete(doc.id);
+    this.commit({
+      documents,
+      activeId,
+      mode: activeId ? this.activationMode(activeId) : this.state.mode,
+    });
   }
 
   /** 启动时立即建立会话保存定时器，即使尚未打开文档也能保存侧栏/工作区状态。 */
@@ -546,9 +590,11 @@ export class DocumentManager {
     for (const entry of session.documents) {
       if (!entry.path) continue;
       const ref: FileRef = { path: entry.path, name: basename(entry.path), rootId: "" };
-      await this.openRef(ref, { silentRecent: true, silentErrors: true });
+      await this.openRef(ref, { silentRecent: true, silentErrors: true, mode: entry.mode });
       const doc = this.state.documents.find((item) => item.path === entry.path);
       if (doc) {
+        // 会话中的每文档模式作为该标签的偏好在切回时恢复。
+        this.modeByDocument.set(doc.id, entry.mode);
         this.patchDocument(doc.id, () => ({
           cursor: entry.cursor,
           folds: entry.folds,
@@ -556,9 +602,9 @@ export class DocumentManager {
       }
     }
     const active = this.state.documents[Math.min(session.activeIndex, this.state.documents.length - 1)];
-    if (active) this.commit({ activeId: active.id });
-    if (session.mode === "wysiwyg" && active?.format !== "markdown") {
-      this.commit({ mode: "split" });
+    if (active) {
+      if (!this.modeByDocument.has(active.id)) this.modeByDocument.set(active.id, session.mode);
+      this.commit({ activeId: active.id, mode: this.activationMode(active.id) });
     } else {
       this.commit({ mode: session.mode });
     }
@@ -597,7 +643,13 @@ export class DocumentManager {
         watchId: null,
         cursor: entry.cursor,
       };
-      this.commit({ documents: [...this.state.documents, created], activeId: id });
+      this.rememberActiveMode();
+      // 草稿对应的新文档是 Markdown，直接以所见即所得打开。
+      this.commit({
+        documents: [...this.state.documents, created],
+        activeId: id,
+        mode: "wysiwyg",
+      });
       return;
     }
     this.patchDocument(doc.id, (current) => ({
@@ -607,7 +659,8 @@ export class DocumentManager {
       draftKey: entry.key,
       cursor: entry.cursor,
     }));
-    this.commit({ activeId: doc.id });
+    this.rememberActiveMode();
+    this.commit({ activeId: doc.id, mode: this.activationMode(doc.id) });
   }
 
   async discardDraft(key: string): Promise<void> {
@@ -624,7 +677,7 @@ export class DocumentManager {
     return {
       documents: this.state.documents.map((doc) => ({
         path: doc.path,
-        mode: args.mode,
+        mode: this.modeByDocument.get(doc.id) ?? args.mode,
         cursor: doc.cursor,
         folds: doc.folds,
       })),
@@ -647,7 +700,7 @@ export class DocumentManager {
 
   private async openRef(
     ref: FileRef,
-    options: { silentRecent?: boolean; silentErrors?: boolean } = {},
+    options: { silentRecent?: boolean; silentErrors?: boolean; mode?: EditorMode } = {},
   ): Promise<void> {
     const existing = this.state.documents.find((doc) => doc.path === ref.path);
     if (existing) {
@@ -705,18 +758,21 @@ export class DocumentManager {
         draftKey: null,
         watchId,
       };
+      this.rememberActiveMode();
+      // 新打开的 Markdown 文档一律以所见即所得展示；大文件等强制源码的情况除外。
+      // 会话恢复时用 entry.mode 覆盖，避免先 wysiwyg 再切源码造成一次多余的状态重建。
+      const desiredMode: EditorMode = isBinary
+        ? "preview"
+        : forceSource
+          ? "source"
+          : (options.mode ??
+            (document.format === "markdown" ? "wysiwyg" : this.state.mode));
+      const mode = isBinary || modeSupported(desiredMode, document.format) ? desiredMode : "source";
+      this.modeByDocument.set(document.id, mode);
       this.commit({
         documents: [...this.state.documents, document],
         activeId: document.id,
-        mode: isBinary
-          ? "preview"
-          : !supportsPreview(document.format)
-            ? "source"
-            : forceSource
-              ? "source"
-              : document.format === "markdown" || this.state.mode !== "wysiwyg"
-                ? this.state.mode
-                : "source",
+        mode,
       });
       if (blockLimit) {
         this.notify("info", t("文档顶层块超过 8000，已默认切换到源码模式"));

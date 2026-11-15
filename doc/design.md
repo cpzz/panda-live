@@ -777,7 +777,9 @@ stop
 | 图表围栏 `plantuml` `puml` `{uml}` `mermaid` | 代码块 lang | `diagram_block` |
 | MyST 围栏指令 | 代码块 lang `{tab-set}` 等 + 后置转换 | `tab_set` / `tab_item` / `grid` / `grid_item` |
 | 原始 HTML | mdast `html` | `html_block` / `html_inline`（只读，消毒后渲染） |
-| 未知 mdast 节点 | 无映射 | `raw_markdown`（原子） |
+| 引用式链接/图片 `[文字][id]`、`![alt][id]` | mdast `linkReference` / `imageReference` + `definition` | link mark 的 `reference` 属性 / `image.reference`；定义行按 `raw_markdown` 保留 |
+| 脚注 `[^1]` 与 `[^1]: …` | mdast `footnoteReference` / `footnoteDefinition` | `raw_inline` / `raw_markdown`，只保留源码写法（渲染层不支持脚注） |
+| 未知 mdast 节点 | 无映射 | `raw_markdown`（原子），行内未知节点用 `raw_inline` |
 
 MyST 不需要正则预处理。外层围栏（例如六个反引号 + `{tab-set}`）被 micromark 解析为 `code` 节点，`lang` 为 `{tab-set}`，`value` 为内部文本；后置插件递归解析 `value`，将内部 `{tab-item}` 代码块转换为容器节点。该方式天然处理嵌套围栏，优于字符串替换。
 
@@ -790,14 +792,17 @@ MyST 不需要正则预处理。外层围栏（例如六个反引号 + `{tab-set
 | `blockquote` | `blockquote` | — |
 | `list` / `listItem` | `bullet_list` / `ordered_list` / `list_item` | `start` 保留 |
 | `table` / `tableRow` / `tableCell` | `table` / `table_row` / `table_cell` | 保留对齐方式 |
-| `code` | `code_block` 或 `diagram_block` | 按 `lang` 分流 |
+| `code` | `code_block` 或 `diagram_block` | 按 `lang` 分流；info string 中语言后的 `meta` 保留 |
 | `inlineCode` | `code` mark | — |
 | `strong` / `em` / `link` / `delete` | `strong` / `em` / `link` / `strikethrough` | — |
+| `linkReference` / `imageReference` | `link` mark（`reference`）/ `image`（`reference`） | 写入定义表解析出的 `href`，同时保留标签与 `referenceType`，序列化回 `[文字][id]` |
+| `definition` / `footnoteDefinition` | `raw_markdown` | 定义行原样保留 |
+| `footnoteReference` | `raw_inline` | 保留 `[^1]` 原文，避免被转义成 `\[^1]` |
 | `image` | `image` | 相对路径经 `panda-res` 解析 |
 | `math`（inline/flow） | `math_inline` / `math_block` | 保留 `notation` 与 `source` |
 | `yaml` | `frontmatter` | 原子节点 |
 | `html` | `html_block` / `html_inline` | 原始文本保留 |
-| 未知节点 | `raw_markdown` | 记录原始切片与位置 |
+| 未知节点 | `raw_markdown` / `raw_inline` | 记录原始切片与位置 |
 
 ### 8.4 序列化
 
@@ -820,7 +825,9 @@ MyST 不需要正则预处理。外层围栏（例如六个反引号 + `{tab-set
 特殊规则：
 
 - `math`：v1 统一输出 `$` / `$$`；`delimiter` 仅用于展示原始来源，不参与序列化。
-- `diagram_block`：输出代码围栏，`lang` 为 `plantuml` / `mermaid`。
+- `diagram_block`：输出代码围栏，`lang` 为 `plantuml` / `mermaid`，`meta` 原样写回 info string。
+- 引用式链接/图片：`link` mark / `image` 带 `reference` 时输出 `linkReference` / `imageReference`，`referenceType` 归一为 `full` / `collapsed` / `shortcut`；用户改写地址后 `reference` 丢失，退化为内联链接。
+- `raw_inline`：按 mdast `html` 节点原样输出（如 `[^1]`），不再经过文本转义。
 - `tab_set` / `tab_item` / `grid` / `grid_item`：自定义序列化，围栏长度取 `max(3, 内部最大围栏长度 + 1)`；`{tab-item}` 标签写在 lang 后的 meta 位。
 - `frontmatter`：仅允许位于文档首部；序列化时置于文档开头，结束分隔符后补一个空行。
 - `raw_markdown`：跳过 mdast 构建，直接写入原始切片。
@@ -876,9 +883,9 @@ MyST 不需要正则预处理。外层围栏（例如六个反引号 + `{tab-set
 ### 8.6 剪贴板与拖放
 
 - 复制：同时写入 `text/plain`（Markdown/LaTeX）与 `text/html`（渲染结果）。
-- 粘贴 HTML：经 DOMPurify 后由 ProseMirror `parseDOM` 接入，未知标签降级为文本。
-- 粘贴纯文本：设置项 `pasteAsMarkdown` 开启时按 Markdown 解析，否则作为纯文本。
-- 粘贴/拖入图片：主进程校验扩展名与 MIME、单文件不超过 20 MB，写入当前文档同目录 `assets/`，文件名 `YYYYMMDD-HHmmss-<hash8>.<ext>`，插入相对路径；无文档路径时先要求另存为。
+- 粘贴 HTML：经 DOMPurify 后由 ProseMirror `parseDOM` 接入，未知标签降级为文本；目标位置的内容模型不接受片段时（如表格单元）回退为默认粘贴，不丢内容。
+- 粘贴纯文本：设置项 `editor.pasteAsMarkdown`（默认关闭）开启时按 Markdown 解析，否则作为纯文本；单段落解析结果按行内内容插入，避免拆开光标所在段落。
+- 粘贴/拖入图片：经 `fs:saveImage` 由主进程校验 MIME（png/jpeg/gif/webp/bmp）与单文件 20 MB 上限，写入当前文档同目录 `assets/`，文件名 `YYYYMMDD-HHmmss-<hash8>.<ext>`，插入相对路径；无文档路径时先弹出另存为，取消则中止。WYSIWYG 的图片 NodeView 与预览把相对路径按文档目录读取为 data URL；超过 1 MB 的图片先显示「图片较大」占位与「加载图片」按钮，点击后才读取。
 - 拖入文件：按扩展名新建标签或插入链接。
 
 ---
@@ -1058,11 +1065,13 @@ type RenderResponse =
 
 ### 10.3 缓存与消毒
 
-- `cacheKey = sha256(kind + theme + engineVersion + normalizedSource)`。
+- `cacheKey = sha256(kind + theme + engineVersion + sanitizeVersion + normalizedSource)`；消毒逻辑变化时递增 `sanitizeVersion`，使 IndexedDB 中的旧 SVG 自动失效。
 - 内存 LRU（100 项）+ IndexedDB 持久缓存（上限 200 MB）。
 - 返回的 SVG 在**父窗口**消毒后缓存：DOMPurify SVG profile，禁止 `script`、`foreignObject`、事件属性、`javascript:` URL、外部 `href`；保留 `style` 仅限引擎生成内容。
+- Mermaid 以内联 `max-width` 编码自然宽度，消毒时转写为固定 `width` 属性，使查看器能取到自然尺寸并支持放大；其余内联样式原样保留。
 - 消毒后的 SVG 以字符串插入 NodeView；不执行任何内联脚本。
-- 图表节点双击进入源码编辑，失焦 300 ms 后重新渲染，沿用缓存。
+- 图表节点双击或点击「编辑代码」开关进入源码编辑；编辑窗的开/关只由该开关控制（再次点击或 Esc 取消、Ctrl+Enter 提交），失焦不自动关闭。编辑框内的事件不交给 ProseMirror，全选/双击选词不会把焦点抢回文档。
+- 查看器（独立图表/图片预览、「放大查看」对话框）以自然尺寸为 100% 基准，按缩放百分比设置内容宽度；超出视口时在查看器内部滚动，工具栏固定在顶部。
 
 ---
 
@@ -1076,17 +1085,18 @@ type RenderResponse =
 |---|---|---|
 | `doc` / `paragraph` / `heading` / `blockquote` | 结构 | `heading.level` |
 | `bullet_list` / `ordered_list` / `list_item` | 结构 | `ordered_list.start`、`list_item.checked` |
-| `code_block` | 结构（文本内容） | `language` |
+| `code_block` | 结构（文本内容） | `language`、`meta`（围栏 info string 中语言之后的部分） |
 | `math_inline` / `math_block` | 原子 | §9.1 |
-| `diagram_block` | 原子 | `kind`（字符串，内置 `plantuml`/`mermaid`，扩展可注册）、`source` |
+| `diagram_block` | 原子 | `kind`（字符串，内置 `plantuml`/`mermaid`，扩展可注册）、`source`、`meta` |
 | `tab_set` / `tab_item` | 容器 | 当前页签由 NodeView 本地状态维护，不进入文档 |
 | `grid` / `grid_item` | 容器 | `columns`、`outline` |
 | `table` / `table_row` / `table_cell` | 结构 | `align`（按列） |
-| `image` | 原子 | `src`（原始相对路径）、`alt`、`title`；NodeView 解析为 `panda-res` URL |
+| `image` | 原子 | `src`（原始相对路径）、`alt`、`title`；引用式图片额外记录 `reference` / `referenceType`；NodeView 把相对路径按文档目录读取为 data URL |
 | `frontmatter` | 原子 | `raw` |
 | `mathml_block` / `mathml_inline` | 原子 | `source` |
 | `html_block` / `html_inline` | 原子 | `raw` |
 | `raw_markdown` | 原子 | `raw`、`reason` |
+| `raw_inline` | 原子 | `raw`：行内未映射语法的原文（如脚注 `[^1]`），序列化时按 HTML 原样输出 |
 | `horizontal_rule` / `hard_break` | 原子 | — |
 
 v1 仅支持 GFM 矩形表格，不提供单元格合并；HTML 表格中的 `colspan` / `rowspan` 以原始块保留或按独立单元格降级，不进入可编辑表格。
@@ -1101,12 +1111,14 @@ Schema 对第三方扩展只读；扩展只能使用上述节点输出 `PMJson`�
 |---|---|
 | `history` | 撤销/重做，按块合并 |
 | `keymap` | 基础键位与平台差异 |
-| `inputRules` | `# `、`- `、`1. `、`**`、代码围栏、`$$` 等输入转换 |
-| `schemaList` / `tables` / `gapCursor` / `dropCursor` | 列表、表格、光标兜底 |
-| `selectionToolbar` | 选区浮动工具栏（加粗、链接、公式等） |
-| `link` | 链接插入、编辑、协议校验 |
-| `image` | 图片拖放、粘贴、资源解析 |
-| `pasteSanitizer` | HTML 消毒与 schema 接入 |
+| `inputRules` | 块级 `# `、`- `、`1. `、`> `、任务项 `[ ] ` / `[x] `（列表项内）、代码围栏 ` ```lang␠ `（行尾 Enter 由编辑器 keydown 处理）与行内 `**粗体**`、`*斜体*`/`_斜体_`、`` `代码` ``、`~~删除~~` |
+| `schemaList` / `tables` / `gapCursor` / `dropCursor` | 列表、表格、光标兜底；列表内 `Enter` 新建项（任务项重置为未完成）、`Tab` / `Shift+Tab` 缩进；引用内 `Tab` / `Shift+Tab` 加深 / 减少嵌套层级 |
+| `blockToolbar` | 顶部块级工具栏（Word 风格，`\|` 分组）：段落样式下拉（正文、H1–H6、代码块）、行内格式、两种列表与任务列表、引用、代码块、分割线、插入表格/图片；高亮当前块格式，列表与引用可再次点击取消 |
+| `slashMenu` | 空段落输入 `/` 打开的块级命令菜单，支持上下键与 Enter |
+| `inputPopover` | 链接/图片地址输入弹层，外部点击或 Esc 关闭；链接弹层提供「移除链接」，光标位于链接内时自动扩展选区 |
+| `link` | 链接插入、编辑与移除（地址弹层） |
+| `image` | 图片节点与相对路径解析 |
+| `pasteSanitizer` | 粘贴图片经 `fs:saveImage` 转存到文档目录 `assets/` 并插入相对路径；粘贴 HTML 经 DOMPurify 消毒（白名单标签/属性，丢弃脚本、样式与内联样式）后由 schema `parseDOM` 解析为片段；纯文本按 `editor.pasteAsMarkdown` 决定是否解析为 Markdown；目标内容模型不接受时（如表格单元）回退默认粘贴 |
 | `nodeId` | 顶层块 ID 生成与事务映射维护 |
 | `math` | 公式节点命令、校验、编辑入口 |
 | `diagram` | 图表节点命令、渲染调度 |
@@ -1115,9 +1127,22 @@ Schema 对第三方扩展只读；扩展只能使用上述节点输出 `PMJson`�
 | `autosave` | 脏标记、防抖保存、外部冲突 |
 | `placeholder` | 空文档占位提示 |
 
+任务项：`list_item.checked` 为 `null` 表示普通列表项，布尔值表示任务项；点击列表项左侧 `::before` 绘制的勾选框时由 `handleDOMEvents.mousedown` 切换 `checked`，不移动光标。
+
+页内跳转：WYSIWYG 中点击 `[文字](#锚点)` 由 `scrollToAnchorId` 处理。标题锚点按实时文本用统一 slugger（`src/shared/slug.ts`，与解析共用，重复标题追加 `-1`）计算，并回退到解析时写入的 `id`，因此新建或改名后的标题仍可跳转；计算 slug 的文本会拼回标题内 `html_inline` / `raw_inline` 的原文与公式源码，与解析期 mdast `textContent` 保持一致。同时匹配原始 HTML 的 `id` / `name` 锚点；空锚点 `[回到顶部](#)` 滚动到文档顶部。目标高亮使用 Decoration，直接改节点 class 会被 ProseMirror 的属性观察还原。
+
+代码块插入：工具栏、段落样式下拉、斜杠菜单与行内围栏共用同一命令。列表项首段等不允许替换首段时在段落之后插入；表格单元等无法容纳代码块的位置保持原文不变，并通过提示条说明原因。
+
+视图模式：每个文档记住最近一次使用的模式，切换标签时恢复；当前模式不适用于目标格式（WYSIWYG 仅 markdown，分栏/预览要求格式有渲染预览）时自动回落到源码模式。
+
 ### 11.3 NodeView 约定
 
 - 重节点（公式、图表、代码块、图片、PDF）必须实现 NodeView，复用 DOM，避免每次事务重建。
+- 代码块 NodeView 在右上角提供语言下拉（写入 `code_block.language`，序列化为围栏 info string）；围栏 info string 中语言之后的 `meta` 原样保留。代码块内 `Tab` / `Shift+Tab` 插入或删除两个空格。
+- 代码块未聚焦时叠加 Shiki 高亮层（与预览共用高亮器缓存与主题，主题切换后重新着色）；聚焦编辑时隐藏高亮层，保证光标与选区可读。高亮层 `contenteditable=false`，横向滚动与底层 `pre` 同步。
+- 创建代码块的入口（工具栏、段落样式下拉、斜杠菜单、行内围栏回车）统一走同一命令：当前段落可替换时直接转换，列表项首段等不允许替换时改为在其后插入新代码块；表格单元等内容模型无法容纳时保持原文不变，并通过提示条说明。
+- 图表 NodeView 的编辑框与按钮事件不交给 ProseMirror（`stopEvent`），全选、双击选词与方向键都在 textarea 内生效；编辑窗仅由「编辑代码」开关控制，失焦不关闭。
+- 图片 NodeView：绝对地址（http/data/blob）直接显示；相对路径按文档目录读取为 data URL；超过 1 MB 时先显示大小占位与「加载图片」按钮；失败时显示占位提示。
 - `update(node)` 仅比较 attrs 与主题；选区变化不触发重渲染。
 - 异步渲染以节点 `id` + 输入哈希校验，丢弃过期结果；不使用全局编辑版本。
 - NodeView 不直接修改文档；所有变更通过 command/transaction。
@@ -1133,10 +1158,11 @@ Schema 对第三方扩展只读；扩展只能使用上述节点输出 `PMJson`�
 | `Ctrl+Z` / `Ctrl+Shift+Z` | `Cmd+Z` / `Cmd+Shift+Z` | 撤销 / 重做 |
 | `Ctrl+F` / `Ctrl+H` | `Cmd+F` / `Cmd+Option+F` | 查找 / 替换 |
 | `Ctrl+B` / `Ctrl+I` | `Cmd+B` / `Cmd+I` | 加粗 / 斜体 |
+| `Ctrl+E` / `Ctrl+Shift+X` | `Cmd+E` / `Cmd+Shift+X` | 行内代码 / 删除线 |
 | `Ctrl+K` | `Cmd+K` | 插入/编辑链接 |
 | `Alt+=` | `Option+=` | 插入公式 |
 | `Ctrl+Shift+M` | `Cmd+Shift+M` | 插入图表 |
-| `Tab` / `Shift+Tab` | 同 | 列表缩进 / 表格下一单元格 |
+| `Tab` / `Shift+Tab` | 同 | 列表缩进；引用内加深 / 减少嵌套层级 |
 | `Alt+Enter` | `Option+Enter` | 编辑当前公式或图表源码 |
 | `F2` | `F2` | 切换 WYSIWYG / 源码 |
 
@@ -1158,6 +1184,8 @@ Schema 对第三方扩展只读；扩展只能使用上述节点输出 `PMJson`�
 键位方案以 VS Code 默认为基准；Notepad++/UltraEdit 兼容预设通过设置 `keymapPreset` 切换（P2）。差异示例：VS Code `Ctrl+D` 选中下一个相同项，Notepad++ `Ctrl+D` 复制当前行；VS Code `Ctrl+L` 选中当前行，Notepad++ `Ctrl+L` 删除当前行。
 
 IME：组合输入期间禁用 input rules 与自定义 keymap；`compositionend` 后统一执行延迟事务。
+
+选区同步：原生 `Home` / `End`、`Ctrl+End`、`Shift+End` 等由浏览器改选区，ProseMirror 依赖异步的 `selectionchange` 才更新状态。自定义按键处理（斜杠菜单、`Ctrl+K`）入口先按 DOM 选区（`window.getSelection` + `view.posAtDOM`）重建 EditorState 选区，避免紧随其后的按键基于过期选区判断（否则斜杠菜单可能不弹出）；只使用公开 API，不依赖 `view.domObserver` 内部实现。NodeSelection / AllSelection 与不在文本块内的位置不参与重建。
 
 ### 11.5 查找替换
 
@@ -1268,6 +1296,7 @@ IME：组合输入期间禁用 input rules 与自定义 keymap；`compositionend
 | `fs:readText` | R→M | `{ path }` | `{ content, mtimeMs, hash, eol, bom, encoding, size }` |
 | `fs:writeText` | R→M | `{ path, content, baseHash }` | `{ mtimeMs, hash }` |
 | `fs:writeBinary` | R→M | `{ path, data: Uint8Array }` | `{ path, mtimeMs }` |
+| `fs:saveImage` | R→M | `{ documentPath, data: Uint8Array, mime, fileName? }` | `{ path }`（相对文档的 `assets/…`） |
 | `fs:create` | R→M | `{ path, kind: "file" \| "dir" }` | `FileRef` |
 | `fs:rename` | R→M | `{ path, newName }` | `FileRef` |
 | `fs:delete` | R→M | `{ path, recursive? }` | `void` |
@@ -1422,27 +1451,29 @@ form-action 'none';
 
 ```text
 ┌─────────────────────────────────────────────────────────┐
-│ 工具栏/标题栏 熊猫 ▣ | + 📂 💾 | doc.md • | [模式] ⌘ ⚙ —□× │
+│ 工具栏/标题栏 熊猫 ▣ | + 📂 💾 | doc.md • | Git ⌘ ⚙ —□× │
 ├──────────┬──────────────────────────────────────────────┤
 │ 标签栏    │ [doc.md ×] [main.tex ×]                  [+] │
 │ 工作区    ├──────────────────────────────────────────────┤
-│ 目录树    │                                              │
+│ 目录树    │ [块级工具栏……] | [源码][分栏][预览][所见即所得] │
+│          ├──────────────────────────────────────────────┤
 │          │              编辑 / 预览区                     │
 │          │                                              │
 ├──────────┴──────────────────────────────────────────────┤
-│ 状态栏：路径 | 格式 | 行:列 | 编码/换行 | 保存状态 | 宽度% │
+│ 状态栏：路径 | 格式 | 行:列 | 编码/换行 | 保存状态       │
 └─────────────────────────────────────────────────────────┘
 ```
 
 - 标题栏与工具栏合并为一条 40px：Windows/Linux 用 `titleBarStyle: hidden` + `titleBarOverlay`（系统按钮悬浮右侧，`titlebar-area-*` 环境变量避让），macOS 用 `hiddenInset`；空白区可拖拽/双击最大化，中间显示文档名与未保存圆点，语言切换等低频入口收进设置。
-- 状态栏为中性底色 24px，内容宽度等低频控件收进上翻弹层；品牌绿只用于活动态。
+- 状态栏为中性底色 24px，只放高频状态与开关；品牌绿只用于活动态。
 
 - 左侧工作区可折叠；编辑区可切换 WYSIWYG / 源码 / 双栏。
 - 工作区下方提供大纲面板：Markdown 取标题层级，LaTeX 取 `\section` 等层级；点击跳转，可折叠。
 - 支持文档内页内目录 `[标题](#id)`：预览保留原始 HTML（仍经 DOMPurify 消毒）以便 `<a id="…">` 生效，点击后在当前面板平滑滚动并短暂高亮；WYSIWYG 按标题 id 或锚点节点的 raw 属性定位。
 - 文件树与大纲支持上下方向键直接切换：文件树打开上一/下一个文件（目录只移动焦点），大纲跳到上/下一条标题；跳转后焦点保留在侧栏项上，便于连续按键。未打开工作区时文件页只显示提示，打开文件夹入口保留在侧栏标题栏。
 - 标签支持拖拽排序、中键关闭、未保存标记圆点；列表溢出时横向滚动，右侧提供左右滚动箭头、「关闭全部」（≥2 个文档时显示，点击先确认，关闭中遇到「取消」即中止剩余）与「全部标签」下拉；下拉列出全部文档（图标、未保存点、名称、当前标记）并带行内关闭按钮，选择或切换文档时活动标签自动滚动进可视区。
-- 模式切换使用 WYSIWYG / 源码 / 双栏三段式控件，不使用循环切换按钮。
+- 模式切换使用固定的模式条，位于标签栏之下、编辑区顶部（不随内容滚动）：左侧为 WYSIWYG 块级工具栏，右侧为视图模式按钮，中间以 `|` 分隔；块级工具栏超宽时换行，模式条高度随内容增长。模式条只对支持预览的格式显示；Markdown 额外显示「所见即所得」，位于模式组最右侧；非预览格式与 PDF/图片只有源码或专用查看器，不显示模式条。主工具栏仅保留 Git 差异入口。
+- Markdown 文档打开时默认进入所见即所得（超大文件强制源码）；切换标签时恢复该标签上次的模式，模式不适用于当前格式时回落源码；每文档模式随会话保存。
 - 源码模式显示行号、折叠槽与缩进参考线；搜索面板停靠在编辑区顶部，不遮挡正文。
 - 源码支持语法折叠：按语言语法树提供折叠范围（CodeMirror foldGutter + 快捷键）；Markdown 标题分节与围栏代码块折叠，LaTeX 章节命令折叠，PlantUML `@startuml…@enduml` 块折叠，流式解析语言按缩进兜底折叠。
 - 渲染预览的代码块右上角提供复制按钮：悬停显示，点击复制代码内容（复制后短暂显示成功态）；差异视图自带「复制原文」，不重复提供。
@@ -1450,7 +1481,7 @@ form-action 'none';
 - 表格获得焦点时显示行列操作工具条（增删行列、对齐、删除表格）。
 - 无打开文档时显示欢迎页：新建、打开、最近文件。
 - 解析、公式、图表与 TeX 诊断统一汇总到问题面板，状态栏显示错误/警告计数。
-- 正文内容宽度按面板百分比设置（默认 100%，范围 30–1000%），两侧留白，避免长行；超过 100% 时横向滚动。
+- 正文占满渲染面板宽度；图表、图片与 PDF 的缩放由各自查看器的工具栏与快捷键控制（见 §10.3），不随正文宽度变化。
 - 状态栏在窄窗口下按优先级折叠次要信息；保存状态（保存中/已保存/失败）必须可见。
 - 设置内提供扩展管理页：安装 `.panda`、启用/禁用、查看权限与版本、打开扩展目录。
 - 命令面板（`Ctrl+Shift+P` / `Cmd+Shift+P`）调用应用命令与扩展命令。
@@ -1475,7 +1506,7 @@ CSS 变量定义：
 
 ### 15.3 设置
 
-分组：外观（主题、界面语言、字号、内容宽度百分比）、编辑（自动保存、Tab、换行、行号、粘贴为 Markdown、键位方案）、数学（宏、单美元内联公式开关、默认渲染）、图表（缓存上限；图表主题永远跟随应用主题）、LaTeX（引擎路径、编译超时）、扩展（已安装扩展、启用状态、安装/卸载、扩展设置）、隐私（日志级别）。设置对话框「保存」写盘但不关闭窗口（可连续调整后一并生效），关闭走 Esc、遮罩或标题栏关闭按钮。
+分组：外观（主题、界面语言、字号、图表适配宽度）、编辑（自动保存、Tab、换行、行号、粘贴为 Markdown、键位方案）、数学（宏、单美元内联公式开关、默认渲染）、图表（缓存上限；图表主题永远跟随应用主题）、LaTeX（引擎路径、编译超时）、扩展（已安装扩展、启用状态、安装/卸载、扩展设置）、隐私（日志级别）。设置对话框「保存」写盘但不关闭窗口（可连续调整后一并生效），关闭走 Esc、遮罩或标题栏关闭按钮。
 
 设置文件带 `schemaVersion`；启动时按版本迁移，未知字段保留。
 
@@ -1485,7 +1516,7 @@ CSS 变量定义：
 - 界面语言存于 `appearance.language`（`zh` / `en` / `system`，默认 `zh`）；在设置 → 外观中选择，即时生效。
 - 渲染进程在 App 渲染前按偏好设置全局语言；主进程在启动与设置写入后同步语言并重建原生菜单，保证错误信息与菜单一致。
 - 所有对话框支持 Esc 关闭与焦点陷阱；工具栏按钮有 `aria-label`。
-- 公式输出包含 MathML 语义；图表节点提供“查看源码”入口作为文本替代。
+- 公式输出包含 MathML 语义；图表节点提供「编辑代码」开关作为文本替代。
 - 颜色对比度符合 WCAG 2.1 AA；键盘焦点可见。
 
 ---
@@ -1537,6 +1568,8 @@ AST(parse(s1)) 语义等价于 AST(parse(s2))
 9. 导出 HTML/PDF；HTML 离线打开后数学、图表、图片正常显示。
 10. 源码模式：行号、语法高亮、查找替换（正则/全词）、跳转行、多光标、折叠、注释切换、行移动/复制、选择匹配高亮；替换全部一次撤销。
 11. 安装示例扩展 → 打开 `.adoc` 显示源码 + 预览 → 保存；禁用扩展后重新打开回退为纯文本。
+12. WYSIWYG：工具栏格式化与任务列表、代码块语言切换、嵌套引用、页内锚点跳转、图表源码编辑、粘贴 HTML 消毒，以及引用式链接/图片与脚注写法保持不被打散。
+13. 标签切换：Markdown 标签打开后默认进入 WYSIWYG，切回标签恢复上次模式，非 Markdown 标签自动回落到源码；固定模式条左侧为块级工具栏、右侧为模式按钮；表格内插入代码块给出提示；引用式链接改地址后定义行同步更新；粘贴纯文本按设置解析 Markdown、粘贴/拖入图片写入 `assets/` 并显示；大图先占位后按需加载；无路径文档粘贴图片先触发另存为。
 
 ### 16.4 质量门禁
 
@@ -1870,7 +1903,7 @@ interface RenderedDiff {
 - 计数 `+12 −4` 只统计当前视图可见的块级改动；点击计数展开改动列表（见 21.8.3）；
 - `∧` / `∨` 为上一处 / 下一处按钮，无改动时禁用；
 - pill 的 5 种状态：`关闭`、`对比中…`、`无改动`、`改动待刷新`、`不可用（不在 Git 仓库）`；
-- 「性能」按钮开关性能浮层，默认关闭；内容宽度百分比按钮也位于状态栏，点击弹出面板：滑块（带 30/100/300/600/1000 刻度，可点击）、百分比直接输入与「重置」。Ctrl+滚轮与 Ctrl +/- 同样可调整。
+- 「性能」按钮开关性能浮层，默认关闭。
 
 #### 21.8.2 视图粒度切换
 
@@ -2004,7 +2037,7 @@ interface RenderedDiff {
 
 ### 21.15 独立 Git 差异视图
 
-> 内容宽度分两层：「设置 → 外观 → 内容宽度」是全局默认（30–1000%，随设置持久化）；状态栏百分比按钮弹出的滑块、数字输入、Ctrl+滚轮与 Ctrl +/- 只调整**当前显示**（会话内覆盖，不写入设置文件），「重置」与 Ctrl+0 恢复跟随全局默认。超过 100% 时面板出现水平滚动条；超宽表格和代码块在内容区内部横向滚动。
+> 图表、图片与 PDF 的缩放互相独立，与正文排版宽度无关：查看器以 **100% = 自然尺寸** 为基准，工具栏组合为「百分比输入框、滑块、放大/缩小图标、复位图标」，`Ctrl` + `=` / `-` / `0` 与 `Ctrl+滚轮` 等价；复位的含义是恢复自然宽度显示且不超过视口。图表缩放范围 30–1000%，PDF 因位图渲染限制为 50–300%。「设置 → 外观 → 图表适配宽度」只控制打开查看器时是否自动适配面板宽度，不影响内嵌图表的自然宽度与正文排版。
 
 - 新增视图模式「Git 差异」（工具栏 Git 分支图标），对所有支持的文本格式可用；只读，不显示编辑区。
 - 顶部对比栏使用图标按钮：一个开关切换比较方式，一个「读取并对比」按钮，一组「对比 / 源文件 / 改动后」显示切换，以及 `-w`、`空行`、`CR` 三个 Git 参数图标开关；不再显示比较方式或参数的文本标签。

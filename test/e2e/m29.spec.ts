@@ -66,6 +66,8 @@ test("M29：侧栏键盘导航与空工作区", async () => {
       .toBe("alpha.md");
 
     // 焦点在「大纲」标签上时，方向键进入大纲并直接跳到第一条标题。
+    // Markdown 默认所见即所得；大纲跳转与状态栏行列信息在源码模式验证。
+    await page.getByRole("button", { name: "源码", exact: true }).click();
     await page.getByRole("tab", { name: "大纲", exact: true }).click();
     const outlineItems = page.locator(".outline-item");
     await expect(outlineItems).toHaveCount(2, { timeout: 15_000 });

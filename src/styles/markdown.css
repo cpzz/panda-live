@@ -288,6 +288,121 @@
   white-space: pre-wrap;
 }
 
+/* WYSIWYG 代码块：右上角语言选择（沿用预览代码块悬浮按钮的位置）。 */
+.prose-editor .code-block-node {
+  position: relative;
+  margin: 0.9em 0;
+}
+
+.prose-editor .code-block-node pre {
+  margin: 0;
+}
+
+/* 语法高亮层：覆盖在可编辑 pre 上；聚焦编辑时隐藏，保证光标与选区可见。 */
+.prose-editor .code-block-body {
+  position: relative;
+}
+
+.prose-editor .code-block-highlight {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.prose-editor .code-block-highlight pre,
+.prose-editor .code-block-highlight pre.shiki {
+  width: max-content;
+  min-width: 100%;
+  max-width: none;
+  margin: 0;
+  overflow: visible;
+  border-color: transparent;
+  /* Shiki 会写内联背景色，这里保持与底层可编辑 pre 同一背景。 */
+  background: transparent !important;
+}
+
+.prose-editor .code-block-node.has-highlight:not(:focus-within) .code-block-body > pre {
+  color: transparent;
+}
+
+.prose-editor .code-block-node.has-highlight:focus-within .code-block-highlight,
+.prose-editor .code-block-node:not(.has-highlight) .code-block-highlight {
+  display: none;
+}
+
+/* 图片：相对路径由 NodeView 解析为 data URL；失败时保留占位提示。 */
+.prose-editor .image-node {
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: bottom;
+}
+
+.prose-editor .image-node img {
+  max-width: 100%;
+}
+
+.prose-editor .image-node-error img {
+  display: none;
+}
+
+/* 大图占位：先显示大小与「加载图片」按钮，点击后再读取 data URL。 */
+.prose-editor .image-node-placeholder {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 8px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.prose-editor .image-node-placeholder[hidden] {
+  display: none;
+}
+
+.prose-editor .image-node-error::after {
+  content: attr(data-error);
+  padding: 2px 8px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.prose-editor .code-block-header {
+  position: absolute;
+  top: 7px;
+  right: 8px;
+  z-index: 2;
+}
+
+.prose-editor .code-lang-select {
+  height: 24px;
+  max-width: 150px;
+  padding: 0 22px 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  appearance: none;
+  background-color: var(--surface);
+  background-image: var(--select-chevron);
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+  color: var(--muted);
+  font-size: 11.5px;
+  cursor: pointer;
+  opacity: 0.75;
+  transition: opacity 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.prose-editor .code-block-node:hover .code-lang-select,
+.prose-editor .code-lang-select:focus-visible {
+  color: var(--fg);
+  border-color: var(--border-strong);
+  opacity: 1;
+}
+
 .prose-editor td > p,
 .prose-editor th > p,
 .prose-editor li > p {
@@ -308,6 +423,7 @@
   left: -1.4em;
   content: "\2610";
   color: var(--muted);
+  cursor: pointer;
 }
 
 .prose-editor .task-item[data-checked="true"]::before {
@@ -318,6 +434,7 @@
 .prose-editor .frontmatter,
 .prose-editor .html-block,
 .prose-editor .html-inline,
+.prose-editor .raw-inline,
 .prose-editor .mathml-block,
 .prose-editor .raw-markdown {
   font-family: var(--font-mono);
@@ -456,6 +573,25 @@
   font-size: 0.78em;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+
+.diagram-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 头部整体大写，但按钮文案保持正常大小写。 */
+.diagram-actions .button {
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* 「编辑代码」开关按钮的按下态：显示代码编辑窗时保持高亮。 */
+.prose-editor .diagram-node-header .button[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 .prose-editor .diagram-node-body {

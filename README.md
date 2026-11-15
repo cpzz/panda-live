@@ -6,7 +6,7 @@ Panda Live is a local-first desktop document editor. It keeps source and rendere
 
 ## Highlights
 
-- **Multiple view modes** — source (CodeMirror 6), WYSIWYG (ProseMirror), split, rendered preview and a read-only Git diff view.
+- **Multiple view modes** — source (CodeMirror 6), WYSIWYG (ProseMirror, with a Word-style block toolbar and slash commands), split, rendered preview and a read-only Git diff view.
 - **Rendered Git diff** — compare the current buffer or two commits. Markdown is compared in rendered form with block/word/ghost decorations; every other text format gets a side-by-side, syntax-highlighted source diff.
 - **Git-compatible diff options** — `-w` (ignore whitespace), `--ignore-blank-lines`, and `--ignore-cr-at-eol` are available as independent toggles.
 - **Markdown pipeline** — GFM, front matter, math (KaTeX), syntax highlighting (Shiki), and sanitized HTML.

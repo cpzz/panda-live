@@ -5,6 +5,10 @@ import {
   type OpenDialogOptions,
   type SaveDialogOptions,
 } from "electron";
+import { createHash } from "node:crypto";
+import { promises as fs } from "node:fs";
+import path from "node:path";
+import { PandaError } from "../../src/shared/errors";
 import type { FileFilter } from "../../src/shared/ipc";
 import { t } from "../../src/i18n";
 import type { FileService } from "../services/file-service";
@@ -72,6 +76,23 @@ const CODE_EXTENSIONS = [
 ];
 
 const MARKDOWN_EXTENSIONS = ["md", "markdown", "mdown", "mkd", "qmd", "rmd", "mdx"];
+
+/** 允许转存的图片类型；SVG 不在此列，避免把可执行脚本带入文档目录。 */
+const IMAGE_MIME_EXTENSIONS: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/gif": "gif",
+  "image/webp": "webp",
+  "image/bmp": "bmp",
+};
+
+const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
+
+/** `YYYYMMDD-HHmmss` 时间戳，用于图片文件名。 */
+function timestamp(date: Date): string {
+  const pad = (value: number): string => String(value).padStart(2, "0");
+  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
+}
 
 function markdownFilters(): FileFilter[] {
   return [
@@ -142,6 +163,27 @@ export function registerFileHandlers({ files, getWindow }: FileHandlerOptions): 
   handle("fs:writeText", async (request) => files.writeText(request));
 
   handle("fs:readBase64", async (request) => files.readBase64(request.path));
+
+  // 粘贴/拖入图片：校验类型与大小后写入文档同目录 assets/，返回相对路径。见 design.md §8.6。
+  handle("fs:saveImage", async (request) => {
+    const extension = IMAGE_MIME_EXTENSIONS[request.mime.toLowerCase()];
+    if (!extension) {
+      throw new PandaError("E_PAYLOAD_INVALID", t("不支持的图片格式：{0}", request.mime));
+    }
+    if (request.data.byteLength > MAX_IMAGE_BYTES) {
+      throw new PandaError("E_FILE_TOO_LARGE", t("图片超过 20 MB，未写入：{0}", request.fileName ?? ""));
+    }
+    const documentDir = path.dirname(path.resolve(request.documentPath));
+    const assetsDir = path.join(documentDir, "assets");
+    // 文档目录已在打开时登记为允许根；assets 为其子目录，写入前再确认一次。
+    await files.assertAllowed(documentDir);
+    await fs.mkdir(assetsDir, { recursive: true });
+    const bytes = Buffer.from(request.data);
+    const hash = createHash("sha256").update(bytes).digest("hex").slice(0, 8);
+    const name = `${timestamp(new Date())}-${hash}.${extension}`;
+    await fs.writeFile(path.join(assetsDir, name), bytes);
+    return { path: `assets/${name}` };
+  });
 
   handle("fs:stat", async (request) => files.stat(request.path));
 

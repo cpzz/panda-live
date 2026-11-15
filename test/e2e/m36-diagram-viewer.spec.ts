@@ -145,19 +145,22 @@ test("M36：图表缩放与持久缓存回归", async () => {
         dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
       }, mdPath);
       await page.getByRole("button", { name: "打开", exact: true }).click();
-      const block = page.locator(".markdown-body .preview-diagram").first();
+      // Markdown 默认所见即所得；图表布局在渲染预览中验证。
+      await page.getByRole("button", { name: "预览", exact: true }).click();
+      const preview = page.locator(".preview-pane .markdown-body");
+      const block = preview.locator(".preview-diagram").first();
       await expect(block.locator("svg.flowchart")).toBeVisible({ timeout: 30_000 });
 
       // 图表左对齐：与同级正文段落的左边缘一致（此前是居中显示）。
       const blockBox = await block.boundingBox();
-      const paragraphBox = await page.locator(".markdown-body p").first().boundingBox();
+      const paragraphBox = await preview.locator("p").first().boundingBox();
       expect(blockBox).not.toBeNull();
       expect(paragraphBox).not.toBeNull();
       expect(Math.abs(blockBox!.x - paragraphBox!.x)).toBeLessThanOrEqual(1);
 
       // 代码块背景按代码自然宽度收缩，不撑满内容区。
-      const codeBox = await page.locator(".markdown-body pre.shiki").first().boundingBox();
-      const bodyBox = await page.locator(".markdown-body").boundingBox();
+      const codeBox = await preview.locator("pre.shiki").first().boundingBox();
+      const bodyBox = await preview.boundingBox();
       expect(codeBox).not.toBeNull();
       expect(bodyBox).not.toBeNull();
       expect(codeBox!.width).toBeLessThan(bodyBox!.width - 40);

@@ -35,6 +35,12 @@ describe("设置合并", () => {
     expect(mergeSettings({ editor: { insertSpaces: false } }).editor.insertSpaces).toBe(false);
   });
 
+  it("粘贴设置：默认按纯文本，开启后按 Markdown 解析", () => {
+    expect(mergeSettings(undefined).editor.pasteAsMarkdown).toBe(false);
+    expect(mergeSettings({ editor: { pasteAsMarkdown: "yes" } }).editor.pasteAsMarkdown).toBe(false);
+    expect(mergeSettings({ editor: { pasteAsMarkdown: true } }).editor.pasteAsMarkdown).toBe(true);
+  });
+
   it("已移除的内容宽度字段在读取时被丢弃", () => {
     expect(mergeSettings({ appearance: { lineWidth: 120 } }).appearance).not.toHaveProperty("lineWidth");
     expect(

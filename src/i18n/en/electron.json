@@ -1,5 +1,7 @@
 {
   "文件": "File",
+  "不支持的图片格式：{0}": "Unsupported image format: {0}",
+  "图片超过 20 MB，未写入：{0}": "Image exceeds 20 MB and was not saved: {0}",
   "编辑": "Edit",
   "视图": "View",
   "导出 HTML…": "Export HTML…",

@@ -113,7 +113,7 @@ export function RenderedMarkdown({
 
   useEffect(() => onThemeChange(setTheme), []);
 
-  // 超过 1 MB 的图片改为占位 + 手动加载。见 doc/design.md §14.3。
+  // 相对图片按文档目录解析：超过 1 MB 的改为占位 + 手动加载；其余直接内联为 data URL。
   useEffect(() => {
     const host = hostRef.current;
     if (!host || !filePath) return;
@@ -125,7 +125,13 @@ export function RenderedMarkdown({
       void window.panda.fs
         .stat({ path: resolved })
         .then((stats) => {
-          if (cancelled || stats.size <= 1024 * 1024) return;
+          if (cancelled || !image.isConnected) return;
+          if (stats.size <= 1024 * 1024) {
+            return window.panda.fs.readBase64({ path: resolved }).then((file) => {
+              if (cancelled || !image.isConnected) return;
+              image.src = `data:${file.mime};base64,${file.data}`;
+            });
+          }
           const wrapper = globalThis.document.createElement("div");
           wrapper.className = "big-image-placeholder";
           const label = globalThis.document.createElement("span");

@@ -20,6 +20,8 @@ async function launchWithFile(
   }, filePath);
   await page.getByRole("button", { name: "打开", exact: true }).click();
   await expect(page.locator(".tab-name")).toHaveText(path.basename(filePath));
+  // Markdown 默认以所见即所得打开；这些用例验证源码编辑器能力。
+  await page.getByRole("button", { name: "源码", exact: true }).click();
   return { app, page, userDataDir };
 }
 
@@ -124,6 +126,8 @@ test("M7：超过 1 MB 的图片显示占位并可手动加载", async () => {
 
   const { app, page, userDataDir } = await launchWithFile(filePath);
   try {
+    // 大图占位由渲染预览提供；Markdown 默认所见即所得，这里切到预览。
+    await page.getByRole("button", { name: "预览", exact: true }).click();
     const placeholder = page.locator(".big-image-placeholder");
     await expect(placeholder).toContainText("图片较大", { timeout: 15_000 });
     await expect(placeholder.getByRole("button", { name: "加载图片" })).toBeVisible();

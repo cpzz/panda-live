@@ -43,6 +43,8 @@ test("M4：外部修改未保存文档 → 冲突横幅 → 重新加载", async
     const page = await app.firstWindow();
     await openSample(app, page, filePath);
 
+    // Markdown 默认所见即所得；本场景直接验证源码编辑与冲突恢复。
+    await page.getByRole("button", { name: "源码", exact: true }).click();
     await page.locator(".cm-content").click();
     await page.keyboard.press("Control+A");
     await page.keyboard.type("# 本地修改\n\n本地正文");
@@ -139,6 +141,7 @@ test("M4：强制退出后从草稿恢复", async () => {
   try {
     const page = await app.firstWindow();
     await openSample(app, page, filePath);
+    await page.getByRole("button", { name: "源码", exact: true }).click();
     await page.locator(".cm-content").click();
     await page.keyboard.press("Control+A");
     await page.keyboard.type("# 未保存草稿\n\n崩溃前的输入");

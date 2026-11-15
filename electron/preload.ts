@@ -27,6 +27,7 @@ const api: PandaApi = {
     readText: (request) => invoke("fs:readText", request),
     writeText: (request) => invoke("fs:writeText", request),
     readBase64: (request) => invoke("fs:readBase64", request),
+    saveImage: (request) => invoke("fs:saveImage", request),
     readDir: (request) => invoke("fs:readDir", request),
     stat: (request) => invoke("fs:stat", request),
     inspectDrop: (request) => invoke("fs:inspectDrop", request),

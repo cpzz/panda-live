@@ -269,6 +269,7 @@ function SourcePane({
         } else {
           editor.reset(document.content, document.readOnly, language);
           if (cursorRef.current) editor.setCursor(cursorRef.current);
+          // 模式切换会重建状态；重建后恢复最近的折叠范围，避免折叠丢失。
           applySavedFolds();
         }
         savedRef.current.delete(document.id);
@@ -858,6 +859,8 @@ export function App() {
   const [searchSignal, setSearchSignal] = useState(0);
   const [compileSignal, setCompileSignal] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  /** 模式条左侧的块级工具栏挂载点；由 React 回调 ref 写入。 */
+  const [modeToolbarHost, setModeToolbarHost] = useState<HTMLDivElement | null>(null);
   // 「放大查看」对话框：承载内嵌图表块的放大视图；svg 已由图表服务消毒。
   const [diagramViewer, setDiagramViewer] = useState<{ svg: string; title: string } | null>(null);
   const [recoveries, setRecoveries] = useState<DraftEntry[]>([]);
@@ -931,6 +934,14 @@ export function App() {
   const activeContent = active?.content ?? "";
   const activeFormat = active?.format ?? "";
   const activeId = active?.id ?? "";
+  // 模式条：只对有渲染预览的文本格式显示；二进制（PDF/图片）与纯代码文件只有源码视图。
+  const modeBarVisible = Boolean(active) && !activeIsBinary && formatSupportsPreview(activeFormat);
+  const modeBarModes: EditorMode[] =
+    active?.format === "markdown"
+      ? ["source", "split", "preview", "wysiwyg"]
+      : ["source", "split", "preview"];
+  const showModeBarDivider =
+    modeBarVisible && state.mode === "wysiwyg" && active?.format === "markdown" && !active.readOnly;
 
   // 渲染态差异：每个文档独立保存开关与基线。见 doc/design.md §21.8.1。
   const [diffOptions, setDiffOptions] = useState<
@@ -1770,27 +1781,19 @@ export function App() {
           </span>
         </div>
         <div className="toolbar-spacer" />
-        <div className="mode-switch" role="group" aria-label={t("视图模式")}>
-          {(Object.keys(MODE_LABELS) as EditorMode[]).map((mode) => (
-            <button
-              key={mode}
-              type="button"
-              className={state.mode === mode ? "mode-button active" : "mode-button"}
-              aria-pressed={state.mode === mode}
-              aria-label={t(MODE_LABELS[mode]!)}
-              data-tip={t(MODE_LABELS[mode]!)}
-              onClick={() => manager.setMode(mode)}
-              disabled={
-                !active ||
-                activeIsBinary ||
-                (mode === "wysiwyg" && active.format !== "markdown") ||
-                ((mode === "split" || mode === "preview") &&
-                  !formatSupportsPreview(active.format))
-              }
-            >
-              <Icon name={MODE_ICONS[mode]} />
-            </button>
-          ))}
+        {/* 视图模式已移到文件内容区顶部的固定模式条；主工具栏暂保留 Git 差异入口。 */}
+        <div className="mode-switch" role="group" aria-label={t(MODE_LABELS.git!)}>
+          <button
+            type="button"
+            className={state.mode === "git" ? "mode-button active" : "mode-button"}
+            aria-pressed={state.mode === "git"}
+            aria-label={t(MODE_LABELS.git!)}
+            data-tip={t(MODE_LABELS.git!)}
+            onClick={() => manager.setMode("git")}
+            disabled={!active || activeIsBinary}
+          >
+            <Icon name={MODE_ICONS.git} />
+          </button>
         </div>
         <span className="toolbar-divider" aria-hidden="true" />
         <button
@@ -2108,10 +2111,37 @@ export function App() {
       )}
 
         {active ? (
+          <div className="editor-area">
+            {modeBarVisible && (
+              <div className="mode-bar">
+                <div className="mode-bar-tools" ref={setModeToolbarHost} />
+                {showModeBarDivider && <span className="mode-bar-divider" aria-hidden="true" />}
+                <div className="mode-bar-modes" role="group" aria-label={t("视图模式")}>
+                  {modeBarModes.map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      className={state.mode === mode ? "mode-button active" : "mode-button"}
+                      aria-pressed={state.mode === mode}
+                      aria-label={t(MODE_LABELS[mode]!)}
+                      data-tip={t(MODE_LABELS[mode]!)}
+                      onClick={() => manager.setMode(mode)}
+                      disabled={
+                        (mode === "wysiwyg" && active.format !== "markdown") ||
+                        ((mode === "split" || mode === "preview") &&
+                          !formatSupportsPreview(active.format))
+                      }
+                    >
+                      <Icon name={MODE_ICONS[mode]} />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           <main ref={workspacePaneRef} className={`workspace mode-${state.mode}`}>
             <section
               className="pane wysiwyg-pane"
-              hidden={activeIsBinary || state.mode !== "wysiwyg"}
+              hidden={activeIsBinary || active.format !== "markdown" || state.mode !== "wysiwyg"}
               aria-label={t("所见即所得编辑")}
             >
               <WysiwygPane
@@ -2122,6 +2152,18 @@ export function App() {
                 diff={previewDiff}
                 diffJump={wysiwygDiffJump}
                 onChange={(content) => manager.updateContent(active.id, content)}
+                onNotice={(message) => manager.showNotice("info", message)}
+                pasteAsMarkdown={settings.editor.pasteAsMarkdown}
+                toolbarHost={state.mode === "wysiwyg" ? modeToolbarHost : null}
+                onRequestDocumentPath={async () => {
+                  const current = activeRef.current;
+                  if (!current) return null;
+                  if (current.path) return current.path;
+                  await manager.saveDocumentAs(current.id);
+                  return (
+                    manager.getState().documents.find((item) => item.id === current.id)?.path ?? null
+                  );
+                }}
               />
             </section>
             <section
@@ -2212,6 +2254,7 @@ export function App() {
               {activeIsImage ? <ImagePreviewPane document={active} /> : null}
             </section>
           </main>
+          </div>
         ) : (
           <main className="empty-state">
             <PandaMark size={64} className="brand-mark-large" />

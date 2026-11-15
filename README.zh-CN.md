@@ -6,7 +6,7 @@ Panda Live 是一个本地优先的桌面文档编辑器。源码与渲染结果
 
 ## 主要特性
 
-- **多种视图模式** —— 源码（CodeMirror 6）、所见即所得（ProseMirror）、分栏、渲染预览与只读 Git 差异视图。
+- **多种视图模式** —— 源码（CodeMirror 6）、所见即所得（ProseMirror，支持顶部块级格式工具栏与斜杠命令）、分栏、渲染预览与只读 Git 差异视图。
 - **渲染态 Git 差异** —— 可对比当前缓冲区与指定提交，或两个提交之间。Markdown 以渲染结果对比，提供块级、词级与删除幽灵块标记；其他文本格式提供并排、带语法高亮的源码差异。
 - **Git 兼容参数** —— `-w`（忽略空白）、`--ignore-blank-lines`（忽略空行）与 `--ignore-cr-at-eol`（忽略行尾 CR）各自独立开关。
 - **Markdown 渲染管线** —— GFM、Front Matter、数学公式（KaTeX）、语法高亮（Shiki）与 HTML 净化。

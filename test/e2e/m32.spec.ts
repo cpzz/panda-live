@@ -56,9 +56,8 @@ test("M32：打开 PDF 文档显示只读预览", async () => {
     await expect(viewer.locator(".pdf-page")).toHaveCount(1, { timeout: 30_000 });
     await expect(viewer.locator("canvas")).toBeVisible({ timeout: 30_000 });
 
-    // 只读文档：源码/预览等模式按钮全部禁用，状态栏给出 PDF 只读信息。
-    await expect(page.getByRole("button", { name: "源码", exact: true })).toBeDisabled();
-    await expect(page.getByRole("button", { name: "预览", exact: true })).toBeDisabled();
+    // 只读 PDF：没有可切换的文本模式，顶部模式条整体隐藏。
+    await expect(page.locator(".mode-bar")).toHaveCount(0);
     await expect(page.locator(".statusbar")).toContainText("PDF");
     await expect(page.locator(".statusbar")).toContainText("只读");
 

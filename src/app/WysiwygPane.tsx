@@ -8,6 +8,8 @@ import { buildWysiwygDiff } from "../diff/wysiwyg";
 import { computeLineDiff, normalizeDiffText } from "../diff/compute";
 import type { PreviewDiffModel } from "../diff/preview";
 import type { DocumentState, EditorMode } from "../services/document-manager";
+import { resolveRelativePath } from "../utils/paths";
+import { describeError } from "../shared/errors";
 import { SearchPanel } from "./SearchPanel";
 
 interface SavedWysiwygState {
@@ -27,6 +29,10 @@ export function WysiwygPane({
   diff,
   diffJump,
   onChange,
+  onNotice,
+  pasteAsMarkdown,
+  toolbarHost,
+  onRequestDocumentPath,
 }: {
   document: DocumentState;
   mode: EditorMode;
@@ -35,6 +41,12 @@ export function WysiwygPane({
   diff: PreviewDiffModel | null;
   diffJump: { line: number; token: number } | null;
   onChange(content: string): void;
+  onNotice?(message: string): void;
+  pasteAsMarkdown?: boolean;
+  /** 块级工具栏的挂载容器（固定模式条左侧）。 */
+  toolbarHost?: HTMLElement | null;
+  /** 无路径文档插入图片前请求另存为，返回保存后的路径。 */
+  onRequestDocumentPath?: () => Promise<string | null>;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<PandaEditor | null>(null);
@@ -45,6 +57,15 @@ export function WysiwygPane({
   );
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  // 编辑器实例在文档间复用；动态设置与路径通过 ref 读取最新值。
+  const noticeRef = useRef(onNotice);
+  noticeRef.current = onNotice;
+  const pasteMdRef = useRef(Boolean(pasteAsMarkdown));
+  pasteMdRef.current = Boolean(pasteAsMarkdown);
+  const documentRef = useRef(document);
+  documentRef.current = document;
+  const requestPathRef = useRef(onRequestDocumentPath);
+  requestPathRef.current = onRequestDocumentPath;
 
   useEffect(() => {
     return () => {
@@ -73,7 +94,12 @@ export function WysiwygPane({
       } catch {
         // 非法百分号编码时按原值匹配。
       }
-      if (id) editorRef.current?.scrollToAnchorId(id);
+      if (id) {
+        editorRef.current?.scrollToAnchorId(id);
+      } else {
+        // `[回到顶部](#)`：空锚点滚动到文档顶部。
+        host.scrollTo({ top: 0, behavior: "smooth" });
+      }
     };
     host.addEventListener("click", onClick);
     return () => host.removeEventListener("click", onClick);
@@ -93,6 +119,54 @@ export function WysiwygPane({
         readOnly: document.readOnly,
         documentId: document.id,
         onChange: (docJson) => onChangeRef.current(serializeMarkdown(docJson)),
+        onNotice: (message) => noticeRef.current?.(message),
+        pasteAsMarkdown: () => pasteMdRef.current,
+        toolbarHost: toolbarHost ?? null,
+        // 粘贴/拖入图片：写入文档同目录 assets/，Markdown 中只保存相对路径。
+        onImportImage: async ({ data, mime, fileName }) => {
+          let documentPath = documentRef.current.path;
+          if (!documentPath) {
+            // 无路径文档先走另存为；取消则中止插入。
+            documentPath = (await requestPathRef.current?.()) ?? null;
+          }
+          if (!documentPath) return null;
+          try {
+            const result = await window.panda.fs.saveImage({
+              documentPath,
+              data,
+              mime,
+              fileName,
+            });
+            return result.path;
+          } catch (error) {
+            noticeRef.current?.(describeError(error));
+            return null;
+          }
+        },
+        // 相对图片按文档目录读取为 data URL；超过 1 MB 的大图先返回占位信息。
+        resolveImage: async (src) => {
+          const documentPath = documentRef.current.path;
+          if (!documentPath) return null;
+          const absolute = resolveRelativePath(documentPath, src);
+          if (!absolute) return null;
+          try {
+            const stats = await window.panda.fs.stat({ path: absolute });
+            if (stats.size > 1024 * 1024) {
+              return {
+                kind: "large",
+                size: stats.size,
+                load: async () => {
+                  const file = await window.panda.fs.readBase64({ path: absolute });
+                  return `data:${file.mime};base64,${file.data}`;
+                },
+              };
+            }
+            const file = await window.panda.fs.readBase64({ path: absolute });
+            return { kind: "url", url: `data:${file.mime};base64,${file.data}` };
+          } catch {
+            return null;
+          }
+        },
       });
       editorRef.current = editor;
       lastRef.current = {
@@ -130,6 +204,16 @@ export function WysiwygPane({
       readOnly: document.readOnly,
     };
   }, [document.id, document.revision, document.readOnly, document.content, document.format, mode]);
+
+  // 模式条挂载点可能晚于编辑器创建（React 回调 ref），就绪后把块级工具栏移过去。
+  useEffect(() => {
+    editorRef.current?.setToolbarHost(toolbarHost ?? null);
+  }, [toolbarHost]);
+
+  // 另存为/重命名改变文档路径后，重新解析相对图片。
+  useEffect(() => {
+    editorRef.current?.refreshImages();
+  }, [document.id, document.path]);
 
   // 切换文档时旧的行范围不再有效，避免导航跳到错误的块。
   useEffect(() => {

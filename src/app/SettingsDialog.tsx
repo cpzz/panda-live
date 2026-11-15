@@ -202,6 +202,17 @@ export function SettingsDialog({
                   />
                 </label>
                 <label className="settings-row">
+                  <span>{t("粘贴纯文本时按 Markdown 解析")}</span>
+                  <input
+                    type="checkbox"
+                    checked={draft.editor.pasteAsMarkdown}
+                    onChange={(event) => patch("editor", { pasteAsMarkdown: event.target.checked })}
+                  />
+                </label>
+                <p className="settings-note">
+                  {t("关闭时按纯文本插入；开启后识别标题、列表、链接等 Markdown 语法。")}
+                </p>
+                <label className="settings-row">
                   <span>{t("保存换行符")}</span>
                   <select
                     value={draft.editor.eol}

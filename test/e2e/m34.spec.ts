@@ -29,10 +29,10 @@ test("M34：预览代码块提供复制按钮", async () => {
     await page.getByRole("button", { name: "打开", exact: true }).click();
     await expect(page.locator(".tab-name")).toHaveText("copy.md");
     await page.getByRole("button", { name: "预览", exact: true }).click();
-    await expect(page.locator(".markdown-body pre.shiki")).toBeVisible({ timeout: 20_000 });
+    await expect(page.locator(".preview-pane .markdown-body pre.shiki")).toBeVisible({ timeout: 20_000 });
 
     // 复制按钮挂在代码块右上角，点击后写入剪贴板。
-    const button = page.locator(".markdown-body .preview-copy");
+    const button = page.locator(".preview-pane .markdown-body .preview-copy");
     await expect(button).toHaveCount(1);
     // clipboard.writeText 要求文档持有焦点；先把窗口带到前台，避免偶发拒绝。
     await app.evaluate(({ BrowserWindow }) => {

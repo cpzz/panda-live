@@ -43,6 +43,8 @@ test("M35：源码折叠状态随会话持久化，重启后恢复", async () =>
     }, mdPath);
     await page.getByRole("button", { name: "打开", exact: true }).click();
     await expect(page.locator(".tab-name")).toHaveText("folds.md");
+    // Markdown 默认所见即所得；折叠能力在源码模式验证。
+    await page.getByRole("button", { name: "源码", exact: true }).click();
 
     // 折叠第一个分节（# 折叠 到文末）。
     const gutter = page.locator(".pane:not([hidden]) .cm-foldGutter span:visible");

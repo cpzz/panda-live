@@ -44,11 +44,12 @@ test("M28：Markdown 页内目录锚点跳转", async () => {
 
     // 预览：原始 HTML 锚点被保留，而不是转义成文本。
     await page.getByRole("button", { name: "预览", exact: true }).click();
-    await expect(page.locator('.markdown-body a#sec-1')).toHaveCount(1, { timeout: 15_000 });
-    await expect(page.locator(".markdown-body")).not.toContainText('<a id="sec-1">');
+    const preview = page.locator(".preview-pane .markdown-body");
+    await expect(preview.locator('a#sec-1')).toHaveCount(1, { timeout: 15_000 });
+    await expect(preview).not.toContainText('<a id="sec-1">');
 
-    await page.locator('.markdown-body a[href="#sec-1"]').first().click();
-    await expect(page.locator(".markdown-body #sec-1")).toHaveClass(/anchor-target/);
+    await preview.locator('a[href="#sec-1"]').first().click();
+    await expect(preview.locator("#sec-1")).toHaveClass(/anchor-target/);
     await expect
       .poll(() =>
         page.evaluate(() => {
@@ -79,10 +80,13 @@ test("M28：Markdown 页内目录锚点跳转", async () => {
       .poll(() =>
         page.evaluate(() => {
           const anchor = document.querySelector(".prose-editor .html-inline");
-          return anchor ? Math.round(anchor.getBoundingClientRect().top) : null;
+          if (!anchor) return false;
+          const rect = anchor.getBoundingClientRect();
+          // 居中滚动到视口内即可；具体像素位置随窗口高度变化。
+          return rect.top > 0 && rect.top < window.innerHeight - 40;
         }),
       )
-      .toBeLessThan(500);
+      .toBe(true);
   } finally {
     await app.close();
     await fs.rm(tempDir, { recursive: true, force: true });

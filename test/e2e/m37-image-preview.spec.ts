@@ -36,8 +36,8 @@ test("M37：图片预览与缩放快捷键", async () => {
     await expect(zoomInput).toHaveValue("100");
     await expect(page.getByRole("button", { name: "复位", exact: true })).toBeVisible();
 
-    // 只读：源码模式不可用。
-    await expect(page.getByRole("button", { name: "源码", exact: true })).toBeDisabled();
+    // 只读图片：没有可切换的文本模式，顶部模式条整体隐藏。
+    await expect(page.locator(".mode-bar")).toHaveCount(0);
 
     // 缩放快捷键：Ctrl+= 放大到 110%，Ctrl+0 复位到 100%。
     await page.keyboard.press("Control+=");

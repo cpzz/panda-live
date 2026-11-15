@@ -39,13 +39,15 @@ test("M0：打开、编辑、预览、保存并保留 BOM 与 CRLF", async () =>
 
   await page.getByRole("button", { name: "打开文件", exact: true }).click();
   await expect(page.locator(".tab-name")).toHaveText("sample.md");
+  // Markdown 默认以所见即所得打开；本用例需要同时编辑源码并观察预览。
+  await page.getByRole("button", { name: "分栏", exact: true }).click();
   await expect(page.locator(".cm-content")).toContainText("初始标题");
 
   await page.locator(".cm-content").click();
   await page.keyboard.press("Control+A");
   await page.keyboard.type("# 更新标题\n\n第一行\n第二行");
 
-  await expect(page.locator(".markdown-body h1")).toHaveText("更新标题");
+  await expect(page.locator(".preview-pane .markdown-body h1")).toHaveText("更新标题");
 
   await page.getByRole("button", { name: "保存", exact: true }).click();
   await expect(page.locator(".tab-dot")).toHaveCount(0);

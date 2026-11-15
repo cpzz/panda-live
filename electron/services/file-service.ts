@@ -20,6 +20,7 @@ const BINARY_MIME: Record<string, string> = {
   ".jpeg": "image/jpeg",
   ".gif": "image/gif",
   ".webp": "image/webp",
+  ".bmp": "image/bmp",
   ".svg": "image/svg+xml",
   ".woff": "font/woff",
   ".woff2": "font/woff2",

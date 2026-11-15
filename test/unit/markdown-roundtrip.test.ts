@@ -48,4 +48,28 @@ describe("Markdown 往返语料库", () => {
     expect(markdown).toContain("```plantuml");
     expect(markdown).toContain("```mermaid");
   });
+
+  it("代码围栏保留语言与 meta 信息", () => {
+    const source = '```js title="demo"\nconst a = 1\n```\n';
+    const { doc } = parseMarkdown(source);
+    const markdown = serializeMarkdown(doc);
+    expect(markdown).toContain('```js title="demo"');
+    expect(markdown).toContain("const a = 1");
+    expect(serializeMarkdown(parseMarkdown(markdown).doc)).toBe(markdown);
+  });
+
+  it("引用式链接与图片保留标签写法", () => {
+    const source = "[链接][ref] 与 ![图][img]\n\n[ref]: https://example.com\n[img]: ./a.png\n";
+    const markdown = serializeMarkdown(parseMarkdown(source).doc);
+    expect(markdown).toContain("[链接][ref]");
+    expect(markdown).toContain("![图][img]");
+    expect(serializeMarkdown(parseMarkdown(markdown).doc)).toBe(markdown);
+  });
+
+  it("脚注引用保留原文而不被转义", () => {
+    const source = "引用[^1]\n\n[^1]: 脚注内容\n";
+    const markdown = serializeMarkdown(parseMarkdown(source).doc);
+    expect(markdown).toContain("引用[^1]");
+    expect(markdown).not.toContain("\\[^1]");
+  });
 });

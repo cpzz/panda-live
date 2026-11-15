@@ -27,6 +27,37 @@ export function codeLanguage(element: HTMLElement): string | null {
   return null;
 }
 
+async function ensureHighlighter(): Promise<Highlighter> {
+  const shiki = await import("shiki");
+  highlighterPromise ??= shiki.createHighlighter({
+    themes: [THEMES.light, THEMES.dark],
+    langs: [],
+  });
+  return highlighterPromise;
+}
+
+/**
+ * 单块源码高亮：返回 Shiki 生成的 `<pre>` HTML 字符串；语言或高亮器不可用时返回 null。
+ * 预览与 WYSIWYG 代码块共用同一份高亮器缓存。
+ */
+export async function highlightCodeToHtml(
+  code: string,
+  language: string,
+  theme: "light" | "dark",
+): Promise<string | null> {
+  try {
+    const highlighter = await ensureHighlighter();
+    const resolved = LANGUAGE_ALIASES[language.toLowerCase()] ?? language.toLowerCase();
+    if (!loadedLanguages.has(resolved)) {
+      await highlighter.loadLanguage(resolved as BundledLanguage);
+      loadedLanguages.add(resolved);
+    }
+    return highlighter.codeToHtml(code, { lang: resolved as BundledLanguage, theme: THEMES[theme] });
+  } catch {
+    return null;
+  }
+}
+
 /**
  * 预览内代码块语法高亮：Shiki 按需加载语言，主题跟随明暗。
  * 语言或高亮器不可用时保留原文，不影响渲染。见 doc/design.md §14.2。
@@ -35,48 +66,24 @@ export async function highlightCodeBlocks(root: HTMLElement, theme: "light" | "d
   const blocks = [...root.querySelectorAll<HTMLElement>("pre")];
   if (blocks.length === 0) return;
 
-  try {
-    const shiki = await import("shiki");
-    highlighterPromise ??= shiki.createHighlighter({
-      themes: [THEMES.light, THEMES.dark],
-      langs: [],
-    });
-    const highlighter = await highlighterPromise;
-
-    for (const pre of blocks) {
-      const code = pre.firstElementChild;
-      if (code?.tagName !== "CODE") continue;
-      const language = codeLanguage(code as HTMLElement) ?? (pre.dataset.language || null);
-      if (!language) continue;
-      const text = code.textContent ?? "";
-      const resolved = LANGUAGE_ALIASES[language.toLowerCase()] ?? language.toLowerCase();
-      try {
-        if (!loadedLanguages.has(resolved)) {
-          await highlighter.loadLanguage(resolved as BundledLanguage);
-          loadedLanguages.add(resolved);
-        }
-        const html = highlighter.codeToHtml(text, {
-          lang: resolved as BundledLanguage,
-          theme: THEMES[theme],
-        });
-        const template = document.createElement("template");
-        template.innerHTML = html;
-        const next = template.content.firstElementChild;
-        if (!(next instanceof HTMLElement)) continue;
-        next.dataset.highlighted = "true";
-        // 保留语言，主题切换时可重新高亮。
-        next.dataset.language = resolved;
-        // 保留源行号，供渲染态差异定位代码块。
-        for (const attribute of ["data-src-line", "data-src-end-line"]) {
-          const value = pre.getAttribute(attribute);
-          if (value !== null) next.setAttribute(attribute, value);
-        }
-        pre.replaceWith(next);
-      } catch {
-        // 语言别名不支持或加载失败时保留未高亮的代码块。
-      }
+  for (const pre of blocks) {
+    const code = pre.firstElementChild;
+    if (code?.tagName !== "CODE") continue;
+    const language = codeLanguage(code as HTMLElement) ?? (pre.dataset.language || null);
+    if (!language) continue;
+    const html = await highlightCodeToHtml(code.textContent ?? "", language, theme);
+    if (!html) continue;
+    const template = document.createElement("template");
+    template.innerHTML = html;
+    const next = template.content.firstElementChild;
+    if (!(next instanceof HTMLElement)) continue;
+    next.dataset.highlighted = "true";
+    // 保留语言与源行号，供主题切换重新高亮与渲染态差异定位。
+    next.dataset.language = language.toLowerCase();
+    for (const attribute of ["data-src-line", "data-src-end-line"]) {
+      const value = pre.getAttribute(attribute);
+      if (value !== null) next.setAttribute(attribute, value);
     }
-  } catch {
-    // Shiki 初始化失败时静默降级。
+    pre.replaceWith(next);
   }
 }

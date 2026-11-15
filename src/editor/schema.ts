@@ -35,6 +35,7 @@ const nodes: Record<string, NodeSpec> = {
     group: "block",
     content: "inline*",
     attrs: { ...nodeIdAttr },
+    parseDOM: [{ tag: "p" }],
     toDOM: () => ["p", 0],
   },
 
@@ -43,6 +44,7 @@ const nodes: Record<string, NodeSpec> = {
     content: "inline*",
     defining: true,
     attrs: { level: { default: 1 }, id: { default: null }, ...nodeIdAttr },
+    parseDOM: [1, 2, 3, 4, 5, 6].map((level) => ({ tag: `h${level}`, attrs: { level } })),
     toDOM: (node) => {
       const level = Math.min(6, Math.max(1, Number(node.attrs.level) || 1));
       return [`h${level}`, { "data-heading-id": String(node.attrs.id ?? "") }, 0];
@@ -53,6 +55,7 @@ const nodes: Record<string, NodeSpec> = {
     group: "block",
     content: "block+",
     defining: true,
+    parseDOM: [{ tag: "blockquote" }],
     toDOM: () => ["blockquote", 0],
   },
 
@@ -60,6 +63,7 @@ const nodes: Record<string, NodeSpec> = {
     group: "block",
     content: "list_item+",
     attrs: { ...nodeIdAttr },
+    parseDOM: [{ tag: "ul" }],
     toDOM: () => ["ul", 0],
   },
 
@@ -67,6 +71,12 @@ const nodes: Record<string, NodeSpec> = {
     group: "block",
     content: "list_item+",
     attrs: { start: { default: 1 }, ...nodeIdAttr },
+    parseDOM: [
+      {
+        tag: "ol",
+        getAttrs: (dom) => ({ start: Number((dom as HTMLElement).getAttribute("start")) || 1 }),
+      },
+    ],
     toDOM: (node) => ["ol", { start: String(node.attrs.start ?? 1) }, 0],
   },
 
@@ -74,6 +84,18 @@ const nodes: Record<string, NodeSpec> = {
     content: "paragraph block*",
     defining: true,
     attrs: { checked: { default: null } },
+    parseDOM: [
+      {
+        tag: "li",
+        getAttrs: (dom) => {
+          const element = dom as HTMLElement;
+          const data = element.getAttribute("data-checked");
+          const input = element.querySelector('input[type="checkbox"]') as HTMLInputElement | null;
+          const checked = data === "true" ? true : data === "false" ? false : input ? input.checked : null;
+          return { checked };
+        },
+      },
+    ],
     toDOM: listItemDOM,
   },
 
@@ -83,7 +105,23 @@ const nodes: Record<string, NodeSpec> = {
     marks: "",
     code: true,
     defining: true,
-    attrs: { language: { default: "" }, ...nodeIdAttr },
+    // meta 保留围栏 info string 中语言之后的内容（如 ```js title="x"）。
+    attrs: { language: { default: "" }, meta: { default: "" }, ...nodeIdAttr },
+    parseDOM: [
+      {
+        tag: "pre",
+        preserveWhitespace: "full",
+        getAttrs: (dom) => {
+          const element = dom as HTMLElement;
+          const code = element.querySelector("code");
+          const match = /language-([\w+#.-]+)/u.exec(code?.className ?? "");
+          return {
+            language: element.getAttribute("data-language") || match?.[1] || "",
+            meta: "",
+          };
+        },
+      },
+    ],
     toDOM: (node) => ["pre", { "data-language": String(node.attrs.language ?? "") }, ["code", 0]],
   },
 
@@ -120,7 +158,7 @@ const nodes: Record<string, NodeSpec> = {
   diagram_block: {
     group: "block",
     atom: true,
-    attrs: { kind: { default: "plantuml" }, source: { default: "" }, ...nodeIdAttr },
+    attrs: { kind: { default: "plantuml" }, source: { default: "" }, meta: { default: "" }, ...nodeIdAttr },
     toDOM: (node) => [
       "div",
       { class: "diagram-placeholder", "data-kind": String(node.attrs.kind ?? "") },
@@ -172,7 +210,27 @@ const nodes: Record<string, NodeSpec> = {
     inline: true,
     atom: true,
     draggable: true,
-    attrs: { src: { default: "" }, alt: { default: "" }, title: { default: null } },
+    attrs: {
+      src: { default: "" },
+      alt: { default: "" },
+      title: { default: null },
+      /** 引用式图片的标签；存在时序列化回 `![alt][label]`。 */
+      reference: { default: null },
+      referenceType: { default: null },
+    },
+    parseDOM: [
+      {
+        tag: "img[src]",
+        getAttrs: (dom) => {
+          const element = dom as HTMLElement;
+          return {
+            src: element.getAttribute("src") ?? "",
+            alt: element.getAttribute("alt") ?? "",
+            title: element.getAttribute("title"),
+          };
+        },
+      },
+    ],
     toDOM: (node) => {
       const attrs: Record<string, string> = { src: String(node.attrs.src ?? "") };
       if (node.attrs.alt) attrs.alt = String(node.attrs.alt);
@@ -211,10 +269,20 @@ const nodes: Record<string, NodeSpec> = {
     toDOM: (node) => ["div", { class: "raw-markdown", "data-reason": String(node.attrs.reason ?? "") }, ["pre", String(node.attrs.raw ?? "")]],
   },
 
+  /** 未映射的行内语法（如脚注引用）原样保留，避免序列化时被转义改写。 */
+  raw_inline: {
+    group: "inline",
+    inline: true,
+    atom: true,
+    attrs: { raw: { default: "" } },
+    toDOM: (node) => ["span", { class: "raw-inline" }, String(node.attrs.raw ?? "")],
+  },
+
   horizontal_rule: {
     group: "block",
     atom: true,
     attrs: { ...nodeIdAttr },
+    parseDOM: [{ tag: "hr" }],
     toDOM: () => ["hr"],
   },
 
@@ -223,6 +291,7 @@ const nodes: Record<string, NodeSpec> = {
     inline: true,
     atom: true,
     selectable: false,
+    parseDOM: [{ tag: "br" }],
     toDOM: () => ["br"],
   },
 };
@@ -255,20 +324,39 @@ export const markdownSchema = new Schema({
   },
   marks: {
     strong: {
+      parseDOM: [{ tag: "strong" }, { tag: "b" }],
       toDOM: () => ["strong", 0],
     },
     em: {
+      parseDOM: [{ tag: "em" }, { tag: "i" }],
       toDOM: () => ["em", 0],
     },
     code: {
+      parseDOM: [{ tag: "code" }],
       toDOM: () => ["code", 0],
     },
     strikethrough: {
+      parseDOM: [{ tag: "s" }, { tag: "del" }, { tag: "strike" }],
       toDOM: () => ["s", 0],
     },
     link: {
-      attrs: { href: { default: "" }, title: { default: null } },
+      attrs: {
+        href: { default: "" },
+        title: { default: null },
+        /** 引用式链接的标签；存在时序列化回 `[text][label]`。 */
+        reference: { default: null },
+        referenceType: { default: null },
+      },
       inclusive: false,
+      parseDOM: [
+        {
+          tag: "a[href]",
+          getAttrs: (dom) => {
+            const element = dom as HTMLElement;
+            return { href: element.getAttribute("href") ?? "", title: element.getAttribute("title") };
+          },
+        },
+      ],
       toDOM: (mark) => {
         const attrs: Record<string, string> = { href: String(mark.attrs.href ?? "") };
         if (mark.attrs.title) attrs.title = String(mark.attrs.title);

@@ -31,6 +31,8 @@ test("M18：预览代码高亮背景随主题切换", async () => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
     }, filePath);
     await page.getByRole("button", { name: "打开", exact: true }).click();
+    // Markdown 默认以所见即所得打开；本用例验证渲染预览。
+    await page.getByRole("button", { name: "预览", exact: true }).click();
     await expect(page.locator(".pane:not([hidden]) .markdown-body pre.shiki")).toBeVisible({
       timeout: 30_000,
     });
@@ -88,13 +90,15 @@ test("M18：预览中代码高亮且图表围栏渲染为 SVG", async () => {
     }, filePath);
     await page.getByRole("button", { name: "打开", exact: true }).click();
     await expect(page.locator(".tab-name")).toHaveText("demo.md");
+    await page.getByRole("button", { name: "预览", exact: true }).click();
 
     const preview = page.locator(".pane:not([hidden]) .markdown-body");
     await expect(preview.locator("pre.shiki")).toBeVisible({ timeout: 30_000 });
     await expect(preview.locator("pre.shiki")).toContainText("const answer");
     await expect(preview.locator("pre.shiki span").first()).toBeVisible();
 
-    await expect(preview.locator(".preview-diagram svg")).toBeVisible({ timeout: 30_000 });
+    // 图表 SVG 是 `.preview-diagram` 的直接子节点；「放大查看」按钮内的图标 svg 不计入。
+    await expect(preview.locator(".preview-diagram > svg")).toBeVisible({ timeout: 30_000 });
     await expect(preview.locator(".preview-diagram[data-kind='plantuml']")).toHaveCount(1);
     await expect(preview.locator("pre code.language-plantuml")).toHaveCount(0);
   } finally {

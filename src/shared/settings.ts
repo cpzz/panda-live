@@ -31,6 +31,8 @@ export interface Settings {
     showLineNumbers: boolean;
     /** 保存时的换行符；`preserve` 沿用文件已有换行。 */
     eol: SaveEol;
+    /** 粘贴纯文本时按 Markdown 解析（关闭时按纯文本插入）。 */
+    pasteAsMarkdown: boolean;
   };
   math: {
     /** KaTeX 宏定义，每行一条 `\命令 = 定义`；空行与 `%` 注释行忽略。 */
@@ -70,7 +72,14 @@ export const SETTINGS_SCHEMA_VERSION = 1;
 export const DEFAULT_SETTINGS: Settings = {
   schemaVersion: SETTINGS_SCHEMA_VERSION,
   appearance: { theme: "system", fontSize: 15, diagramFitWidth: true, language: "zh" },
-  editor: { autoSave: true, tabSize: 2, insertSpaces: true, showLineNumbers: true, eol: "preserve" },
+  editor: {
+    autoSave: true,
+    tabSize: 2,
+    insertSpaces: true,
+    showLineNumbers: true,
+    eol: "preserve",
+    pasteAsMarkdown: false,
+  },
   math: {
     // KaTeX 内置已支持 \Pr，这里作为默认示例展示宏写法（design.md §9.2）。
     macros: "\\Pr = \\operatorname{Pr}",
@@ -150,6 +159,10 @@ export function mergeSettings(raw: unknown): Settings {
           ? editor.showLineNumbers
           : DEFAULT_SETTINGS.editor.showLineNumbers,
       eol: pickEnum(editor.eol, ["preserve", "lf", "crlf"] as const, "preserve"),
+      pasteAsMarkdown:
+        typeof editor.pasteAsMarkdown === "boolean"
+          ? editor.pasteAsMarkdown
+          : DEFAULT_SETTINGS.editor.pasteAsMarkdown,
     },
     math: {
       ...math,

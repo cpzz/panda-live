@@ -10,8 +10,6 @@ import { t } from "../../i18n";
 import { problemStore } from "../../services/problem-store";
 import { DIAGRAM_OPEN_EVENT } from "../../render/markdown/diagram-preview";
 
-const EDIT_COMMIT_DELAY_MS = 300;
-
 /**
  * 图表节点：视口懒渲染 + 双击源码编辑 + 错误卡片。见 doc/design.md §10.1、§11.3。
  * 异步结果以「节点 ID + 输入键」校验，过期结果直接丢弃。
@@ -28,8 +26,9 @@ export class DiagramNodeView implements NodeView {
   private observer: IntersectionObserver | null = null;
   private themeCleanup: () => void;
   private editing = false;
+  private readonly toggleButton: HTMLButtonElement;
+  private readonly expandButton: HTMLButtonElement;
   private textarea: HTMLTextAreaElement | null = null;
-  private commitTimer: ReturnType<typeof setTimeout> | null = null;
   private destroyed = false;
   /** 最近一次成功渲染的 SVG（已消毒）；「放大查看」直接复用，不重新渲染。 */
   private lastSvg: string | null = null;
@@ -39,6 +38,7 @@ export class DiagramNodeView implements NodeView {
     private readonly view: EditorView,
     private readonly getPos: () => number | undefined,
     private readonly documentId?: string,
+    private readonly isReadOnly: () => boolean = () => false,
   ) {
     this.node = node;
     this.instanceId = `diagram-${Math.random().toString(36).slice(2, 10)}`;
@@ -55,31 +55,43 @@ export class DiagramNodeView implements NodeView {
     label.textContent = this.kind === "mermaid" ? "Mermaid" : this.kind === "plantuml" ? "PlantUML" : this.kind;
     const actions = document.createElement("span");
     actions.className = "diagram-actions";
-    const sourceButton = document.createElement("button");
-    sourceButton.type = "button";
-    sourceButton.className = "button small ghost";
-    sourceButton.textContent = t("查看源码");
-    sourceButton.addEventListener("mousedown", (event) => event.preventDefault());
-    sourceButton.addEventListener("click", () => this.startEditing());
-    const expandButton = document.createElement("button");
-    expandButton.type = "button";
-    expandButton.className = "button small ghost";
-    expandButton.textContent = t("放大查看");
-    expandButton.addEventListener("mousedown", (event) => event.preventDefault());
-    expandButton.addEventListener("click", () => {
+    // 开关按钮：按下显示代码编辑窗，弹起关闭并提交。
+    this.toggleButton = document.createElement("button");
+    this.toggleButton.type = "button";
+    this.toggleButton.className = "button small ghost";
+    this.toggleButton.textContent = t("编辑代码");
+    this.toggleButton.setAttribute("aria-pressed", "false");
+    this.toggleButton.disabled = this.isReadOnly();
+    this.toggleButton.addEventListener("mousedown", (event) => event.preventDefault());
+    this.toggleButton.addEventListener("click", () => {
+      if (this.isReadOnly()) return;
+      if (this.editing) {
+        this.commitEditing();
+      } else {
+        this.startEditing();
+      }
+    });
+    this.expandButton = document.createElement("button");
+    this.expandButton.type = "button";
+    this.expandButton.className = "button small ghost";
+    this.expandButton.textContent = t("放大查看");
+    this.expandButton.addEventListener("mousedown", (event) => event.preventDefault());
+    this.expandButton.addEventListener("click", () => {
       if (!this.lastSvg) return;
       window.dispatchEvent(
         new CustomEvent(DIAGRAM_OPEN_EVENT, { detail: { svg: this.lastSvg } }),
       );
     });
-    actions.append(sourceButton, expandButton);
+    actions.append(this.toggleButton, this.expandButton);
     this.header.append(label, actions);
 
     this.body = document.createElement("div");
     this.body.className = "diagram-node-body";
 
     this.dom.append(this.header, this.body);
-    this.dom.addEventListener("dblclick", () => this.startEditing());
+    this.dom.addEventListener("dblclick", () => {
+      if (!this.isReadOnly()) this.startEditing();
+    });
 
     this.themeCleanup = onDiagramThemeChange(() => {
       if (!this.visible || this.editing) return;
@@ -129,6 +141,7 @@ export class DiagramNodeView implements NodeView {
     if (node.type !== this.node.type) return false;
     const previous = this.key;
     this.node = node;
+    this.toggleButton.disabled = this.isReadOnly();
     this.dom.setAttribute("data-kind", this.kind);
     const label = this.header.querySelector(".diagram-kind");
     if (label) label.textContent = this.kind === "mermaid" ? "Mermaid" : this.kind === "plantuml" ? "PlantUML" : this.kind;
@@ -145,13 +158,24 @@ export class DiagramNodeView implements NodeView {
     return true;
   }
 
+  /**
+   * 头部按钮与源码编辑框的事件不交给 ProseMirror：
+   * 否则编辑框里 Ctrl+A、双击选词会被当作文档全选/选词，焦点被抢回文档。
+   * 图表 SVG 区域仍交给 ProseMirror 处理，保留点击选中节点的常规行为。
+   */
+  stopEvent(event: Event): boolean {
+    const target = event.target;
+    if (!(target instanceof Node)) return false;
+    if (this.header.contains(target)) return true;
+    return this.textarea !== null && this.textarea.contains(target);
+  }
+
   destroy(): void {
     this.destroyed = true;
     this.token += 1;
     this.observer?.disconnect();
     this.observer = null;
     this.themeCleanup();
-    if (this.commitTimer) clearTimeout(this.commitTimer);
     getDiagramService().cancel(`${this.nodeId}:${this.instanceId}`);
     this.reportProblem(null);
   }
@@ -241,10 +265,12 @@ export class DiagramNodeView implements NodeView {
   }
 
   private startEditing(): void {
-    if (this.editing || this.destroyed) return;
+    if (this.editing || this.destroyed || this.isReadOnly()) return;
     this.editing = true;
     this.renderKey = null;
     this.lastSvg = null;
+    this.toggleButton.setAttribute("aria-pressed", "true");
+    this.expandButton.disabled = true;
 
     const textarea = document.createElement("textarea");
     textarea.className = "diagram-source-editor";
@@ -257,13 +283,7 @@ export class DiagramNodeView implements NodeView {
     textarea.focus();
     textarea.select();
 
-    textarea.addEventListener("blur", () => {
-      // 失焦 300 ms 后提交并重新渲染，避免点击按钮时误提交。见 doc/design.md §10.3。
-      if (this.commitTimer) clearTimeout(this.commitTimer);
-      this.commitTimer = setTimeout(() => {
-        if (this.editing) this.commitEditing();
-      }, EDIT_COMMIT_DELAY_MS);
-    });
+    // 编辑窗的开关只由「编辑代码」按钮控制（Esc 取消、Ctrl+Enter 提交），失焦不自动关闭。
     textarea.addEventListener("keydown", (event) => {
       if (event.key === "Escape") {
         event.preventDefault();
@@ -297,10 +317,8 @@ export class DiagramNodeView implements NodeView {
 
   private exitEditing(renderAfter = true): void {
     this.editing = false;
-    if (this.commitTimer) {
-      clearTimeout(this.commitTimer);
-      this.commitTimer = null;
-    }
+    this.toggleButton.setAttribute("aria-pressed", "false");
+    this.expandButton.disabled = false;
     this.textarea = null;
     this.renderKey = null;
     if (!renderAfter) return;

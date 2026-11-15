@@ -1,4 +1,5 @@
 import type { PMJson, PMJsonMark } from "../../editor/schema";
+import { createSlugger } from "../../shared/slug";
 
 /**
  * mdast 的结构化子集。这里只声明本模块实际访问的字段，
@@ -20,6 +21,8 @@ export interface MdNode {
   title?: string | null;
   alt?: string | null;
   identifier?: string | null;
+  /** 引用式链接/图片的写法（full / collapsed / shortcut）。 */
+  referenceType?: string | null;
   /** MyST 指令解析时记录的原始切片（位置相对于所属片段）。 */
   rawSource?: string | null;
   /** `tab-item` 页签标题。 */
@@ -49,21 +52,6 @@ function textContent(node: MdNode): string {
   return (node.children ?? []).map(textContent).join("");
 }
 
-function createSlugger(): (text: string) => string {
-  const seen = new Map<string, number>();
-  return (text: string) => {
-    const base =
-      text
-        .trim()
-        .toLowerCase()
-        .replace(/[^\p{L}\p{N}\s-]/gu, "")
-        .replace(/\s+/g, "-") || "section";
-    const count = seen.get(base) ?? 0;
-    seen.set(base, count + 1);
-    return count === 0 ? base : `${base}-${count}`;
-  };
-}
-
 function diagramKind(language: string): string | null {
   const normalized = language.trim().toLowerCase();
   if (normalized === "plantuml" || normalized === "puml" || normalized === "uml" || normalized === "{uml}") {
@@ -85,23 +73,85 @@ function isMathmlInline(value: string): boolean {
   return isMathmlBlock(value);
 }
 
-function mdastInline(node: MdNode, source: string, marks: PMJsonMark[]): PMJson[] {
+/** 映射上下文：标题 slug 与引用式链接定义表。 */
+interface MdContext {
+  slugger: (text: string) => string;
+  definitions: Map<string, { url: string; title: string | null }>;
+}
+
+/** 引用式链接标识符规范化（CommonMark 大小写不敏感、空白折叠）。 */
+function normalizeIdentifier(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/gu, " ");
+}
+
+/** 收集全文的链接定义（`[label]: url`），供引用式链接/图片解析。 */
+function collectDefinitions(node: MdNode, map: Map<string, { url: string; title: string | null }>): void {
+  if (node.type === "definition") {
+    const key = normalizeIdentifier(node.identifier ?? node.label ?? "");
+    if (key && !map.has(key)) map.set(key, { url: node.url ?? "", title: node.title ?? null });
+  }
+  for (const child of node.children ?? []) collectDefinitions(child, map);
+}
+
+/** 脚注引用在 CommonMark 中是纯文本；拆出来原样保留，避免序列化时被转义。 */
+const FOOTNOTE_REFERENCE = /(\[\^[^\]\s]+\])/u;
+
+function mdastInline(node: MdNode, source: string, marks: PMJsonMark[], ctx: MdContext): PMJson[] {
   switch (node.type) {
     case "text": {
       const text = node.value ?? "";
-      return text ? [{ type: "text", text, ...(marks.length ? { marks } : {}) }] : [];
+      if (!text) return [];
+      // 源文本带转义（如 `\[^1]`）时按普通文本处理，避免与「未转义脚注」反复互转导致非幂等。
+      if (rawSlice(node, source) !== text) {
+        return [{ type: "text", text, ...(marks.length ? { marks } : {}) }];
+      }
+      return text.split(FOOTNOTE_REFERENCE).filter(Boolean).map((part) =>
+        FOOTNOTE_REFERENCE.test(part)
+          ? { type: "raw_inline", attrs: { raw: part } }
+          : { type: "text", text: part, ...(marks.length ? { marks } : {}) },
+      );
     }
     case "strong":
-      return mdastInlines(node, source, [...marks, { type: "strong" }]);
+      return mdastInlines(node, source, [...marks, { type: "strong" }], ctx);
     case "emphasis":
-      return mdastInlines(node, source, [...marks, { type: "em" }]);
+      return mdastInlines(node, source, [...marks, { type: "em" }], ctx);
     case "delete":
-      return mdastInlines(node, source, [...marks, { type: "strikethrough" }]);
+      return mdastInlines(node, source, [...marks, { type: "strikethrough" }], ctx);
     case "link":
       return mdastInlines(node, source, [
         ...marks,
         { type: "link", attrs: { href: node.url ?? "", title: node.title ?? null } },
-      ]);
+      ], ctx);
+    case "footnoteReference": {
+      // 渲染层不支持脚注，保留原始写法 `[^id]`，避免序列化时被转义成 `\[^id]`。
+      const raw = rawSlice(node, source);
+      return raw ? [{ type: "raw_inline", attrs: { raw } }] : [];
+    }
+    case "linkReference": {
+      const label = node.label ?? node.identifier ?? "";
+      // `[^1]` 属于脚注写法，不按引用式链接处理。
+      if (label.trim().startsWith("^")) {
+        const raw = rawSlice(node, source);
+        return raw ? [{ type: "raw_inline", attrs: { raw } }] : [];
+      }
+      const definition = ctx.definitions.get(normalizeIdentifier(node.identifier ?? label));
+      if (!definition) {
+        const raw = rawSlice(node, source);
+        return raw ? [{ type: "text", text: raw, ...(marks.length ? { marks } : {}) }] : [];
+      }
+      return mdastInlines(node, source, [
+        ...marks,
+        {
+          type: "link",
+          attrs: {
+            href: definition.url,
+            title: definition.title,
+            reference: label,
+            referenceType: node.referenceType ?? "full",
+          },
+        },
+      ], ctx);
+    }
     case "inlineCode": {
       const text = node.value ?? "";
       return text ? [{ type: "text", text, marks: [...marks, { type: "code" }] }] : [];
@@ -113,6 +163,26 @@ function mdastInline(node: MdNode, source: string, marks: PMJsonMark[]): PMJson[
           attrs: { src: node.url ?? "", alt: node.alt ?? "", title: node.title ?? null },
         },
       ];
+    case "imageReference": {
+      const label = node.label ?? node.identifier ?? "";
+      const definition = ctx.definitions.get(normalizeIdentifier(node.identifier ?? label));
+      if (!definition) {
+        const raw = rawSlice(node, source);
+        return raw ? [{ type: "text", text: raw, ...(marks.length ? { marks } : {}) }] : [];
+      }
+      return [
+        {
+          type: "image",
+          attrs: {
+            src: definition.url,
+            alt: node.alt ?? "",
+            title: definition.title,
+            reference: label,
+            referenceType: node.referenceType ?? "full",
+          },
+        },
+      ];
+    }
     case "break":
       return [{ type: "hard_break" }];
     case "html": {
@@ -173,18 +243,18 @@ function mergeMathmlInlines(children: MdNode[], source: string): MdNode[] {
   return merged;
 }
 
-function mdastInlines(node: MdNode, source: string, marks: PMJsonMark[]): PMJson[] {
+function mdastInlines(node: MdNode, source: string, marks: PMJsonMark[], ctx: MdContext): PMJson[] {
   return mergeMathmlInlines(node.children ?? [], source).flatMap((child) => {
     if (child.type === "mathmlInlineRun") {
       return [{ type: "mathml_inline", attrs: { source: child.value ?? "" } }];
     }
-    return mdastInline(child, source, marks);
+    return mdastInline(child, source, marks, ctx);
   });
 }
 
-function mdastListItem(node: MdNode, source: string, slugger: ReturnType<typeof createSlugger>): PMJson {
+function mdastListItem(node: MdNode, source: string, ctx: MdContext): PMJson {
   const blocks = (node.children ?? [])
-    .map((child) => mdastBlock(child, source, slugger))
+    .map((child) => mdastBlock(child, source, ctx))
     .filter((block): block is PMJson => block !== null);
   const content = blocks[0]?.type === "paragraph" ? blocks : [{ type: "paragraph" }, ...blocks];
   return {
@@ -194,17 +264,17 @@ function mdastListItem(node: MdNode, source: string, slugger: ReturnType<typeof 
   };
 }
 
-function mdastList(node: MdNode, source: string, slugger: ReturnType<typeof createSlugger>): PMJson {
+function mdastList(node: MdNode, source: string, ctx: MdContext): PMJson {
   const items = (node.children ?? []).filter((child) => child.type === "listItem");
-  const content = items.map((item) => mdastListItem(item, source, slugger));
-  if (content.length === 0) content.push(mdastListItem({ type: "listItem", children: [] }, source, slugger));
+  const content = items.map((item) => mdastListItem(item, source, ctx));
+  if (content.length === 0) content.push(mdastListItem({ type: "listItem", children: [] }, source, ctx));
   if (node.ordered === true) {
     return { type: "ordered_list", attrs: { start: node.start ?? 1 }, content };
   }
   return { type: "bullet_list", content };
 }
 
-function mdastTable(node: MdNode, source: string): PMJson | null {
+function mdastTable(node: MdNode, source: string, ctx: MdContext): PMJson | null {
   const rows = (node.children ?? []).filter((child) => child.type === "tableRow");
   const align = node.align ?? [];
   const pmRows: PMJson[] = [];
@@ -216,7 +286,7 @@ function mdastTable(node: MdNode, source: string): PMJson | null {
       content: cells.map((cell, columnIndex) => ({
         type: rowIndex === 0 ? "table_header" : "table_cell",
         attrs: { align: align[columnIndex] ?? null },
-        content: [{ type: "paragraph", content: mdastInlines(cell, source, []) }],
+        content: [{ type: "paragraph", content: mdastInlines(cell, source, [], ctx) }],
       })),
     });
   }
@@ -230,11 +300,12 @@ function mdastTable(node: MdNode, source: string): PMJson | null {
 function mdastCode(node: MdNode): PMJson {
   const language = (node.lang ?? "").trim();
   const value = node.value ?? "";
+  const meta = (node.meta ?? "").trim();
   const kind = diagramKind(language);
-  if (kind) return { type: "diagram_block", attrs: { kind, source: value } };
+  if (kind) return { type: "diagram_block", attrs: { kind, source: value, meta } };
   return {
     type: "code_block",
-    attrs: { language },
+    attrs: { language, meta },
     content: value ? [{ type: "text", text: value }] : [],
   };
 }
@@ -247,11 +318,11 @@ function ensureBlocks(blocks: PMJson[]): PMJson[] {
 function mdastContainerItem(
   node: MdNode,
   source: string,
-  slugger: ReturnType<typeof createSlugger>,
+  ctx: MdContext,
   type: "tab_item" | "grid_item",
 ): PMJson {
   const blocks = (node.children ?? [])
-    .map((child) => mdastBlock(child, source, slugger))
+    .map((child) => mdastBlock(child, source, ctx))
     .filter((block): block is PMJson => block !== null);
   return {
     type,
@@ -263,15 +334,15 @@ function mdastContainerItem(
 function mdastContainer(
   node: MdNode,
   source: string,
-  slugger: ReturnType<typeof createSlugger>,
+  ctx: MdContext,
   kind: "tab_set" | "grid",
 ): PMJson {
   const itemType = kind === "tab_set" ? "mystTabItem" : "mystGridItem";
   const items = (node.children ?? [])
     .filter((child) => child.type === itemType)
-    .map((child) => mdastContainerItem(child, source, slugger, kind === "tab_set" ? "tab_item" : "grid_item"));
+    .map((child) => mdastContainerItem(child, source, ctx, kind === "tab_set" ? "tab_item" : "grid_item"));
   if (items.length === 0) {
-    items.push(mdastContainerItem({ type: itemType, children: [] }, source, slugger, kind === "tab_set" ? "tab_item" : "grid_item"));
+    items.push(mdastContainerItem({ type: itemType, children: [] }, source, ctx, kind === "tab_set" ? "tab_item" : "grid_item"));
   }
   if (kind === "tab_set") return { type: "tab_set", content: items };
   return {
@@ -284,7 +355,7 @@ function mdastContainer(
 function mdastBlock(
   node: MdNode,
   source: string,
-  slugger: ReturnType<typeof createSlugger>,
+  ctx: MdContext,
 ): PMJson | null {
   switch (node.type) {
     case "paragraph": {
@@ -301,36 +372,36 @@ function mdastBlock(
           return { type: "mathml_block", attrs: { source: raw.trim() } };
         }
       }
-      return { type: "paragraph", content: mdastInlines(node, source, []) };
+      return { type: "paragraph", content: mdastInlines(node, source, [], ctx) };
     }
     case "heading": {
       const level = Math.min(6, Math.max(1, node.depth ?? 1));
       return {
         type: "heading",
-        attrs: { level, id: slugger(textContent(node)) },
-        content: mdastInlines(node, source, []),
+        attrs: { level, id: ctx.slugger(textContent(node)) },
+        content: mdastInlines(node, source, [], ctx),
       };
     }
     case "blockquote": {
       const content = (node.children ?? [])
-        .map((child) => mdastBlock(child, source, slugger))
+        .map((child) => mdastBlock(child, source, ctx))
         .filter((block): block is PMJson => block !== null);
       return { type: "blockquote", content: content.length ? content : [{ type: "paragraph" }] };
     }
     case "list":
-      return mdastList(node, source, slugger);
+      return mdastList(node, source, ctx);
     case "table":
-      return mdastTable(node, source);
+      return mdastTable(node, source, ctx);
     case "code":
       return mdastCode(node);
     case "mystTabSet":
-      return mdastContainer(node, source, slugger, "tab_set");
+      return mdastContainer(node, source, ctx, "tab_set");
     case "mystTabItem":
-      return mdastContainerItem(node, source, slugger, "tab_item");
+      return mdastContainerItem(node, source, ctx, "tab_item");
     case "mystGrid":
-      return mdastContainer(node, source, slugger, "grid");
+      return mdastContainer(node, source, ctx, "grid");
     case "mystGridItem":
-      return mdastContainerItem(node, source, slugger, "grid_item");
+      return mdastContainerItem(node, source, ctx, "grid_item");
     case "thematicBreak":
       return { type: "horizontal_rule" };
     case "yaml":
@@ -352,9 +423,11 @@ function mdastBlock(
 
 /** mdast → ProseMirror JSON；顶层块分配 `nodeId`。 */
 export function mdastToPmJson(root: MdNode, source: string): PMJson {
-  const slugger = createSlugger();
+  const definitions = new Map<string, { url: string; title: string | null }>();
+  collectDefinitions(root, definitions);
+  const ctx: MdContext = { slugger: createSlugger(), definitions };
   const blocks = (root.children ?? [])
-    .map((child) => mdastBlock(child, source, slugger))
+    .map((child) => mdastBlock(child, source, ctx))
     .filter((block): block is PMJson => block !== null)
     .map((block, index) => ({
       ...block,
@@ -376,12 +449,26 @@ function applyMarks(value: string, marks: PMJsonMark[]): MdNode {
   if (map.has("strong")) result = { type: "strong", children: [result] };
   const link = map.get("link");
   if (link) {
-    result = {
-      type: "link",
-      url: String(link.attrs?.href ?? ""),
-      title: link.attrs?.title == null ? null : String(link.attrs.title),
-      children: [result],
-    };
+    const reference = typeof link.attrs?.reference === "string" ? link.attrs.reference : "";
+    if (reference) {
+      // 引用式链接保留 `[text][label]` 写法，避免把定义改写为内联链接。
+      const referenceType = String(link.attrs?.referenceType ?? "full");
+      result = {
+        type: "linkReference",
+        identifier: normalizeIdentifier(reference),
+        label: reference,
+        referenceType:
+          referenceType === "collapsed" || referenceType === "shortcut" ? referenceType : "full",
+        children: [result],
+      };
+    } else {
+      result = {
+        type: "link",
+        url: String(link.attrs?.href ?? ""),
+        title: link.attrs?.title == null ? null : String(link.attrs.title),
+        children: [result],
+      };
+    }
   }
   return result;
 }
@@ -390,15 +477,30 @@ function pmInlineToMdast(node: PMJson): MdNode | null {
   switch (node.type) {
     case "text":
       return applyMarks(node.text ?? "", node.marks ?? []);
-    case "image":
+    case "image": {
+      const reference = typeof node.attrs?.reference === "string" ? node.attrs.reference : "";
+      if (reference) {
+        const referenceType = String(node.attrs?.referenceType ?? "full");
+        return {
+          type: "imageReference",
+          identifier: normalizeIdentifier(reference),
+          label: reference,
+          alt: String(node.attrs?.alt ?? ""),
+          referenceType:
+            referenceType === "collapsed" || referenceType === "shortcut" ? referenceType : "full",
+        };
+      }
       return {
         type: "image",
         url: String(node.attrs?.src ?? ""),
         alt: String(node.attrs?.alt ?? ""),
         title: node.attrs?.title == null ? null : String(node.attrs.title),
       };
+    }
     case "hard_break":
       return { type: "break" };
+    case "raw_inline":
+      return { type: "html", value: String(node.attrs?.raw ?? "") };
     case "html_inline":
       return { type: "html", value: String(node.attrs?.raw ?? "") };
     case "math_inline":
@@ -494,14 +596,14 @@ function pmBlockToMdast(node: PMJson): MdNode | null {
       return {
         type: "code",
         lang: String(node.attrs?.language ?? "") || null,
-        meta: null,
+        meta: String(node.attrs?.meta ?? "") || null,
         value: pmText(node),
       };
     case "diagram_block":
       return {
         type: "code",
         lang: String(node.attrs?.kind ?? "plantuml"),
-        meta: null,
+        meta: String(node.attrs?.meta ?? "") || null,
         value: String(node.attrs?.source ?? ""),
       };
     case "tab_set":

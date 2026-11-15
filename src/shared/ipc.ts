@@ -92,6 +92,23 @@ export interface ReadBase64Result {
   size: number;
 }
 
+/** 粘贴/拖入图片：写入文档目录 `assets/`，返回 Markdown 中使用的相对路径。 */
+export interface SaveImageRequest {
+  /** 当前文档的绝对路径（用于确定 assets 目录）。 */
+  documentPath: string;
+  /** 图片字节。 */
+  data: Uint8Array;
+  /** 图片 MIME，如 `image/png`。 */
+  mime: string;
+  /** 原始文件名，仅用于日志与提示。 */
+  fileName?: string;
+}
+
+export interface SaveImageResult {
+  /** 相对当前文档的路径（POSIX 分隔符），如 `assets/20261114-101500-abcd1234.png`。 */
+  path: string;
+}
+
 export interface DirEntry {
   name: string;
   path: string;
@@ -355,6 +372,12 @@ export const ipcRequestSchemas = {
     eol: z.enum(["lf", "crlf"]).optional(),
   }),
   "fs:readBase64": z.object({ path: z.string().min(1) }),
+  "fs:saveImage": z.object({
+    documentPath: z.string().min(1),
+    data: z.instanceof(Uint8Array),
+    mime: z.string().min(1).max(120),
+    fileName: z.string().max(260).optional(),
+  }),
   "fs:readDir": z.object({ path: z.string().min(1) }),
   "fs:create": z.object({ path: z.string().min(1), kind: z.enum(["file", "dir"]) }),
   "fs:rename": z.object({ path: z.string().min(1), newName: z.string().min(1) }),
@@ -434,6 +457,7 @@ export interface IpcResponseMap {
   "fs:readText": ReadTextResult;
   "fs:writeText": WriteTextResult;
   "fs:readBase64": ReadBase64Result;
+  "fs:saveImage": SaveImageResult;
   "fs:readDir": ReadDirResult;
   "fs:create": FileRef;
   "fs:rename": FileRef;
@@ -491,6 +515,8 @@ export interface PandaApi {
     readText(request: ReadTextRequest): Promise<ReadTextResult>;
     writeText(request: WriteTextRequest): Promise<WriteTextResult>;
     readBase64(request: ReadBase64Request): Promise<ReadBase64Result>;
+    /** 把粘贴/拖入的图片写入文档目录 assets/，返回相对路径。 */
+    saveImage(request: SaveImageRequest): Promise<SaveImageResult>;
     readDir(request: ReadDirRequest): Promise<ReadDirResult>;
     stat(request: StatRequest): Promise<StatResult>;
     /** 登记系统拖入的路径并返回是否文件。 */
