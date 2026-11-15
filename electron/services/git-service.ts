@@ -1,11 +1,25 @@
 import { execFile } from "node:child_process";
+import { promises as fs } from "node:fs";
 import path from "node:path";
 import { PandaError } from "../../src/shared/errors";
 import { t } from "../../src/i18n";
 import type { GitBaselineReason, GitDiffBase, GitDiffResult } from "../../src/shared/diff";
+import type {
+  GitBranch,
+  GitCommit,
+  GitCommitDetail,
+  GitOperation,
+  GitSnapshot,
+} from "../../src/shared/git";
+import { parseCommitFiles, parseGitBranches, parseGitLog, parseGitStatus } from "./git-parse";
 
 /** Git 命令统一超时；超时后不阻塞编辑。见 doc/design.md §21.3。 */
 const GIT_TIMEOUT_MS = 5_000;
+/** 提交可能触发 hooks；网络命令可能有认证/传输等待。 */
+const GIT_COMMIT_TIMEOUT_MS = 60_000;
+const GIT_NETWORK_TIMEOUT_MS = 120_000;
+/** 大仓库 status 可能超过普通只读命令的 5s。 */
+const GIT_STATUS_TIMEOUT_MS = 15_000;
 /** 单次命令输出上限，避免把超大文件读进内存。 */
 const GIT_MAX_BUFFER = 8 * 1024 * 1024;
 
@@ -71,19 +85,41 @@ export function parseGitCommand(line: string | undefined): GitCommand {
   return command;
 }
 
-/** 执行只读 Git 命令；固定参数、`shell: false`，失败时抛出携带错误码的异常。 */
-function runGit(args: string[], cwd: string, git: GitCommand): Promise<GitOutput> {
+interface RunOptions {
+  timeout?: number;
+  /** 写入 git 的标准输入（提交消息等）。 */
+  input?: string;
+  env?: NodeJS.ProcessEnv;
+}
+
+/** 执行 Git 命令；固定参数、`shell: false`，失败时抛出携带错误码的异常。 */
+function runGit(
+  args: string[],
+  cwd: string,
+  git: GitCommand,
+  options: RunOptions = {},
+): Promise<GitOutput> {
   return new Promise((resolve, reject) => {
-    execFile(
+    const child = execFile(
       git.command,
       [...git.args, ...args],
       {
         cwd,
-        timeout: GIT_TIMEOUT_MS,
+        timeout: options.timeout ?? GIT_TIMEOUT_MS,
         maxBuffer: GIT_MAX_BUFFER,
         windowsHide: true,
         shell: false,
         encoding: "utf8",
+        env: {
+          ...process.env,
+          // 认证依赖系统 Git Credential Manager / SSH Agent；禁止终端交互挂起。
+          GIT_TERMINAL_PROMPT: "0",
+          GIT_EDITOR: "true",
+          GIT_MERGE_AUTOEDIT: "no",
+          GIT_PAGER: "cat",
+          LC_ALL: "C",
+          ...options.env,
+        },
       },
       (error, stdout, stderr) => {
         if (!error) {
@@ -107,17 +143,18 @@ function runGit(args: string[], cwd: string, git: GitCommand): Promise<GitOutput
           return;
         }
         if (details.killed || details.code === "ETIMEDOUT") {
-          reject(new PandaError("E_GIT_TIMEOUT", t("Git 命令超时（5 s）")));
+          reject(new PandaError("E_GIT_TIMEOUT", t("Git 命令超时，请稍后重试")));
           return;
         }
         if (details.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER") {
-          reject(new PandaError("E_GIT_TOO_LARGE", t("Git 基线文本超过大小上限")));
+          reject(new PandaError("E_GIT_TOO_LARGE", t("Git 输出超过大小上限")));
           return;
         }
         // 其余错误交给调用方判断（例如路径不在基线中）。
         reject(Object.assign(error, { stderr }));
       },
     );
+    if (options.input !== undefined) child.stdin?.end(options.input);
   });
 }
 
@@ -139,6 +176,243 @@ const NEGATIVE_CACHE_MS = 5_000;
  */
 export class GitService {
   private readonly repoRoots = new Map<string, { root: string | null; at: number }>();
+
+  /** 读取仓库状态快照；`targetPath` 可以是文件或目录。 */
+  async snapshot(targetPath: string, commandLine?: string): Promise<GitSnapshot> {
+    const command = parseGitCommand(commandLine);
+    const absolute = path.resolve(targetPath);
+    let directory = absolute;
+    try {
+      if ((await fs.stat(absolute)).isFile()) directory = path.dirname(absolute);
+    } catch {
+      directory = path.dirname(absolute);
+    }
+    const root = await this.resolveRepoRoot(directory, command);
+    if (!root) {
+      return {
+        inRepo: false,
+        root: null,
+        branch: null,
+        detached: false,
+        upstream: null,
+        ahead: 0,
+        behind: 0,
+        operation: null,
+        changes: [],
+      };
+    }
+    const [status, gitDir] = await Promise.all([
+      runGit(["status", "--porcelain=v2", "--branch", "-z", "--untracked-files=normal"], root, command, {
+        timeout: GIT_STATUS_TIMEOUT_MS,
+      }),
+      runGit(["rev-parse", "--absolute-git-dir"], root, command),
+    ]);
+    return {
+      inRepo: true,
+      root,
+      ...parseGitStatus(status.stdout),
+      operation: await detectOperation(gitDir.stdout.trim()),
+    };
+  }
+
+  /** 暂存指定文件；路径为仓库根下的相对路径。 */
+  async stage(root: string, paths: string[], commandLine?: string): Promise<GitSnapshot> {
+    const command = parseGitCommand(commandLine);
+    await runGit(["--literal-pathspecs", "add", "--", ...paths], root, command);
+    return this.snapshot(root, commandLine);
+  }
+
+  /** 取消暂存；空仓库没有 HEAD 时回退到 rm --cached。 */
+  async unstage(root: string, paths: string[], commandLine?: string): Promise<GitSnapshot> {
+    const command = parseGitCommand(commandLine);
+    try {
+      await runGit(["restore", "--staged", "--", ...paths], root, command);
+    } catch (error) {
+      if (error instanceof PandaError) throw error;
+      const text = errorText(error);
+      if (!text.includes("head") && !text.includes("ambiguous")) throw error;
+      await runGit(["rm", "-r", "--cached", "--quiet", "--", ...paths], root, command);
+    }
+    return this.snapshot(root, commandLine);
+  }
+
+  /** 放弃已跟踪文件的修改（同时恢复暂存区与工作区）。 */
+  async discard(root: string, paths: string[], commandLine?: string): Promise<GitSnapshot> {
+    const command = parseGitCommand(commandLine);
+    await runGit(
+      ["restore", "--source=HEAD", "--staged", "--worktree", "--", ...paths],
+      root,
+      command,
+    );
+    return this.snapshot(root, commandLine);
+  }
+
+  async commit(
+    root: string,
+    message: string,
+    amend: boolean,
+    commandLine?: string,
+  ): Promise<GitSnapshot> {
+    const command = parseGitCommand(commandLine);
+    await runGit(
+      ["commit", "--file", "-", ...(amend ? ["--amend"] : [])],
+      root,
+      command,
+      { input: message, timeout: GIT_COMMIT_TIMEOUT_MS },
+    );
+    return this.snapshot(root, commandLine);
+  }
+
+  async branches(root: string, commandLine?: string): Promise<GitBranch[]> {
+    const command = parseGitCommand(commandLine);
+    const output = await runGit(
+      [
+        "for-each-ref",
+        "--format=%(refname)%09%(refname:short)%09%(HEAD)%09%(upstream:short)",
+        "refs/heads",
+        "refs/remotes",
+      ],
+      root,
+      command,
+    );
+    return parseGitBranches(output.stdout);
+  }
+
+  async checkout(
+    root: string,
+    branch: string,
+    create: boolean,
+    commandLine?: string,
+  ): Promise<GitSnapshot> {
+    const command = parseGitCommand(commandLine);
+    await runGit(["check-ref-format", "--branch", branch], root, command);
+    await runGit(
+      create ? ["switch", "-c", branch] : ["switch", branch],
+      root,
+      command,
+    );
+    return this.snapshot(root, commandLine);
+  }
+
+  async deleteBranch(root: string, branch: string, commandLine?: string): Promise<GitSnapshot> {
+    const command = parseGitCommand(commandLine);
+    await runGit(["check-ref-format", "--branch", branch], root, command);
+    await runGit(["branch", "-d", branch], root, command);
+    return this.snapshot(root, commandLine);
+  }
+
+  async fetch(root: string, commandLine?: string): Promise<GitSnapshot> {
+    const command = parseGitCommand(commandLine);
+    await runGit(["fetch", "--prune"], root, command, { timeout: GIT_NETWORK_TIMEOUT_MS });
+    return this.snapshot(root, commandLine);
+  }
+
+  /** 按用户 Git 配置执行 pull，不追加 merge/rebase 策略参数。 */
+  async pull(root: string, commandLine?: string): Promise<GitSnapshot> {
+    const command = parseGitCommand(commandLine);
+    await runGit(["pull"], root, command, { timeout: GIT_NETWORK_TIMEOUT_MS });
+    return this.snapshot(root, commandLine);
+  }
+
+  async push(root: string, setUpstream: boolean, commandLine?: string): Promise<GitSnapshot> {
+    const command = parseGitCommand(commandLine);
+    if (setUpstream) {
+      const current = await this.snapshot(root, commandLine);
+      if (current.detached || !current.branch) {
+        throw new PandaError("E_GIT_OPERATION", t("detached HEAD 无法设置上游分支"));
+      }
+      const remotes = (await runGit(["remote"], root, command)).stdout
+        .split(/\r?\n/u)
+        .map((value) => value.trim())
+        .filter(Boolean);
+      const remote = remotes.includes("origin") ? "origin" : remotes[0];
+      if (!remote) throw new PandaError("E_GIT_OPERATION", t("仓库没有配置远程地址"));
+      await runGit(["push", "-u", remote, current.branch], root, command, {
+        timeout: GIT_NETWORK_TIMEOUT_MS,
+      });
+    } else {
+      await runGit(["push"], root, command, { timeout: GIT_NETWORK_TIMEOUT_MS });
+    }
+    return this.snapshot(root, commandLine);
+  }
+
+  async log(root: string, limit: number, commandLine?: string): Promise<GitCommit[]> {
+    const command = parseGitCommand(commandLine);
+    const count = Math.min(200, Math.max(1, Math.floor(limit)));
+    const output = await runGit(
+      [
+        "log",
+        "-n",
+        String(count),
+        "--pretty=format:%H%x1f%h%x1f%s%x1f%an%x1f%aI%x1e",
+      ],
+      root,
+      command,
+    );
+    return parseGitLog(output.stdout);
+  }
+
+  async commitDetail(root: string, hash: string, commandLine?: string): Promise<GitCommitDetail> {
+    const command = parseGitCommand(commandLine);
+    // 拒绝以 `-` 开头的参数式“哈希”，避免把用户输入当成 git show 选项。
+    if (!REF_PATTERN.test(hash)) {
+      throw new PandaError("E_GIT_OPERATION", t("提交引用不合法：{0}", hash));
+    }
+    const meta = await runGit(
+      ["show", "-s", "--pretty=format:%H%x1f%h%x1f%s%x1f%an%x1f%aI%x1f%b", hash],
+      root,
+      command,
+    );
+    const [fullHash, shortHash, subject, author, date, body] = meta.stdout.split("\x1f");
+    const files = await runGit(
+      ["show", "--name-only", "-z", "--format=", hash],
+      root,
+      command,
+    );
+    return {
+      hash: fullHash ?? hash,
+      shortHash: shortHash ?? hash.slice(0, 7),
+      subject: subject ?? "",
+      author: author ?? "",
+      date: date ?? "",
+      body: body ?? "",
+      files: parseCommitFiles(files.stdout),
+    };
+  }
+
+  /** 中止当前 merge/rebase/cherry-pick。 */
+  async abort(root: string, commandLine?: string): Promise<GitSnapshot> {
+    const command = parseGitCommand(commandLine);
+    const current = await this.snapshot(root, commandLine);
+    const args =
+      current.operation === "merge"
+        ? ["merge", "--abort"]
+        : current.operation === "rebase"
+          ? ["rebase", "--abort"]
+          : current.operation === "cherry-pick"
+            ? ["cherry-pick", "--abort"]
+            : null;
+    if (!args) throw new PandaError("E_GIT_OPERATION", t("当前没有可中止的 Git 操作"));
+    await runGit(args, root, command, { timeout: GIT_COMMIT_TIMEOUT_MS });
+    return this.snapshot(root, commandLine);
+  }
+
+  /** 继续当前 merge/rebase/cherry-pick；冲突需先标记为已解决。 */
+  async continue(root: string, commandLine?: string): Promise<GitSnapshot> {
+    const command = parseGitCommand(commandLine);
+    const current = await this.snapshot(root, commandLine);
+    const args =
+      current.operation === "merge"
+        ? ["merge", "--continue"]
+        : current.operation === "rebase"
+          ? ["rebase", "--continue"]
+          : current.operation === "cherry-pick"
+            ? ["cherry-pick", "--continue"]
+            : null;
+    if (!args) throw new PandaError("E_GIT_OPERATION", t("当前没有可继续的 Git 操作"));
+    await runGit(args, root, command, { timeout: GIT_COMMIT_TIMEOUT_MS });
+    return this.snapshot(root, commandLine);
+  }
 
   async readBaseline(
     filePath: string,
@@ -249,7 +523,8 @@ export class GitService {
     let root: string | null;
     try {
       const output = await runGit(["rev-parse", "--show-toplevel"], directory, command);
-      root = output.stdout.trim() || null;
+      // Git 在 Windows 上返回正斜杠路径；统一成本地分隔符，便于与工作区树/已打开文档路径比较。
+      root = output.stdout.trim() ? path.normalize(output.stdout.trim()) : null;
     } catch (error) {
       if (error instanceof PandaError) throw error;
       root = null;
@@ -266,4 +541,24 @@ function displayRef(ref: string): string {
 
 function stripBom(text: string): string {
   return text.replace(/^\uFEFF/, "");
+}
+
+/** 通过 git-dir 下的状态文件判断当前是否有未完成操作。 */
+async function detectOperation(gitDir: string): Promise<GitOperation> {
+  if (!gitDir) return null;
+  const candidates: Array<[string, Exclude<GitOperation, null>]> = [
+    ["MERGE_HEAD", "merge"],
+    ["rebase-merge", "rebase"],
+    ["rebase-apply", "rebase"],
+    ["CHERRY_PICK_HEAD", "cherry-pick"],
+  ];
+  for (const [file, operation] of candidates) {
+    try {
+      await fs.access(path.join(gitDir, file));
+      return operation;
+    } catch {
+      // 继续检查下一个标记文件。
+    }
+  }
+  return null;
 }

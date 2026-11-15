@@ -1,5 +1,11 @@
 import { z } from "zod";
 import type { GitDiffRequest, GitDiffResult } from "./diff";
+import type {
+  GitBranch,
+  GitCommit,
+  GitCommitDetail,
+  GitSnapshot,
+} from "./git";
 import type { PandaErrorPayload } from "./errors";
 import type { MenuCommand } from "./menu";
 import type { Settings } from "./settings";
@@ -437,6 +443,45 @@ export const ipcRequestSchemas = {
     .refine((value) => value.base !== "commit" || (value.ref?.length ?? 0) > 0, {
       message: "指定提交基线需要提供 ref",
     }),
+  "git:snapshot": z.object({ path: z.string().min(1) }),
+  "git:stage": z.object({
+    root: z.string().min(1),
+    paths: z.array(z.string().min(1)).min(1).max(2000),
+  }),
+  "git:unstage": z.object({
+    root: z.string().min(1),
+    paths: z.array(z.string().min(1)).min(1).max(2000),
+  }),
+  "git:discard": z.object({
+    root: z.string().min(1),
+    paths: z.array(z.string().min(1)).min(1).max(2000),
+  }),
+  "git:commit": z.object({
+    root: z.string().min(1),
+    message: z.string().trim().min(1).max(10000),
+    amend: z.boolean(),
+  }),
+  "git:branches": z.object({ root: z.string().min(1) }),
+  "git:checkout": z.object({
+    root: z.string().min(1),
+    branch: z.string().min(1).max(255),
+    create: z.boolean(),
+  }),
+  "git:deleteBranch": z.object({ root: z.string().min(1), branch: z.string().min(1).max(255) }),
+  "git:fetch": z.object({ root: z.string().min(1) }),
+  "git:pull": z.object({ root: z.string().min(1) }),
+  "git:push": z.object({ root: z.string().min(1), setUpstream: z.boolean() }),
+  "git:log": z.object({
+    root: z.string().min(1),
+    limit: z.number().int().min(1).max(200),
+  }),
+  "git:commitDetail": z.object({
+    root: z.string().min(1),
+    hash: z.string().min(1).max(64),
+  }),
+  "git:abort": z.object({ root: z.string().min(1) }),
+  "git:continue": z.object({ root: z.string().min(1) }),
+  "fs:trash": z.object({ path: z.string().min(1) }),
   "export:pdf": z.object({ html: z.string(), suggestedName: z.string().min(1) }),
   "latex:detect": z.undefined(),
   "latex:compile": z.object({ jobId: z.string().min(1), rootPath: z.string().min(1) }),
@@ -494,6 +539,22 @@ export interface IpcResponseMap {
   "fs:stat": StatResult;
   "fs:inspectDrop": { ref: FileRef; isFile: boolean };
   "git:diff": GitDiffResult;
+  "git:snapshot": GitSnapshot;
+  "git:stage": GitSnapshot;
+  "git:unstage": GitSnapshot;
+  "git:discard": GitSnapshot;
+  "git:commit": GitSnapshot;
+  "git:branches": GitBranch[];
+  "git:checkout": GitSnapshot;
+  "git:deleteBranch": GitSnapshot;
+  "git:fetch": GitSnapshot;
+  "git:pull": GitSnapshot;
+  "git:push": GitSnapshot;
+  "git:log": GitCommit[];
+  "git:commitDetail": GitCommitDetail;
+  "git:abort": GitSnapshot;
+  "git:continue": GitSnapshot;
+  "fs:trash": void;
   "export:pdf": PdfExportResult;
   "latex:detect": EngineStatus;
   "latex:compile": CompileResult;
@@ -524,6 +585,8 @@ export interface PandaApi {
     create(request: CreateRequest): Promise<FileRef>;
     rename(request: RenameRequest): Promise<FileRef>;
     remove(request: DeleteRequest): Promise<void>;
+    /** 将文件移入系统回收站。 */
+    trash(request: { path: string }): Promise<void>;
     watch(request: WatchRequest): Promise<WatchResult>;
     unwatch(request: { watchId: string }): Promise<void>;
   };
@@ -533,6 +596,21 @@ export interface PandaApi {
   git: {
     /** 读取渲染进程指定基线的旧文本；当前文本由渲染进程提供。 */
     diff(request: GitDiffRequest): Promise<GitDiffResult>;
+    snapshot(request: { path: string }): Promise<GitSnapshot>;
+    stage(request: { root: string; paths: string[] }): Promise<GitSnapshot>;
+    unstage(request: { root: string; paths: string[] }): Promise<GitSnapshot>;
+    discard(request: { root: string; paths: string[] }): Promise<GitSnapshot>;
+    commit(request: { root: string; message: string; amend: boolean }): Promise<GitSnapshot>;
+    branches(request: { root: string }): Promise<GitBranch[]>;
+    checkout(request: { root: string; branch: string; create: boolean }): Promise<GitSnapshot>;
+    deleteBranch(request: { root: string; branch: string }): Promise<GitSnapshot>;
+    fetch(request: { root: string }): Promise<GitSnapshot>;
+    pull(request: { root: string }): Promise<GitSnapshot>;
+    push(request: { root: string; setUpstream: boolean }): Promise<GitSnapshot>;
+    log(request: { root: string; limit: number }): Promise<GitCommit[]>;
+    commitDetail(request: { root: string; hash: string }): Promise<GitCommitDetail>;
+    abort(request: { root: string }): Promise<GitSnapshot>;
+    continue(request: { root: string }): Promise<GitSnapshot>;
   };
   settings: {
     get(): Promise<Settings>;

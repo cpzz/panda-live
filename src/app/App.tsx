@@ -14,6 +14,7 @@ import {
   type EditorMode,
 } from "../services/document-manager";
 import { settingsStore } from "../services/settings-store";
+import { GitStore } from "../services/git-store";
 import type { SearchMode, SearchRequest } from "../services/search";
 import { WorkspaceStore } from "../services/workspace-store";
 import { SourceEditor, type DiffLineMarker, type SelectionInfo, type SourceLanguage } from "../source/codemirror";
@@ -53,6 +54,7 @@ import { PerformanceOverlay } from "./PerformanceOverlay";
 import { ProblemPanel } from "./ProblemPanel";
 import { SettingsDialog } from "./SettingsDialog";
 import { WorkspacePanel } from "./WorkspacePanel";
+import { GitPanel } from "./GitPanel";
 import { WysiwygPane } from "./WysiwygPane";
 import { GitPane } from "./GitPane";
 
@@ -919,10 +921,14 @@ export function App() {
   const workspaceRef = useRef<WorkspaceStore | null>(null);
   if (!workspaceRef.current) workspaceRef.current = new WorkspaceStore();
   const workspaces = workspaceRef.current;
+  const gitRef = useRef<GitStore | null>(null);
+  if (!gitRef.current) gitRef.current = new GitStore();
+  const git = gitRef.current;
 
   const state = useSyncExternalStore(manager.subscribe, manager.getState);
   const settings = useSyncExternalStore(settingsStore.subscribe, settingsStore.getState);
   const workspace = useSyncExternalStore(workspaces.subscribe, workspaces.getState);
+  const gitState = useSyncExternalStore(git.subscribe, git.getState);
 
   // 界面语言在父组件渲染前写入全局，子组件直接调用 t() 即可拿到当前语言。
   useMemo(() => {
@@ -943,10 +949,19 @@ export function App() {
   const requestSearch = useCallback((mode: SearchMode): void => {
     setSearchRequest((current) => ({ mode, token: (current?.token ?? 0) + 1 }));
   }, []);
+  const openSourceControl = useCallback((): void => {
+    workspaces.setVisible(true);
+    setSidebarTabRequest((current) => ({
+      tab: "source-control",
+      token: (current?.token ?? 0) + 1,
+    }));
+  }, [workspaces]);
   const [compileSignal, setCompileSignal] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
   /** 模式条左侧的块级工具栏挂载点；由 React 回调 ref 写入。 */
   const [modeToolbarHost, setModeToolbarHost] = useState<HTMLDivElement | null>(null);
+  /** 进入 Git 差异前的模式，用于工具栏按钮切回。 */
+  const modeBeforeGitRef = useRef<EditorMode>("source");
   // 「放大查看」对话框：承载内嵌图表块的放大视图；svg 已由图表服务消毒。
   const [diagramViewer, setDiagramViewer] = useState<{ svg: string; title: string } | null>(null);
   const [recoveries, setRecoveries] = useState<DraftEntry[]>([]);
@@ -961,6 +976,10 @@ export function App() {
     right: false,
   });
   const [tabMenu, setTabMenu] = useState<{ top: number; right: number } | null>(null);
+  const [sidebarTabRequest, setSidebarTabRequest] = useState<{
+    tab: "source-control";
+    token: number;
+  } | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const stored = Number(localStorage.getItem("panda.sidebarWidth"));
     return Number.isFinite(stored) && stored >= 120 ? Math.min(480, stored) : 260;
@@ -1028,6 +1047,36 @@ export function App() {
       : ["source", "split", "preview"];
   const showModeBarDivider =
     modeBarVisible && state.mode === "wysiwyg" && active?.format === "markdown" && !active.readOnly;
+
+  // 源代码管理：以当前文件目录或首个工作区根探测仓库。
+  const gitProbePath = useMemo(() => {
+    if (active?.path) return active.path.replace(/[\\/][^\\/]+$/u, "");
+    return workspace.roots[0]?.root.path ?? null;
+  }, [active?.path, workspace.roots]);
+  useEffect(() => {
+    void git.setPath(gitProbePath);
+  }, [git, gitProbePath]);
+  useEffect(() => {
+    const onFocus = (): void => {
+      void git.refresh();
+    };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [git]);
+  const gitRoot = gitState.snapshot?.root ?? null;
+  const gitDirtyCount = gitRoot ? manager.dirtyCountInRoot(gitRoot) : 0;
+  const previousDirtyRef = useRef<Map<string, boolean>>(new Map());
+  // 文档从“未保存”变为“已保存”时刷新 Git 状态，覆盖保存/自动保存。
+  useEffect(() => {
+    let saved = false;
+    const next = new Map<string, boolean>();
+    for (const doc of state.documents) {
+      next.set(doc.id, doc.dirty);
+      if (previousDirtyRef.current.get(doc.id) === true && !doc.dirty) saved = true;
+    }
+    previousDirtyRef.current = next;
+    if (saved) void git.refresh();
+  }, [state.documents, git]);
 
   // 渲染态差异：每个文档独立保存开关与基线。见 doc/design.md §21.8.1。
   const [diffOptions, setDiffOptions] = useState<
@@ -1712,6 +1761,42 @@ export function App() {
       run: () => requestSearch("replace"),
     },
     {
+      id: "git.open",
+      title: t("打开源代码管理"),
+      run: openSourceControl,
+    },
+    {
+      id: "git.refresh",
+      title: t("刷新源代码管理"),
+      run: () => void git.refresh(),
+    },
+    {
+      id: "git.stageAll",
+      title: t("暂存全部更改"),
+      run: () => {
+        const paths =
+          git.getState().snapshot?.changes
+            .filter((change) => !change.staged && !change.conflicted)
+            .map((change) => change.path) ?? [];
+        if (paths.length > 0) void git.stage(paths).catch(() => undefined);
+      },
+    },
+    {
+      id: "git.fetch",
+      title: t("获取（Git fetch）"),
+      run: () => void git.fetch().catch(() => undefined),
+    },
+    {
+      id: "git.pull",
+      title: t("拉取（Git pull）"),
+      run: () => void git.pull().catch(() => undefined),
+    },
+    {
+      id: "git.push",
+      title: t("推送（Git push）"),
+      run: () => void git.push().catch(() => undefined),
+    },
+    {
       id: "diff.toggle",
       title: diffEnabled ? t("隐藏改动") : t("显示改动"),
       shortcut: "Ctrl+Shift+D",
@@ -1887,7 +1972,19 @@ export function App() {
             aria-pressed={state.mode === "git"}
             aria-label={t(MODE_LABELS.git!)}
             data-tip={t(MODE_LABELS.git!)}
-            onClick={() => manager.setMode("git")}
+            onClick={() => {
+              if (state.mode === "git") {
+                const target = modeBeforeGitRef.current;
+                manager.setMode(
+                  (target === "split" || target === "preview") && !formatHasPreview(active?.format ?? "")
+                    ? "source"
+                    : target,
+                );
+              } else {
+                modeBeforeGitRef.current = state.mode;
+                manager.setMode("git");
+              }
+            }}
             disabled={!active || activeIsBinary}
           >
             <Icon name={MODE_ICONS.git} />
@@ -1929,6 +2026,29 @@ export function App() {
                 void manager.removeDocumentByPath(filePath);
               }}
               outline={<OutlinePanel items={outline} onSelect={jumpToOutline} />}
+              sourceControl={
+                <GitPanel
+                  store={git}
+                  state={gitState}
+                  dirtyCount={gitDirtyCount}
+                  onSaveAll={async () => {
+                    if (!gitRoot) return;
+                    await manager.saveDocumentsInRoot(gitRoot);
+                    await git.refresh();
+                  }}
+                  onOpenFile={(filePath) => {
+                    void manager.openPath(filePath).then(() => {
+                      const current = manager.getState();
+                      const doc = current.documents.find((item) => item.id === current.activeId);
+                      if (doc?.path === filePath && formatHasPreview(doc.format)) {
+                        manager.setMode("git");
+                      }
+                    });
+                  }}
+                />
+              }
+              sourceControlCount={gitState.snapshot?.changes.length ?? 0}
+              tabRequest={sidebarTabRequest}
             />
             <div
               className="resizer sidebar-resizer"
@@ -2439,6 +2559,24 @@ export function App() {
 
       <footer className="statusbar">
         <span className="statusbar-name">{active?.path ?? t("就绪")}</span>
+        {gitState.snapshot?.inRepo && (
+          <button
+            type="button"
+            className="statusbar-button git-status-button"
+            title={t("打开源代码管理")}
+            onClick={openSourceControl}
+          >
+            <Icon name="git" size={12} />
+            <span>
+              {gitState.snapshot.detached
+                ? t("detached HEAD")
+                : (gitState.snapshot.branch ?? t("无分支"))}
+            </span>
+            {gitState.snapshot.ahead > 0 && <span>↑{gitState.snapshot.ahead}</span>}
+            {gitState.snapshot.behind > 0 && <span>↓{gitState.snapshot.behind}</span>}
+            {gitState.snapshot.operation && <span>{t("操作中")}</span>}
+          </button>
+        )}
         {active && (
           <span className="statusbar-meta">
             {active.format === "pdf"

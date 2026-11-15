@@ -35,6 +35,12 @@ export function registerWorkspaceHandlers({
 
   handle("fs:delete", (request) => files.deleteEntry(request.path, request.recursive ?? false));
 
+  // 放弃未跟踪文件时移入系统回收站，避免永久删除。
+  handle("fs:trash", async (request) => {
+    const target = await files.assertAllowed(request.path);
+    await shell.trashItem(target);
+  });
+
   handle("fs:watch", (request) => workspaces.watch(request.paths));
 
   handle("fs:unwatch", (request) => workspaces.unwatch(request.watchId));

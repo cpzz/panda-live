@@ -19,6 +19,7 @@ export const ERROR_CODES = [
   "E_CANCELLED",
   "E_GIT_MISSING",
   "E_GIT_NOT_REPO",
+  "E_GIT_OPERATION",
   "E_GIT_TIMEOUT",
   "E_GIT_TOO_LARGE",
   "E_INTERNAL",

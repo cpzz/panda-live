@@ -23,7 +23,15 @@ interface WorkspacePanelProps {
   activePath: string | null;
   /** 大纲标签页的内容。 */
   outline?: ReactNode;
+  /** 源代码管理标签页的内容。 */
+  sourceControl?: ReactNode;
+  /** 源代码管理标签上的变更数量。 */
+  sourceControlCount?: number;
+  /** 外部请求切换侧栏标签（如点击状态栏分支）。 */
+  tabRequest?: { tab: SidebarTab; token: number } | null;
 }
+
+type SidebarTab = "files" | "outline" | "source-control";
 
 interface PromptState {
   title: string;
@@ -174,6 +182,9 @@ export function WorkspacePanel({
   onDeleted,
   activePath,
   outline,
+  sourceControl,
+  sourceControlCount,
+  tabRequest,
 }: WorkspacePanelProps) {
   const state = useSyncExternalStore(store.subscribe, store.getState);
   const [prompt, setPrompt] = useState<PromptState | null>(null);
@@ -181,10 +192,15 @@ export function WorkspacePanel({
   const [dragging, setDragging] = useState(false);
   const dragDepth = useRef(0);
   const [collapsedRoots, setCollapsedRoots] = useState<Set<string>>(() => new Set());
-  const [tab, setTab] = useState<"files" | "outline">(() =>
+  const [tab, setTab] = useState<SidebarTab>(() =>
     store.getState().roots.length > 0 ? "files" : "outline",
   );
   const previousRoot = useRef(state.roots[0]?.root.path ?? null);
+
+  // 外部请求（例如点击状态栏分支）切换到指定标签。
+  useEffect(() => {
+    if (tabRequest) setTab(tabRequest.tab);
+  }, [tabRequest]);
 
   // 打开文件夹后自动切回文件视图；未打开工作区时默认显示大纲。
   useEffect(() => {
@@ -214,7 +230,8 @@ export function WorkspacePanel({
     if (event.defaultPrevented) return;
     const target = event.target;
     if (target instanceof HTMLElement && target.tagName === "INPUT") return;
-    const selector = tab === "files" ? ".tree-name" : ".outline-item";
+    const selector = tab === "files" ? ".tree-name" : tab === "outline" ? ".outline-item" : "";
+    if (!selector) return;
     const items = [...event.currentTarget.querySelectorAll<HTMLButtonElement>(selector)];
     if (items.length === 0) return;
     const current =
@@ -359,6 +376,21 @@ export function WorkspacePanel({
             <Icon name="list" size={14} />
             {t("大纲")}
           </button>
+          {sourceControl && (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === "source-control"}
+              className={tab === "source-control" ? "sidebar-tab active" : "sidebar-tab"}
+              onClick={() => setTab("source-control")}
+            >
+              <Icon name="git" size={14} />
+              {t("源代码管理")}
+              {(sourceControlCount ?? 0) > 0 && (
+                <span className="sidebar-tab-badge">{sourceControlCount}</span>
+              )}
+            </button>
+          )}
         </div>
 
         {tab === "files" ? (
@@ -456,8 +488,10 @@ export function WorkspacePanel({
               </div>
             )}
           </div>
-        ) : (
+        ) : tab === "outline" ? (
           <div className="sidebar-panel">{outline}</div>
+        ) : (
+          <div className="sidebar-panel git-sidebar-panel">{sourceControl}</div>
         )}
       </aside>
 

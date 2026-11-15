@@ -1305,6 +1305,7 @@ IME：组合输入期间禁用 input rules 与自定义 keymap；`compositionend
 | `fs:create` | R→M | `{ path, kind: "file" \| "dir" }` | `FileRef` |
 | `fs:rename` | R→M | `{ path, newName }` | `FileRef` |
 | `fs:delete` | R→M | `{ path, recursive? }` | `void` |
+| `fs:trash` | R→M | `{ path }` | `void`（移入系统回收站） |
 | `fs:stat` / `fs:readDir` | R→M | `{ path }` | 元数据 / 目录项 |
 | `fs:watch` | R→M | `{ paths }` | `{ watchId }` |
 | `fs:unwatch` | R→M | `{ watchId }` | `void` |
@@ -1323,6 +1324,15 @@ IME：组合输入期间禁用 input rules 与自定义 keymap；`compositionend
 | `ext:reload` | R→M | `{ id }` | `void` |
 | `shell:openExternal` | R→M | `{ url }` | `{ ok }` |
 | `shell:reveal` | R→M | `{ path }` | `void` |
+| `git:snapshot` | R→M | `{ path }` | `GitSnapshot` |
+| `git:stage` / `git:unstage` / `git:discard` | R→M | `{ root, paths }` | `GitSnapshot` |
+| `git:commit` | R→M | `{ root, message, amend }` | `GitSnapshot` |
+| `git:branches` | R→M | `{ root }` | `GitBranch[]` |
+| `git:checkout` / `git:deleteBranch` | R→M | `{ root, branch, create? }` | `GitSnapshot` |
+| `git:fetch` / `git:pull` / `git:abort` / `git:continue` | R→M | `{ root }` | `GitSnapshot` |
+| `git:push` | R→M | `{ root, setUpstream }` | `GitSnapshot` |
+| `git:log` | R→M | `{ root, limit }` | `GitCommit[]` |
+| `git:commitDetail` | R→M | `{ root, hash }` | `GitCommitDetail` |
 | `app:getInfo` | R→M | — | 版本、路径、平台 |
 | `log:write` | R→M | `{ level, scope, message, data? }` | `void` |
 
@@ -2062,7 +2072,109 @@ interface RenderedDiff {
 
 ---
 
-## 22. 附录
+## 22. 源代码管理（Git）
+
+> 状态：首版已实现。覆盖工作区状态、暂存/提交、分支、fetch/pull/push、冲突继续/中止、最近提交与详情；不包含内置三方合并编辑器、提交图、force push、stash/tag/submodule，也不在应用内管理凭据。
+
+### 22.1 目标与范围
+
+- **目标**：在应用内完成日常 Git 操作，不必切换终端；与 §21 的渲染态差异共享同一仓库探测与 Git 命令配置。
+- **首版包含**：状态列表（已暂存 / 更改 / 未跟踪 / 冲突）、暂存、取消暂存、放弃修改、提交与 Amend、分支列表 / 创建 / 切换 / 删除、fetch / pull / push、merge / rebase / cherry-pick 的继续与中止、最近 50 条提交与提交详情。
+- **非目标**：三方合并编辑器、提交图、逐行暂存、force push、tag / stash / submodule 管理、应用内 Token 或 SSH Key 管理。
+
+### 22.2 入口与布局
+
+- 侧栏第三个标签「源代码管理」，标签上的 badge 显示变更总数（`GitSnapshot.changes.length`）；
+- 面板内分「更改 / 历史」两个子视图；「更改」包含提交框与分组列表，「历史」为最近提交与详情；
+- 状态栏右侧提供分支按钮：分支名 + `↑ahead ↓behind` + 进行中的操作；点击展开侧栏源代码管理标签；
+- 命令面板提供：打开源代码管理、刷新、暂存全部更改、fetch / pull / push；
+- 点击变更项打开对应文件；若格式支持渲染预览，同时切换到 Git 差异视图（§21），否则停留在源码模式；
+- 工具栏的 Git 按钮用于切换当前文档的 Git 差异视图，与源代码管理面板互相独立。
+
+### 22.3 数据契约与刷新
+
+契约集中在 `src/shared/git.ts`：
+
+```ts
+interface GitSnapshot {
+  inRepo: boolean;
+  root: string | null;
+  branch: string | null;
+  detached: boolean;
+  upstream: string | null;
+  ahead: number;
+  behind: number;
+  operation: "merge" | "rebase" | "cherry-pick" | null;
+  changes: GitChange[];
+}
+```
+
+- `GitChange.path` 为**仓库根下的相对路径**，重命名保留 `origPath`；`staged` / `unstaged` / `untracked` / `conflicted` 为派生布尔值，`indexStatus` / `worktreeStatus` 保留 porcelain 原始字符；
+- 仓库探测路径：当前活动文档所在目录优先，否则取首个工作区根；探测成功后把仓库根登记为允许根（§22.5）；
+- 渲染进程 `GitStore` 以 `useSyncExternalStore` 暴露快照、分支、提交与 `loading` / `busy` / `error`；写操作串行（`busy` 非空时忽略新操作），完成后并行刷新快照、分支与日志；
+- 刷新时机：窗口重新获得焦点、文档从「未保存」变为「已保存」、每次 Git 操作后、手动刷新；`refresh` 使用递增 token 丢弃过期响应，避免快速切换文件时旧结果覆盖新结果；
+- 首版不监听 `.git` 目录，外部终端操作需手动刷新或等窗口焦点变化。
+
+### 22.4 主进程命令与解析
+
+| 操作 | 命令 | 说明 |
+|---|---|---|
+| 状态 | `status --porcelain=v2 --branch -z --untracked-files=normal` | NUL 分隔；`1/2/u/?` 记录，`2` 记录额外消费原路径 |
+| 暂存 | `--literal-pathspecs add -- <paths>` | 禁止通配符展开 |
+| 取消暂存 | `restore --staged -- <paths>` | 空仓库无 HEAD 时回退 `rm -r --cached` |
+| 放弃修改 | `restore --source=HEAD --staged --worktree -- <paths>` | 同时恢复工作区与暂存区 |
+| 提交 | `commit --file - [--amend]` | 提交信息经 stdin 传入，避免临时文件与引号问题 |
+| 分支 | `for-each-ref --format=%(refname)%09%(refname:short)%09%(HEAD)%09%(upstream:short) refs/heads refs/remotes` | 过滤远程 `HEAD` |
+| 切换 / 创建 | `check-ref-format --branch <name>` + `switch [ -c ] <name>` | 创建与切换统一走 `switch` |
+| 删除分支 | `check-ref-format --branch <name>` + `branch -d <name>` | 只允许安全删除 |
+| 获取 | `fetch --prune` | 清理已删除的远程跟踪分支 |
+| 拉取 | `pull` | 不追加 merge/rebase 策略参数，遵循用户 Git 配置 |
+| 推送 | `push` / `push -u <remote> <branch>` | 无上游时优先 `origin`，否则第一个 remote |
+| 历史 | `log -n <limit> --pretty=format:%H%x1f%h%x1f%s%x1f%an%x1f%aI%x1e` | `limit` 限制在 1–200 |
+| 提交详情 | `show -s --pretty=format:…` + `show --name-only -z --format=` | 元数据与变更文件分两次读取 |
+| 继续 / 中止 | `merge/rebase/cherry-pick --continue` / `--abort` | 由 git-dir 下的 `MERGE_HEAD`、`rebase-merge`、`rebase-apply`、`CHERRY_PICK_HEAD` 判定 |
+
+- **超时**：普通只读 5 s、`status` 15 s、`commit` 60 s（可能触发 hooks）、网络命令 120 s；输出上限 8 MB；
+- **环境**：`GIT_TERMINAL_PROMPT=0` 禁止终端交互挂起，`GIT_EDITOR=true` 与 `GIT_MERGE_AUTOEDIT=no` 避免等待编辑器，`GIT_PAGER=cat`、`LC_ALL=C` 稳定输出；
+- **认证**：依赖系统 Git Credential Manager / SSH Agent，应用不保存任何凭据；
+- **错误码**：`E_GIT_MISSING`、`E_GIT_TIMEOUT`、`E_GIT_TOO_LARGE` 沿用 §21.3；命令本身失败（推送被拒、冲突未解决、删除未合并分支等）统一返回 `E_GIT_OPERATION`，消息优先取 stderr。
+
+### 22.5 安全边界
+
+- 所有命令使用 `execFile` + `shell: false` + 固定参数，不拼接 shell 字符串；
+- 渲染进程只提交**仓库相对路径**，主进程 `path.resolve` 后校验仍位于仓库根内，否则返回 `E_PATH_OUTSIDE_ROOT`；
+- 仓库根在探测成功后登记为允许根，后续 `fs:*` 与路径白名单复用同一套校验（§13.5）；
+- 未跟踪文件的「放弃修改」通过 `shell.trashItem` 移入系统回收站，不直接删除；
+- 不提供 force push、不执行任意用户输入命令；提交引用仍受 §21.3 的 `REF_PATTERN` 约束；
+- 外部 Git 命令运行时若目标文件在编辑器中未保存，面板显式提示「Git 只使用磁盘内容」，并在 checkout / pull / push 前二次确认。
+
+### 22.6 冲突处理
+
+首版不内置三方合并编辑器，采用「Git 原生流程 + 应用内引导」：
+
+1. 冲突文件在面板中单独分组，状态显示 `U`，点击按普通文件打开（可用源码或 Git 差异视图查看冲突标记）；
+2. 用户在编辑器中自行解决后，点击「标记为已解决」执行 `git add <path>`，冲突项转入已暂存分组；
+3. 面板顶部显示当前进行中的 merge / rebase / cherry-pick，提供「继续」与「中止」；
+4. 「继续」执行对应 `--continue`，提交信息交给 Git（`GIT_EDITOR=true` 接受默认信息）；仍有未解决冲突时 Git 返回失败，stderr 显示在错误 banner；
+5. 「中止」执行对应 `--abort`，恢复操作前状态。
+
+### 22.7 历史视图
+
+- 首版为「最近提交列表 + 提交详情」，不做提交图；
+- 列表最多 50 条，显示标题、短 hash 与作者；点击后读取详情；
+- 详情包含标题、作者、ISO 时间、完整正文与变更文件列表；
+- 不提供回滚、revert、cherry-pick 到当前分支等写操作。
+
+### 22.8 已知限制
+
+- 大仓库 `status` 可能超过 15 s，此时返回 `E_GIT_TIMEOUT`，面板保留上一次快照；
+- 提交 hooks 可能超过 60 s，需在终端处理或调整 hook；
+- 未跟踪文件放弃操作不可撤销（可从系统回收站恢复）；
+- 工作区在 Git 外部发生变化时，需要窗口焦点变化或手动刷新才能看到。
+
+---
+
+## 23. 附录
 
 ### A. 错误码
 
@@ -2086,8 +2198,9 @@ interface RenderedDiff {
 | `E_CANCELLED` | 任务被用户或新任务取消 | 静默 |
 | `E_GIT_MISSING` | 未安装 Git 或不可执行 | 禁用改动视图并提示 |
 | `E_GIT_NOT_REPO` | 文件不在 Git 仓库内 | 退化为「上次保存」对比 |
-| `E_GIT_TIMEOUT` | Git 命令超时（5 s） | 提示重试，不阻塞编辑 |
-| `E_GIT_TOO_LARGE` | 基线文本超过大小上限 | 跳过词级/禁用 diff 并说明 |
+| `E_GIT_OPERATION` | Git 命令执行失败（推送被拒、冲突未解决、分支未合并等） | 显示 stderr 摘要，保留上次状态 |
+| `E_GIT_TIMEOUT` | Git 命令超时（5 s / status 15 s / commit 60 s / 网络 120 s） | 提示重试，不阻塞编辑 |
+| `E_GIT_TOO_LARGE` | 基线文本或命令输出超过大小上限 | 跳过词级/禁用 diff 并说明 |
 
 ### B. 缓存键
 

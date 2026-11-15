@@ -83,6 +83,16 @@ function basename(filePath: string): string {
   return parts[parts.length - 1] ?? filePath;
 }
 
+/** 判断路径是否位于指定目录内（跨 Windows/POSIX 分隔符）。 */
+function isUnderRoot(filePath: string, root: string): boolean {
+  const normalizedRoot = root.replace(/[\\/]+$/u, "");
+  return (
+    filePath === normalizedRoot ||
+    filePath.startsWith(`${normalizedRoot}\\`) ||
+    filePath.startsWith(`${normalizedRoot}/`)
+  );
+}
+
 function formatTime(ms: number): string {
   return new Date(ms).toLocaleString("zh-CN", { hour12: false });
 }
@@ -294,6 +304,21 @@ export class DocumentManager {
   /** 供导出等外部流程复用提示条。 */
   showNotice(kind: Notice["kind"], message: string): void {
     this.notify(kind, message);
+  }
+
+  /** 仓库内未保存文档数量；Git 操作只读取磁盘内容。 */
+  dirtyCountInRoot(root: string): number {
+    return this.state.documents.filter((doc) => doc.dirty && doc.path && isUnderRoot(doc.path, root)).length;
+  }
+
+  /** 保存仓库内所有未保存文档；任一保存失败时返回 false。 */
+  async saveDocumentsInRoot(root: string): Promise<boolean> {
+    for (const doc of this.state.documents) {
+      if (!doc.dirty || !doc.path || !isUnderRoot(doc.path, root)) continue;
+      await this.saveDocument(doc.id, true);
+      if (this.findDocument(doc.id)?.dirty) return false;
+    }
+    return true;
   }
 
   dismissNotice(): void {
