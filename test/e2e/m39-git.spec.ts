@@ -87,6 +87,16 @@ test("M39：源代码管理变更、提交与分支", async () => {
     await page.locator(".git-detail-file").first().click();
     await expect(page.locator(".git-diff-pane")).toBeVisible({ timeout: 20_000 });
     await expect(page.locator(".git-diff-chip")).toContainText("^ ⇄", { timeout: 20_000 });
+    await expect(page.locator(".git-diff-body")).toContainText("修改后的正文", { timeout: 20_000 });
+
+    // 文件已打开时再选更早的提交：对比内容必须随基线刷新，不能残留上一次结果。
+    await page.locator(".git-commit-row").nth(1).click();
+    await expect(page.locator(".git-commit-expand")).toContainText("note.md", { timeout: 20_000 });
+    await page.locator(".git-detail-file").first().click();
+    await expect(page.locator(".git-diff-body")).not.toContainText("修改后的正文", {
+      timeout: 20_000,
+    });
+    await expect(page.locator(".git-diff-body")).toContainText("初始");
 
     // 创建并切换分支。
     await page.getByRole("tab", { name: "更改", exact: true }).click();

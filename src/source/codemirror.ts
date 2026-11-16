@@ -193,9 +193,57 @@ const diffMarkerField = StateField.define<readonly DiffLineMarker[]>({
     ),
 });
 
-/** 源码 diff 装饰：左侧 gutter 标记 + 行底色。见 doc/design.md §21.6、§21.8。 */
+/** 行内差异标记：在变化行内高亮具体变化的字符（对比视图）。 */
+export interface DiffInlineMark {
+  /** 1 基行号。 */
+  line: number;
+  /** 行内起始列（0 基，UTF-16 偏移）。 */
+  from: number;
+  /** 行内结束列（不含）。 */
+  to: number;
+  kind: "add" | "del";
+}
+
+const setDiffInlineMarksEffect = StateEffect.define<readonly DiffInlineMark[]>();
+
+function buildInlineDecorations(
+  marks: readonly DiffInlineMark[],
+  doc: Text,
+): DecorationSet {
+  const sorted = [...marks].sort((a, b) => a.line - b.line || a.from - b.from);
+  const ranges: Array<{ from: number; to: number; value: Decoration }> = [];
+  for (const mark of sorted) {
+    const line = doc.line(clampLine(doc, mark.line));
+    const from = line.from + Math.max(0, Math.min(mark.from, line.length));
+    const to = line.from + Math.max(0, Math.min(mark.to, line.length));
+    if (to <= from) continue;
+    ranges.push(
+      Decoration.mark({
+        class: mark.kind === "add" ? "cm-inline-add" : "cm-inline-del",
+      }).range(from, to),
+    );
+  }
+  return Decoration.set(ranges, true);
+}
+
+const diffInlineField = StateField.define<readonly DiffInlineMark[]>({
+  create: () => [],
+  update(value, transaction) {
+    for (const effect of transaction.effects) {
+      if (effect.is(setDiffInlineMarksEffect)) return effect.value;
+    }
+    return transaction.docChanged ? [] : value;
+  },
+  provide: (field) =>
+    EditorView.decorations.compute([field, "doc"], (state) =>
+      buildInlineDecorations(state.field(field), state.doc),
+    ),
+});
+
+/** 源码 diff 装饰：左侧 gutter 标记 + 行底色 + 行内变化字符高亮。见 §21.6、§21.8。 */
 const diffExtension: Extension = [
   diffMarkerField,
+  diffInlineField,
   gutter({
     class: "cm-diff-gutter",
     markers: (view) => buildDiffGutterMarkers(view.state.field(diffMarkerField), view.state.doc),
@@ -829,6 +877,11 @@ export class SourceEditor {
   setDiffMarkers(markers: readonly DiffLineMarker[]): void {
     this.view.dom.classList.toggle("diff-active", markers.length > 0);
     this.view.dispatch({ effects: setDiffMarkersEffect.of(markers) });
+  }
+
+  /** 更新行内差异高亮（对比视图）；传空数组关闭。 */
+  setDiffInlineMarks(marks: readonly DiffInlineMark[]): void {
+    this.view.dispatch({ effects: setDiffInlineMarksEffect.of(marks) });
   }
 
   private applyShowLineNumbers(): void {

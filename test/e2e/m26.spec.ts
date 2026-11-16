@@ -105,6 +105,9 @@ test("M26：渲染态差异——源码 gutter、预览词级标记与删除幽�
     await expect(page.locator(".git-source-diff")).toBeVisible();
     await expect(granularity.locator("option")).toHaveCount(2);
     await expect(granularity).toHaveValue("collapse");
+    // 行内字符级高亮：变化行内只加深具体变化的字符。
+    await expect(page.locator(".git-source-diff .cm-inline-del").first()).toContainText("world");
+    await expect(page.locator(".git-source-diff .cm-inline-add").first()).toContainText("panda");
     // 折叠未改动：连续未改动行折叠为「⋯ N 行未改动」占位。
     await expect(
       page.locator(".git-source-diff .cm-foldPlaceholder").first(),

@@ -3479,6 +3479,28 @@ body.resizing * {
   box-shadow: inset 2px 0 var(--diff-del-border);
 }
 
+/* 对比视图的行内变化字符：行底色保持浅色，变化字符加深一档。 */
+.cm-inline-add {
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--diff-add-border) 36%, transparent);
+}
+
+.cm-inline-del {
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--diff-del-border) 36%, transparent);
+}
+
+/* 对比视图的行内变化字符：行底色保持浅色，变化字符加深一档。 */
+.cm-inline-add {
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--diff-add-border) 36%, transparent);
+}
+
+.cm-inline-del {
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--diff-del-border) 36%, transparent);
+}
+
 /* 预览态差异：块级底色与词级标记 */
 .markdown-body .diff-add {
   border-radius: 2px;

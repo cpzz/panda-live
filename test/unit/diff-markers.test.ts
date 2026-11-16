@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { computeLineDiff } from "../../src/diff/compute";
-import { newLineMarkers, oldLineMarkers } from "../../src/diff/markers";
+import { newInlineMarks, newLineMarkers, oldInlineMarks, oldLineMarkers } from "../../src/diff/markers";
 
 describe("源码差异行标记", () => {
   it("修改行在两侧都标记为 change", () => {
@@ -35,5 +35,28 @@ describe("源码差异行标记", () => {
     const ignored = computeLineDiff("a  b\n", "a b\n", { ignoreWhitespace: true });
     expect(oldLineMarkers(ignored)).toEqual([]);
     expect(newLineMarkers(ignored)).toEqual([]);
+  });
+});
+
+describe("对比视图行内字符标记", () => {
+  it("修改行只标记具体变化的字符区间", () => {
+    const diff = computeLineDiff("Hello world\n", "Hello panda\n");
+    expect(oldInlineMarks(diff)).toEqual([{ line: 1, from: 6, to: 11, kind: "del" }]);
+    expect(newInlineMarks(diff)).toEqual([{ line: 1, from: 6, to: 11, kind: "add" }]);
+  });
+
+  it("多行修改逐行计算字符区间", () => {
+    const diff = computeLineDiff("a\nfoo bar\nc\n", "a\nfoo baz\nc\n");
+    expect(oldInlineMarks(diff)).toEqual([{ line: 2, from: 4, to: 7, kind: "del" }]);
+    expect(newInlineMarks(diff)).toEqual([{ line: 2, from: 4, to: 7, kind: "add" }]);
+  });
+
+  it("纯新增与纯删除行不做行内标记", () => {
+    const added = computeLineDiff("a\n", "a\nb\n");
+    expect(oldInlineMarks(added)).toEqual([]);
+    expect(newInlineMarks(added)).toEqual([]);
+    const deleted = computeLineDiff("a\nb\n", "a\n");
+    expect(oldInlineMarks(deleted)).toEqual([]);
+    expect(newInlineMarks(deleted)).toEqual([]);
   });
 });

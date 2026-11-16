@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { DiffHunk, LineDiff } from "../diff/compute";
-import { newLineMarkers, oldLineMarkers } from "../diff/markers";
+import { newInlineMarks, newLineMarkers, oldInlineMarks, oldLineMarkers } from "../diff/markers";
 import { t } from "../i18n";
 import { SourceEditor, type SourceLanguage } from "../source/codemirror";
 
@@ -78,6 +78,9 @@ export function SourceDiffPane({
     if (diff) {
       oldEditor?.setDiffMarkers(oldLineMarkers(diff));
       newEditor?.setDiffMarkers(newLineMarkers(diff));
+      // 行内字符级高亮：变化行保持浅色行底色，具体变化的字符加深。
+      oldEditor?.setDiffInlineMarks(oldInlineMarks(diff));
+      newEditor?.setDiffInlineMarks(newInlineMarks(diff));
     }
 
     return () => {

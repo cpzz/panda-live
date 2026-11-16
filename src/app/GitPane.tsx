@@ -318,6 +318,9 @@ export function GitPane({
     diff.base,
     diff.ref,
     diff.target,
+    // 历史提交对比只改 refA/refB；缺少这两项会导致 chip 更新而内容不刷新。
+    diff.refA,
+    diff.refB,
     document.content,
     document.savedContent,
     document.encoding,
