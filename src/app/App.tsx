@@ -30,7 +30,7 @@ import type { DraftEntry, RecentEntry, SessionState } from "../shared/ipc";
 import type { CompileResult, EngineStatus } from "../shared/ipc";
 import type { Settings } from "../shared/settings";
 import { describeError, getErrorCode } from "../shared/errors";
-import { localeTag, resolveLocale, setLocale, t } from "../i18n";
+import { getLocale, localeTag, resolveLocale, setLocale, t } from "../i18n";
 import { RecoveryDialog } from "./RecoveryDialog";
 import { CommandPalette, type CommandItem } from "./CommandPalette";
 import { DiffControls, type DiffListItem } from "./DiffControls";
@@ -74,6 +74,14 @@ const MODE_ICONS: Record<EditorMode, IconName> = {
   git: "git",
 };
 
+/** 通知类型与重要级别的显示文案。 */
+const NOTICE_KIND_LABELS = { info: "信息", error: "错误" } as const;
+const NOTICE_LEVEL_LABELS = {
+  low: { zh: "低", en: "Low" },
+  medium: { zh: "中", en: "Medium" },
+  high: { zh: "高", en: "High" },
+} as const;
+
 /** macOS 使用 Cmd+F；系统占用 Cmd+H，替换只通过面板与命令面板进入。 */
 const IS_MAC = typeof navigator !== "undefined" && navigator.platform.startsWith("Mac");
 
@@ -93,6 +101,11 @@ function formatSize(bytes: number): string {
 
 function formatTime(ms: number): string {
   return new Date(ms).toLocaleString(localeTag(), { hour12: false });
+}
+
+/** 通知历史里的时间列：只显示时分秒。 */
+function formatClock(ms: number): string {
+  return new Date(ms).toLocaleTimeString(localeTag(), { hour12: false });
 }
 
 const EMPTY_DIFF_HUNKS: DiffHunk[] = [];
@@ -981,6 +994,8 @@ export function App() {
   const [perfVisible, setPerfVisible] = useState(false);
   const [problemsOpen, setProblemsOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  /** 状态栏通知历史浮层。 */
+  const [noticesOpen, setNoticesOpen] = useState(false);
   const [extensionCommands, setExtensionCommands] = useState<CommandItem[]>([]);
   const [tabsOverflow, setTabsOverflow] = useState(false);
   const [canScrollTabs, setCanScrollTabs] = useState<{ left: boolean; right: boolean }>({
@@ -1149,6 +1164,17 @@ export function App() {
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
   }, [git]);
+  // 通知历史浮层：Esc 关闭。
+  useEffect(() => {
+    if (!noticesOpen) return;
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setNoticesOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [noticesOpen]);
   const gitRoot = gitState.snapshot?.root ?? null;
   const gitDirtyCount = gitRoot ? manager.dirtyCountInRoot(gitRoot) : 0;
   const previousDirtyRef = useRef<Map<string, boolean>>(new Map());
@@ -2370,13 +2396,99 @@ export function App() {
         </div>
       )}
 
-      {state.notice && (
-        <div className={`banner banner-${state.notice.kind}`} role={state.notice.kind === "error" ? "alert" : "status"}>
-          <span className="banner-text">{state.notice.message}</span>
-          <button type="button" className="button small ghost" onClick={() => manager.dismissNotice()}>
-            {t("关闭")}
-          </button>
+      {state.toasts.length > 0 && (
+        <div className="toast-stack" role="region" aria-label={t("通知")}>
+          {state.toasts.map((toast) => (
+            <div
+              key={toast.id}
+              className={`toast toast-${toast.kind}`}
+              role={toast.kind === "error" ? "alert" : "status"}
+            >
+              <span className="toast-text">{toast.message}</span>
+              <button
+                type="button"
+                className="toast-close"
+                aria-label={t("关闭")}
+                onClick={() => manager.dismissToast(toast.id)}
+              >
+                <Icon name="close" size={12} />
+              </button>
+            </div>
+          ))}
         </div>
+      )}
+
+      {noticesOpen && (
+        <>
+          <div
+            className="notice-overlay"
+            aria-hidden="true"
+            onClick={() => setNoticesOpen(false)}
+          />
+          <div className="notice-popover" role="dialog" aria-label={t("通知历史")}>
+            <div className="notice-popover-head">
+              <span className="notice-popover-title">{t("通知历史")}</span>
+              <button
+                type="button"
+                className="button small ghost"
+                disabled={state.notices.length === 0}
+                onClick={() => manager.clearNotices()}
+              >
+                {t("全部清除")}
+              </button>
+              <button
+                type="button"
+                className="icon-button"
+                aria-label={t("关闭")}
+                onClick={() => setNoticesOpen(false)}
+              >
+                <Icon name="close" size={12} />
+              </button>
+            </div>
+            {state.notices.length === 0 ? (
+              <p className="placeholder notice-empty">{t("暂无通知记录")}</p>
+            ) : (
+              <>
+                <div className="notice-head" aria-hidden="true">
+                  <span>ID</span>
+                  <span>{t("类型")}</span>
+                  <span>{t("内容")}</span>
+                  <span>{t("时间")}</span>
+                  <span>{t("重要级别")}</span>
+                  <span />
+                </div>
+                <ul className="notice-list">
+                  {state.notices.map((entry) => (
+                    <li key={entry.id} className="notice-item">
+                      <span className="notice-id">#{entry.id}</span>
+                      <span className={`notice-kind notice-kind-${entry.kind}`}>
+                        {t(NOTICE_KIND_LABELS[entry.kind])}
+                      </span>
+                      <span className="notice-message" title={entry.message}>
+                        {entry.message}
+                      </span>
+                      <span className="notice-time">{formatClock(entry.at)}</span>
+                      <span className={`notice-level notice-level-${entry.level}`}>
+                        {getLocale() === "en"
+                          ? NOTICE_LEVEL_LABELS[entry.level].en
+                          : NOTICE_LEVEL_LABELS[entry.level].zh}
+                      </span>
+                      <button
+                        type="button"
+                        className="icon-button notice-remove"
+                        aria-label={t("删除此条通知")}
+                        title={t("删除此条通知")}
+                        onClick={() => manager.removeNotice(entry.id)}
+                      >
+                        <Icon name="close" size={10} />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </div>
+        </>
       )}
 
       {diffEnabled && diffState.status === "error" && (
@@ -2727,6 +2839,23 @@ export function App() {
               ? (workspace.roots[0]?.root.name ?? t("无工作区"))
               : t("{0} 个工作区", workspace.roots.length)}
         </span>
+        <button
+          type="button"
+          className={
+            noticesOpen ? "statusbar-button notice-button active" : "statusbar-button notice-button"
+          }
+          aria-expanded={noticesOpen}
+          aria-label={t("通知历史")}
+          title={t("通知历史")}
+          onClick={() => setNoticesOpen((open) => !open)}
+        >
+          <Icon name="bell" size={12} />
+          {state.notices.length > 0 && (
+            <span className="notice-badge">
+              {state.notices.length > 99 ? "99+" : state.notices.length}
+            </span>
+          )}
+        </button>
         {state.mode !== "git" && (
           <DiffControls
             enabled={diffEnabled && !activeIsBinary}

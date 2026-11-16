@@ -437,7 +437,7 @@ test("M38：表格内代码块提示与引用式链接改地址", async () => {
     // 表格单元无法容纳代码块：安全失败并给出提示条。
     await editor.locator("td").first().click();
     await page.locator('.block-toolbar-button[data-tip="代码块"]').click();
-    await expect(page.locator(".banner", { hasText: "当前位置不能插入代码块" })).toBeVisible();
+    await expect(page.locator(".toast", { hasText: "当前位置不能插入代码块" })).toBeVisible();
     await expect(editor.locator("table .code-block-node")).toHaveCount(0);
 
     // 引用式链接改地址：保留 [文字][id]，同步更新文末定义行。

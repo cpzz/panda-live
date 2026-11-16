@@ -55,6 +55,16 @@ export interface Notice {
   message: string;
 }
 
+/** 通知历史条目：气泡消失后仍保留，供状态栏的通知列表查看。 */
+export interface NoticeEntry {
+  id: number;
+  kind: Notice["kind"];
+  message: string;
+  /** 产生时间（毫秒时间戳）。 */
+  at: number;
+  level: "low" | "medium" | "high";
+}
+
 export interface ConflictState {
   documentId: string;
   message: string;
@@ -66,7 +76,10 @@ export interface AppState {
   documents: DocumentState[];
   activeId: string | null;
   mode: EditorMode;
-  notice: Notice | null;
+  /** 右下角气泡：最多 3 条，3 秒后自动移除。 */
+  toasts: NoticeEntry[];
+  /** 通知历史（倒序，最多 200 条），仅当前会话。 */
+  notices: NoticeEntry[];
   conflict: ConflictState | null;
 }
 
@@ -116,12 +129,16 @@ export class DocumentManager {
     documents: [],
     activeId: null,
     mode: "split",
-    notice: null,
+    toasts: [],
+    notices: [],
     conflict: null,
   };
 
   private readonly listeners = new Set<(state: AppState) => void>();
-  private noticeTimer: ReturnType<typeof setTimeout> | null = null;
+  /** 通知自增序号；用于历史列表的行标识。 */
+  private noticeSeq = 0;
+  /** 每条气泡独立的 3 秒关闭计时器。 */
+  private readonly toastTimers = new Map<number, ReturnType<typeof setTimeout>>();
   private sessionTimer: ReturnType<typeof setInterval> | null = null;
   private readonly autosaveTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly draftTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -301,7 +318,7 @@ export class DocumentManager {
     this.patchDocument(id, () => ({ folds: folds.length > 0 ? folds : undefined }));
   }
 
-  /** 供导出等外部流程复用提示条。 */
+  /** 供导出等外部流程复用通知气泡与历史记录。 */
   showNotice(kind: Notice["kind"], message: string): void {
     this.notify(kind, message);
   }
@@ -321,12 +338,25 @@ export class DocumentManager {
     return true;
   }
 
-  dismissNotice(): void {
-    if (this.noticeTimer) {
-      clearTimeout(this.noticeTimer);
-      this.noticeTimer = null;
+  /** 手动关闭一条气泡（3 秒自动关闭也走这里）；历史记录保留。 */
+  dismissToast(id: number): void {
+    const timer = this.toastTimers.get(id);
+    if (timer) {
+      clearTimeout(timer);
+      this.toastTimers.delete(id);
     }
-    this.commit({ notice: null });
+    if (!this.state.toasts.some((toast) => toast.id === id)) return;
+    this.commit({ toasts: this.state.toasts.filter((toast) => toast.id !== id) });
+  }
+
+  /** 清空通知历史（不影响仍显示的气泡）。 */
+  clearNotices(): void {
+    this.commit({ notices: [] });
+  }
+
+  /** 删除单条通知历史。 */
+  removeNotice(id: number): void {
+    this.commit({ notices: this.state.notices.filter((entry) => entry.id !== id) });
   }
 
   dismissConflict(): void {
@@ -994,12 +1024,29 @@ export class DocumentManager {
   }
 
   private notify(kind: Notice["kind"], message: string): void {
-    if (this.noticeTimer) clearTimeout(this.noticeTimer);
-    this.state = { ...this.state, notice: { kind, message } };
+    const entry: NoticeEntry = {
+      id: (this.noticeSeq += 1),
+      kind,
+      message,
+      at: Date.now(),
+      level: kind === "error" ? "high" : "low",
+    };
+    // 气泡最多 3 条（新的在上）；历史最多 200 条，均按时间倒序。
+    const toasts = [entry, ...this.state.toasts].slice(0, 3);
+    const notices = [entry, ...this.state.notices].slice(0, 200);
+    this.state = { ...this.state, toasts, notices };
     for (const listener of this.listeners) listener(this.state);
-    if (kind === "info") {
-      this.noticeTimer = setTimeout(() => this.dismissNotice(), 4000);
+    // 被挤出的气泡清理计时器，避免无意义回调。
+    for (const [id, timer] of this.toastTimers) {
+      if (!toasts.some((toast) => toast.id === id)) {
+        clearTimeout(timer);
+        this.toastTimers.delete(id);
+      }
     }
+    this.toastTimers.set(
+      entry.id,
+      setTimeout(() => this.dismissToast(entry.id), 3000),
+    );
   }
 
   private reportError(error: unknown): void {

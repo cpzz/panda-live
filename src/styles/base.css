@@ -802,18 +802,6 @@ button {
   min-width: 0;
 }
 
-.banner-info {
-  background: var(--info-bg);
-  border-bottom-color: var(--info-border);
-  border-left-color: var(--accent);
-}
-
-.banner-error {
-  background: var(--error-bg);
-  border-bottom-color: var(--error-border);
-  border-left-color: var(--danger);
-}
-
 .banner-warning {
   background: var(--warning-bg);
   border-bottom-color: var(--warning-border);
@@ -1465,6 +1453,225 @@ button {
 .statusbar-button.active {
   background: var(--accent-soft);
   color: var(--accent);
+}
+
+/* 通知历史入口：状态栏铃铛按钮与未读数。 */
+.notice-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.notice-badge {
+  min-width: 14px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: 9.5px;
+  line-height: 14px;
+  text-align: center;
+}
+
+/* 右下角通知气泡：最多 3 条，3 秒后自动关闭（由 DocumentManager 计时）。 */
+.toast-stack {
+  position: fixed;
+  right: 16px;
+  bottom: 38px;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(420px, calc(100vw - 32px));
+  /* 容器只占位不拦截点击，避免遮挡右下角正文；单条气泡恢复可交互。 */
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  font-size: 12px;
+  line-height: 1.5;
+  animation: overlay-in 140ms ease;
+  pointer-events: auto;
+}
+
+.toast-error {
+  border-left-color: var(--danger);
+}
+
+.toast-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.toast-close {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.toast-close:hover {
+  background: var(--surface-hover);
+  color: var(--fg);
+}
+
+/* 通知历史浮层：状态栏上方，Esc / 点击外部 / x 关闭。 */
+.notice-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 95;
+}
+
+.notice-popover {
+  position: fixed;
+  right: 12px;
+  bottom: 34px;
+  z-index: 96;
+  display: flex;
+  flex-direction: column;
+  width: min(680px, calc(100vw - 24px));
+  max-height: min(50vh, 420px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  animation: overlay-in 140ms ease;
+}
+
+.notice-popover-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.notice-popover-title {
+  flex: 1 1 auto;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.notice-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+/* 列标题：与通知行使用同一套网格列宽。 */
+.notice-head {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: 44px 48px minmax(0, 1fr) 72px 52px 22px;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.notice-item {
+  display: grid;
+  grid-template-columns: 44px 48px minmax(0, 1fr) 72px 52px 22px;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  border-top: 1px solid var(--border);
+  font-size: 11.5px;
+}
+
+.notice-item:first-child {
+  border-top: 0;
+}
+
+.notice-item:hover {
+  background: var(--surface-hover);
+}
+
+.notice-id {
+  color: var(--muted);
+  font-family: var(--font-mono);
+}
+
+.notice-kind {
+  font-weight: 600;
+}
+
+.notice-kind-error {
+  color: var(--danger);
+}
+
+.notice-kind-info {
+  color: var(--accent);
+}
+
+.notice-message {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notice-time {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+.notice-level {
+  text-align: center;
+  border-radius: 999px;
+  padding: 0 6px;
+  line-height: 16px;
+}
+
+.notice-level-high {
+  background: var(--error-bg);
+  color: var(--danger);
+}
+
+.notice-level-medium {
+  background: var(--warning-bg);
+  color: #8a6d3b;
+}
+
+.notice-level-low {
+  background: var(--surface-muted);
+  color: var(--muted);
+}
+
+.notice-empty {
+  padding: 16px;
+  text-align: center;
+}
+
+.notice-remove {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  color: var(--muted);
 }
 
 /* 问题面板 */

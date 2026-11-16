@@ -76,9 +76,22 @@ test("M11：命令面板支持过滤、执行与扩展命令", async () => {
     const extensionItem = page.locator(".palette-item").first();
     await expect(extensionItem).toContainText("AsciiDoc: 导出 HTML（示例）");
     await extensionItem.click();
-    await expect(page.locator(".banner")).toContainText("已执行：AsciiDoc: 导出 HTML（示例）", {
+    await expect(page.locator(".toast")).toContainText("已执行：AsciiDoc: 导出 HTML（示例）", {
       timeout: 15_000,
     });
+
+    // 气泡 3 秒后自动关闭，但历史记录仍保留。
+    await expect(page.locator(".toast")).toHaveCount(0, { timeout: 8_000 });
+    // 状态栏通知按钮打开历史；支持单条删除与 Esc 关闭。
+    await page.locator(".statusbar .notice-button").click();
+    const noticeDialog = page.getByRole("dialog", { name: "通知历史" });
+    await expect(noticeDialog).toBeVisible();
+    const executed = noticeDialog.locator(".notice-item").filter({ hasText: "AsciiDoc" });
+    await expect(executed).toHaveCount(1);
+    await executed.getByRole("button", { name: "删除此条通知" }).click();
+    await expect(executed).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await expect(noticeDialog).toHaveCount(0);
   } finally {
     await app.close();
     await fs.rm(tempDir, { recursive: true, force: true });
