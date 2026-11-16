@@ -81,13 +81,12 @@ test("M39：源代码管理变更、提交与分支", async () => {
     const firstCommit = page.locator(".git-commit-row").first();
     await expect(firstCommit).toContainText("更新说明");
     await firstCommit.click();
-    await expect(page.locator(".git-commit-detail h3")).toHaveText("更新说明");
-    await expect(page.locator(".git-commit-detail")).toContainText("note.md");
+    await expect(page.locator(".git-commit-expand")).toContainText("note.md", { timeout: 20_000 });
 
-    // 点击提交详情的文件行：进入「提交 ⇄ 工作区」差异视图，chip 跟随共享基线。
+    // 点击提交展开区的文件行：进入「该提交 ⇄ 父提交」差异视图。
     await page.locator(".git-detail-file").first().click();
     await expect(page.locator(".git-diff-pane")).toBeVisible({ timeout: 20_000 });
-    await expect(page.locator(".git-diff-chip")).toContainText("工作区 ⇄", { timeout: 20_000 });
+    await expect(page.locator(".git-diff-chip")).toContainText("^ ⇄", { timeout: 20_000 });
 
     // 创建并切换分支。
     await page.getByRole("tab", { name: "更改", exact: true }).click();

@@ -671,13 +671,13 @@ test("M38：模式条布局与默认模式", async () => {
     await expect(editor).toBeVisible();
     const bar = page.locator(".mode-bar");
     await expect(bar).toBeVisible();
-    const modes = bar.locator(".mode-bar-modes button");
+    const modes = bar.locator(".mode-bar-modes button:not(.mode-button-git)");
     await expect(modes).toHaveCount(4);
-    await expect(modes.nth(0)).toHaveAccessibleName("源码");
-    await expect(modes.nth(1)).toHaveAccessibleName("分栏");
-    await expect(modes.nth(2)).toHaveAccessibleName("预览");
-    await expect(modes.nth(3)).toHaveAccessibleName("所见即所得");
-    await expect(modes.nth(3)).toHaveAttribute("aria-pressed", "true");
+    await expect(modes.nth(0)).toHaveAccessibleName("所见即所得");
+    await expect(modes.nth(0)).toHaveAttribute("aria-pressed", "true");
+    await expect(modes.nth(1)).toHaveAccessibleName("源码");
+    await expect(modes.nth(2)).toHaveAccessibleName("分栏");
+    await expect(modes.nth(3)).toHaveAccessibleName("预览");
 
     // 块级工具栏在模式条左侧，模式按钮在右侧。
     const tools = bar.locator(".mode-bar-tools .block-toolbar");
@@ -692,22 +692,23 @@ test("M38：模式条布局与默认模式", async () => {
     await page.getByRole("button", { name: "源码", exact: true }).click();
     await expect(bar.locator(".block-toolbar")).toHaveCount(0);
 
-    // 打开 .txt：没有渲染预览，只有源码模式，模式条隐藏。
+    // 打开 .txt：没有渲染预览，模式条只保留「源码」（+ 仓库内的 git 按钮）。
     await mockOpen(textPath);
     await page.locator(".app").waitFor();
     await page.keyboard.press("Control+O");
-    await expect(page.locator(".mode-bar")).toHaveCount(0);
+    await expect(page.locator(".mode-bar")).toBeVisible();
+    const textModes = page.locator(".mode-bar .mode-bar-modes button:not(.mode-button-git)");
+    await expect(textModes.first()).toHaveAccessibleName("源码");
+    await expect(textModes.first()).toHaveAttribute("aria-pressed", "true");
 
     // 从 .txt（源码）再打开 Markdown：仍然默认所见即所得。
     await mockOpen(secondPath);
     await page.locator(".app").waitFor();
     await page.keyboard.press("Control+O");
     await expect(page.locator(".prose-editor")).toBeVisible();
-    await expect(page.locator(".mode-bar .mode-bar-modes button")).toHaveCount(4);
-    await expect(page.locator(".mode-bar .mode-bar-modes button").nth(3)).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    const markdownModes = page.locator(".mode-bar .mode-bar-modes button:not(.mode-button-git)");
+    await expect(markdownModes).toHaveCount(4);
+    await expect(markdownModes.nth(0)).toHaveAttribute("aria-pressed", "true");
   } finally {
     await app.close();
     await fs.rm(tempDir, { recursive: true, force: true });
@@ -806,10 +807,12 @@ test("M38：另存为代码格式后回落源码模式", async () => {
     await page.keyboard.press("Control+Shift+S");
     await expect(page.locator(".tab-item.active .tab-name")).toHaveText("note.py");
 
-    // Python 没有渲染预览：自动切到源码，模式条隐藏。
+    // Python 没有渲染预览：自动切到源码，模式条只保留「源码」。
     await expect(page.locator(".pane.source-pane")).toBeVisible();
     await expect(page.locator(".cm-content")).toContainText("标题");
-    await expect(page.locator(".mode-bar")).toHaveCount(0);
+    const pyModes = page.locator(".mode-bar .mode-bar-modes button");
+    await expect(pyModes.first()).toHaveAccessibleName("源码");
+    await expect(pyModes.first()).toHaveAttribute("aria-pressed", "true");
   } finally {
     await app.close();
     await fs.rm(tempDir, { recursive: true, force: true });

@@ -84,14 +84,31 @@ test("M26：渲染态差异——源码 gutter、预览词级标记与删除幽�
     await page.keyboard.press("Control+Shift+P");
     await page.keyboard.type("打开 Git 差异视图");
     await page.keyboard.press("Enter");
-    await expect(page.locator(".git-diff-bar")).toBeVisible();
+    // git 模式：模式条左侧是 Git 工具（portal），右侧是显示模式按钮。
+    await expect(page.locator(".mode-bar-git")).toBeVisible();
+    await expect(page.getByRole("group", { name: "Git 显示方式" })).toBeVisible();
     await expect(page.getByRole("button", { name: "对比", exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: "源文件", exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: "改动后", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "预览对比", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "忽略空白", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "忽略空行", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "忽略行尾 CR", exact: true })).toBeVisible();
     await expect(page.locator(".git-diff-chip")).toContainText("上次保存");
+    // 状态栏差异控件在 git 模式下隐藏。
+    await expect(page.locator(".diff-controls")).toHaveCount(0);
+
+    // 粒度下拉：预览对比三档；切到对比后隐藏「仅改动片段」并回落为折叠未改动。
+    const granularity = page.locator(".git-diff-view");
+    await expect(granularity).toBeVisible();
+    await expect(granularity.locator("option")).toHaveCount(3);
+    await granularity.selectOption("fragments");
+    await page.getByRole("button", { name: "对比", exact: true }).click();
+    await expect(page.locator(".git-source-diff")).toBeVisible();
+    await expect(granularity.locator("option")).toHaveCount(2);
+    await expect(granularity).toHaveValue("collapse");
+    // 折叠未改动：连续未改动行折叠为「⋯ N 行未改动」占位。
+    await expect(
+      page.locator(".git-source-diff .cm-foldPlaceholder").first(),
+    ).toContainText("行未改动", { timeout: 10_000 });
 
     // 手动切到「工作区 ⇄ HEAD」预设：非仓库应给出可操作提示。
     await page.locator(".git-diff-chip").click();
@@ -99,6 +116,11 @@ test("M26：渲染态差异——源码 gutter、预览词级标记与删除幽�
     await expect(page.locator(".git-diff-pane .banner")).toContainText(
       /未找到 Git|未检测到 Git 仓库/,
     );
+
+    // 点模式条的显示模式按钮即退出 git 模式；状态栏 ± 恢复显示。
+    await page.locator(".mode-bar-modes").getByRole("button", { name: "分栏", exact: true }).click();
+    await expect(page.locator(".git-pane")).toBeHidden();
+    await expect(page.locator(".diff-controls")).toBeVisible();
   } finally {
     await app.close();
   }

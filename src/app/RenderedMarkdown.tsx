@@ -93,6 +93,11 @@ export interface RenderedMarkdownProps {
   onDiffModeChange?: (mode: DiffViewMode) => void;
   onDiffJump?: (line: number) => void;
   className?: string;
+  /**
+   * 围栏块按纯文本显示：跳过图表渲染与代码高亮。
+   * 预览对比用，保证改动前/后的围栏内容可直接比较。见 §21.15。
+   */
+  plainFences?: boolean;
 }
 
 /**
@@ -107,6 +112,7 @@ export function RenderedMarkdown({
   onDiffModeChange,
   onDiffJump,
   className,
+  plainFences = false,
 }: RenderedMarkdownProps) {
   const hostRef = useRef<HTMLElement>(null);
   const [theme, setTheme] = useState<AppTheme>(resolveTheme);
@@ -169,10 +175,12 @@ export function RenderedMarkdown({
     removeCopyButtons(host);
     let cancelled = false;
     void (async () => {
-      await renderPreviewDiagrams(host, sourceKey, () => cancelled);
-      if (cancelled) return;
-      await highlightCodeBlocks(host, theme);
-      if (cancelled) return;
+      if (!plainFences) {
+        await renderPreviewDiagrams(host, sourceKey, () => cancelled);
+        if (cancelled) return;
+        await highlightCodeBlocks(host, theme);
+        if (cancelled) return;
+      }
       await applyPreviewDiff(host, diff, () => cancelled);
       if (cancelled) return;
       attachCopyButtons(host, Boolean(diff));
@@ -180,7 +188,7 @@ export function RenderedMarkdown({
     return () => {
       cancelled = true;
     };
-  }, [html, sourceKey, theme, diff]);
+  }, [html, sourceKey, theme, diff, plainFences]);
 
   // 页内目录：拦截 `#anchor` 链接，避免 Electron 修改 URL，改为容器内平滑滚动。
   useEffect(() => {

@@ -10,6 +10,12 @@ export type GitDiffBase = Exclude<DiffBase, "lastSave">;
 /** 渲染态差异的视图粒度。见 doc/design.md §21.6、§21.8.2。 */
 export type DiffViewMode = "full" | "collapse" | "fragments";
 
+/**
+ * GitPane 的显示方式，对应 git 模式下模式条左侧的「对比 / 预览对比」按钮。见 §21.15、§22.9。
+ * `split` 对比（源码两栏并排）；`render` 预览对比（渲染态标注差异，仅支持渲染的格式）。
+ */
+export type GitPaneView = "split" | "render";
+
 /** 与 git diff 对齐的比较选项，状态栏就地标注与 GitPane 共享。 */
 export interface DiffFlags {
   whitespace: boolean;
@@ -36,6 +42,8 @@ export interface DocDiffState {
   paneMode: "baseline" | "refs";
   refA: string;
   refB: string;
+  /** GitPane 显示方式（模式条按钮）。 */
+  paneView: GitPaneView;
 }
 
 export const DEFAULT_DOC_DIFF: DocDiffState = {
@@ -48,6 +56,7 @@ export const DEFAULT_DOC_DIFF: DocDiffState = {
   paneMode: "baseline",
   refA: "HEAD~1",
   refB: "HEAD",
+  paneView: "render",
 };
 
 export interface GitDiffRequest {

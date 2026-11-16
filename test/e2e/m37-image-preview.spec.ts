@@ -121,7 +121,7 @@ test("M37：SVG 文档源码与安全预览", async () => {
     await expect(page.locator(".tab-item.active .tab-name")).toHaveText("sample.svg");
 
     // 文本格式：模式条提供 源码 / 分栏 / 预览，不显示「所见即所得」。
-    const modes = page.locator(".mode-bar .mode-bar-modes button");
+    const modes = page.locator(".mode-bar .mode-bar-modes button:not(.mode-button-git)");
     await expect(modes).toHaveCount(3);
     await expect(modes.nth(0)).toHaveAccessibleName("源码");
     await expect(modes.nth(1)).toHaveAccessibleName("分栏");

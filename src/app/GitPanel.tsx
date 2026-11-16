@@ -11,8 +11,8 @@ interface GitPanelProps {
   onOpenFile(path: string): void;
   /** 打开已暂存文件并进入 Git 差异视图（HEAD 对比暂存区）。 */
   onOpenStagedFile(path: string): void;
-  /** 打开提交详情中的文件并进入 Git 差异视图（该提交对比工作区）。 */
-  onOpenCommitFile(hash: string, file: string): void;
+  /** 打开提交详情中的文件并进入 Git 显示模式（该提交 ⇄ 父提交）。 */
+  onOpenCommitFile(shortHash: string, file: string): void;
   /** 冲突项只打开文件本身：冲突标记需在源码模式处理，不进入只读差异视图。 */
   onOpenConflictFile(path: string): void;
   /** 仓库内未保存文档数量；>0 时提示 Git 只读取磁盘内容。 */
@@ -776,60 +776,68 @@ export function GitPanel({
             </button>
           </div>
           {state.commits.length === 0 && <p className="placeholder">{t("还没有提交")}</p>}
-          {state.commits.map((commit) => (
-            <button
-              key={commit.hash}
-              type="button"
-              className={detailHash === commit.hash ? "git-commit-row active" : "git-commit-row"}
-              title={`${commit.hash}\n${commit.author}\n${formatCommitDate(commit.date)}`}
-              onClick={() => {
-                setDetailHash(commit.hash);
-                void store.loadCommitDetail(commit.hash);
-              }}
-            >
-              <span className="git-commit-subject">{commit.subject}</span>
-              <span className="git-commit-meta">
-                {commit.shortHash} · {commit.author} · {formatCommitDate(commit.date)}
-              </span>
-            </button>
-          ))}
-          {state.detail && (() => {
-            const detail = state.detail;
+          {state.commits.map((commit) => {
+            const expanded = detailHash === commit.hash;
+            const detail = expanded && state.detail?.hash === commit.hash ? state.detail : null;
             return (
-            <div className="git-commit-detail">
-              <h3>{detail.subject}</h3>
-              <p className="git-commit-detail-meta">
-                {detail.shortHash} · {detail.author} ·{" "}
-                {formatCommitDate(detail.date)}
-              </p>
-              {detail.body.trim() && <pre>{detail.body.trim()}</pre>}
-              {detail.files.length > 0 && (
-                <>
-                  <h4>{t("变更文件")}</h4>
-                  <ul>
-                    {detail.files.slice(0, 100).map((file) => (
-                      <li key={file}>
-                        <button
-                          type="button"
-                          className="git-detail-file"
-                          title={t("查看该提交与工作区的差异")}
-                          onClick={() => onOpenCommitFile(detail.hash, file)}
-                        >
-                          {file}
-                        </button>
-                      </li>
-                    ))}
-                    {detail.files.length > 100 && (
-                      <li className="git-detail-more">
-                        {t("还有 {0} 个文件…", detail.files.length - 100)}
-                      </li>
+              <div key={commit.hash} className="git-commit-item">
+                <button
+                  type="button"
+                  className={expanded ? "git-commit-row active" : "git-commit-row"}
+                  aria-expanded={expanded}
+                  title={`${commit.hash}\n${commit.author}\n${formatCommitDate(commit.date)}`}
+                  onClick={() => {
+                    if (expanded) {
+                      setDetailHash(null);
+                      return;
+                    }
+                    setDetailHash(commit.hash);
+                    void store.loadCommitDetail(commit.hash);
+                  }}
+                >
+                  <span className="git-commit-toggle" aria-hidden="true">
+                    {expanded ? "▾" : "▸"}
+                  </span>
+                  <span className="git-commit-text">
+                    <span className="git-commit-subject">{commit.subject}</span>
+                    <span className="git-commit-meta">
+                      {commit.shortHash} · {commit.author} · {formatCommitDate(commit.date)}
+                    </span>
+                  </span>
+                </button>
+                {expanded && (
+                  <div className="git-commit-expand">
+                    {!detail && <p className="placeholder">{t("读取提交详情…")}</p>}
+                    {detail && detail.body.trim() && <pre>{detail.body.trim()}</pre>}
+                    {detail && detail.files.length === 0 && (
+                      <p className="placeholder">{t("没有变更文件")}</p>
                     )}
-                  </ul>
-                </>
-              )}
-            </div>
+                    {detail && detail.files.length > 0 && (
+                      <ul>
+                        {detail.files.slice(0, 100).map((file) => (
+                          <li key={file}>
+                            <button
+                              type="button"
+                              className="git-detail-file"
+                              title={t("查看该提交与其父提交的差异")}
+                              onClick={() => onOpenCommitFile(detail.shortHash, file)}
+                            >
+                              {file}
+                            </button>
+                          </li>
+                        ))}
+                        {detail.files.length > 100 && (
+                          <li className="git-detail-more">
+                            {t("还有 {0} 个文件…", detail.files.length - 100)}
+                          </li>
+                        )}
+                      </ul>
+                    )}
+                  </div>
+                )}
+              </div>
             );
-          })()}
+          })}
         </div>
       )}
 

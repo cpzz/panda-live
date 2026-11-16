@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { computeLineDiff, normalizeFormatText } from "../diff/compute";
 import type { PreviewDiffModel } from "../diff/preview";
 import { renderMarkdownToHtml } from "../formats/markdown/preview";
 import type { DocumentState } from "../services/document-manager";
-import type { DocDiffState, GitBaselineReason } from "../shared/diff";
+import type { DocDiffState, GitBaselineReason, GitPaneView } from "../shared/diff";
 import { describeError } from "../shared/errors";
 import { getLocale, t } from "../i18n";
 import { sourceLanguageForFormat } from "../source/language";
-import { Icon } from "./icons";
+import { Icon, type IconName } from "./icons";
 import { RenderedMarkdown } from "./RenderedMarkdown";
 import { SourceDiffPane } from "./SourceDiffPane";
 
@@ -26,26 +27,34 @@ interface GitPaneProps {
   diff: DocDiffState;
   /** Git 写操作成功后的重算信号。 */
   refreshKey: number;
+  /** git 模式下模式条左侧工具区的容器；工具通过 portal 渲染到这里。 */
+  toolbarHost: HTMLElement | null;
   onDiffChange(patch: Partial<DocDiffState>): void;
-  onReturnToEdit(): void;
 }
 
+/** git 模式下的两种显示方式；「预览对比」仅支持渲染的格式可用。 */
+const PANE_VIEW_LABELS: Record<GitPaneView, string> = {
+  split: "对比",
+  render: "预览对比",
+};
+
 /**
- * Git 差异面板：基线 chip 选择「工作区⇄HEAD / HEAD⇄暂存区 / 提交⇄工作区 / 提交⇄提交」，
- * 粒度与忽略参数与状态栏共享同一份 diffOptions。只渲染差异结果，不提供编辑。
- * 见 doc/design.md §21.3、§21.15、§22.9。
+ * Git 差异面板：内容区只读显示差异；工具栏（对比方式、粒度、忽略参数、改动计数与跳转、
+ * 对比/预览对比）通过 portal 渲染到模式条左侧，与「显示模式」按钮同栏。
+ * 只读，不渲染图表与代码高亮（预览对比中围栏块按纯文本显示）。
+ * 见 doc/design.md §21.15、§22.9。
  */
 export function GitPane({
   document,
   active,
   diff,
   refreshKey,
+  toolbarHost,
   onDiffChange,
-  onReturnToEdit,
 }: GitPaneProps) {
   const [chipOpen, setChipOpen] = useState(false);
   const chipWrapRef = useRef<HTMLDivElement>(null);
-  const [commitDraft, setCommitDraft] = useState(diff.ref || "HEAD");
+  const [commitDraft, setCommitDraft] = useState(diff.ref || "HEAD~1");
   const [aDraft, setADraft] = useState(diff.refA);
   const [bDraft, setBDraft] = useState(diff.refB);
   const [status, setStatus] = useState<Status>("idle");
@@ -53,14 +62,13 @@ export function GitPane({
   const [note, setNote] = useState<string | null>(null);
   const [labels, setLabels] = useState({ old: "", next: "" });
   const [result, setResult] = useState<{ oldText: string; newText: string } | null>(null);
-  const [sourceMode, setSourceMode] = useState<"diff" | "before" | "after">("diff");
   const [html, setHtml] = useState("");
-  const [oldHtml, setOldHtml] = useState("");
   const [navIndex, setNavIndex] = useState(-1);
   const [reveal, setReveal] = useState<{ line: number; token: number } | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
-  // Markdown 走渲染态差异，其他格式走并排源码差异。见 §21.15。
   const isMarkdown = document.format === "markdown";
+  // 预览对比只对支持渲染的格式有意义；其他格式回退为分栏。
+  const paneView: GitPaneView = diff.paneView === "render" && !isMarkdown ? "split" : diff.paneView;
 
   const baseDiff = useMemo(() => {
     if (!result) return null;
@@ -111,14 +119,24 @@ export function GitPane({
     diff.base === "head"
       ? "HEAD"
       : diff.base === "commit"
-        ? (diff.ref.trim() || "HEAD")
+        ? (diff.ref.trim() || "HEAD~1")
         : t("上次保存");
+  // 新侧永远是编辑器缓冲区：有未保存修改时显示「编辑器缓存」，否则等价于磁盘工作区。
+  const workingLabel = document.dirty ? t("编辑器缓存") : t("工作区");
   const chipLabel =
     diff.paneMode === "refs"
       ? `${diff.refA} ⇄ ${diff.refB}`
       : diff.target === "index"
         ? `${baseName} ⇄ ${t("暂存区")}`
-        : `${t("工作区")} ⇄ ${baseName}`;
+        : `${workingLabel} ⇄ ${baseName}`;
+
+  // 对比视图不提供「仅改动片段」：进入 git 模式且为对比时把 fragments 回落为折叠未改动。
+  useEffect(() => {
+    if (!active) return;
+    if (paneView !== "render" && diff.mode === "fragments") {
+      onDiffChange({ mode: "collapse" });
+    }
+  }, [active, paneView, diff.mode, onDiffChange]);
 
   useEffect(() => {
     if (!active) return;
@@ -164,6 +182,10 @@ export function GitPane({
               throw new Error(t("未检测到 Git 仓库，请检查设置 → Git 中的 Git 命令"));
             }
             if (result.reason === "invalid-ref") {
+              // 首次提交没有父提交：`<hash>^` 解析失败按空文本处理（全文新增）。
+              if (ref.trim().endsWith("^")) {
+                return { text: "", missing: true };
+              }
               throw new Error(t("无法解析提交「{0}」", ref.trim()));
             }
             if (result.reason === "lfs") {
@@ -266,25 +288,20 @@ export function GitPane({
             }
           }
 
-          const [rendered, renderedOld] = isMarkdown
-            ? await Promise.all([
-                renderMarkdownToHtml(newText, { annotateSource: true }),
-                renderMarkdownToHtml(oldText, { annotateSource: true }),
-              ])
-            : ["", ""];
+          const rendered = isMarkdown
+            ? await renderMarkdownToHtml(newText, { annotateSource: true })
+            : "";
           if (cancelled) return;
           setLabels({ old: oldLabel, next: newLabel });
           setNote(notes.length > 0 ? notes.join(getLocale() === "zh" ? "；" : "; ") : null);
           setResult({ oldText, newText });
           setHtml(rendered);
-          setOldHtml(renderedOld);
           setNavIndex(-1);
           setStatus("ready");
         } catch (error) {
           if (cancelled) return;
           setResult(null);
           setHtml("");
-          setOldHtml("");
           setStatus("error");
           setMessage(describeError(error));
         }
@@ -310,7 +327,7 @@ export function GitPane({
     refreshKey,
   ]);
 
-  /** 逐处跳转：Markdown 渲染态滚动到改动块，源码态移动右侧编辑器光标。 */
+  /** 逐处跳转：预览对比滚动到改动块，分栏移动右侧编辑器光标。 */
   const navTo = (direction: 1 | -1): void => {
     const hunks = baseDiff?.hunks ?? [];
     if (hunks.length === 0) return;
@@ -318,7 +335,7 @@ export function GitPane({
     setNavIndex(next);
     const hunk = hunks[next];
     if (!hunk) return;
-    if (!isMarkdown || sourceMode !== "diff") {
+    if (paneView !== "render") {
       setReveal({ line: Math.max(1, hunk.newStart), token: next });
       return;
     }
@@ -336,32 +353,26 @@ export function GitPane({
     });
   };
 
-  const sourceText = sourceMode === "before" ? (result?.oldText ?? "") : (result?.newText ?? "");
-  const sourceEmpty = sourceMode !== "diff" && sourceText.trim().length === 0;
+  const noDiff = Boolean(baseDiff && baseDiff.hunks.length === 0);
   const hunkTotal = baseDiff?.hunks.length ?? 0;
+  // 仅支持渲染的格式才需要「对比 / 预览对比」切换；非 Markdown 固定为对比，不显示按钮。
+  type ViewButton = { view: GitPaneView; icon: IconName; label: string };
+  const viewButtons: ViewButton[] = isMarkdown
+    ? [
+        { view: "split", icon: "compare", label: PANE_VIEW_LABELS.split },
+        { view: "render", icon: "previewDiff", label: PANE_VIEW_LABELS.render },
+      ]
+    : [];
 
   const applyPreset = (patch: Partial<DocDiffState>): void => {
     onDiffChange(patch);
     setChipOpen(false);
   };
 
-  return (
-    <div className="git-diff-pane">
-      <div className="git-diff-bar">
-        <button
-          type="button"
-          className="git-icon-button"
-          title={t("返回编辑")}
-          aria-label={t("返回编辑")}
-          onClick={onReturnToEdit}
-        >
-          <Icon name="pencil" size={14} />
-        </button>
-        <span className="git-diff-file" title={document.path ?? ""}>
-          {document.name}
-        </span>
-
-        <div className="git-chip-wrap" ref={chipWrapRef}>
+  // 工具栏渲染到模式条左侧（portal），与右侧「显示模式」按钮同栏。
+  const toolbar = (
+    <>
+      <div className="git-chip-wrap" ref={chipWrapRef}>
           <button
             type="button"
             className="git-diff-chip"
@@ -474,55 +485,22 @@ export function GitPane({
           )}
         </div>
 
-        <div className="git-source-switch" role="group" aria-label={t("显示内容")}>
-          <button
-            type="button"
-            className={sourceMode === "diff" ? "git-icon-button active" : "git-icon-button"}
-            aria-pressed={sourceMode === "diff"}
-            aria-label={t("对比")}
-            title={t("对比：显示改动前后差异")}
-            onClick={() => setSourceMode("diff")}
-          >
-            <Icon name="compare" size={14} />
-          </button>
-          <button
-            type="button"
-            className={sourceMode === "before" ? "git-icon-button active" : "git-icon-button"}
-            aria-pressed={sourceMode === "before"}
-            aria-label={t("源文件")}
-            title={t("源文件：显示改动前内容")}
-            onClick={() => setSourceMode("before")}
-          >
-            <Icon name="fileBefore" size={14} />
-          </button>
-          <button
-            type="button"
-            className={sourceMode === "after" ? "git-icon-button active" : "git-icon-button"}
-            aria-pressed={sourceMode === "after"}
-            aria-label={t("改动后")}
-            title={t("改动后：显示改动后内容")}
-            onClick={() => setSourceMode("after")}
-          >
-            <Icon name="fileAfter" size={14} />
-          </button>
-        </div>
-
         {status === "loading" && <span className="git-diff-state">{t("读取中…")}</span>}
-        {status === "ready" && sourceMode === "diff" && isMarkdown && (
+        {status === "ready" && (
           <select
             className="git-diff-view"
             aria-label={t("差异视图粒度")}
             title={t("差异视图粒度")}
-            value={diff.mode}
+            value={paneView === "render" ? diff.mode : diff.mode === "full" ? "full" : "collapse"}
             onChange={(event) => onDiffChange({ mode: event.target.value as DocDiffState["mode"] })}
           >
-            <option value="fragments">{t("仅改动片段")}</option>
+            {paneView === "render" && <option value="fragments">{t("仅改动片段")}</option>}
             <option value="collapse">{t("折叠未改动")}</option>
-            <option value="full">{t("全文标注")}</option>
+            <option value="full">{t("全文显示")}</option>
           </select>
         )}
-        {sourceMode === "diff" && (
-          <div className="git-diff-flags" role="group" aria-label={t("Git 忽略参数")}>
+        <span className="git-diff-bar-sep" aria-hidden="true" />
+        <div className="git-diff-flags" role="group" aria-label={t("Git 忽略参数")}>
             <button
               type="button"
               className={diff.flags.whitespace ? "git-icon-button active" : "git-icon-button"}
@@ -560,8 +538,8 @@ export function GitPane({
               <Icon name="carriageReturn" size={14} />
             </button>
           </div>
-        )}
-        {status === "ready" && sourceMode === "diff" && hunkTotal > 0 && baseDiff && (
+        <span className="git-diff-bar-sep" aria-hidden="true" />
+        {status === "ready" && hunkTotal > 0 && baseDiff && (
           <span className="git-diff-nav">
             <span className="git-diff-count">
               <span className="git-diff-add">+{baseDiff.stats.added}</span>
@@ -587,7 +565,33 @@ export function GitPane({
             </button>
           </span>
         )}
-      </div>
+        {viewButtons.length > 0 && (
+          <>
+            <span className="git-diff-bar-sep" aria-hidden="true" />
+            <div className="git-diff-views" role="group" aria-label={t("Git 显示方式")}>
+              {viewButtons.map(({ view, icon, label }) => (
+                <button
+                  key={view}
+                  type="button"
+                  className={paneView === view ? "git-icon-button active" : "git-icon-button"}
+                  aria-pressed={paneView === view}
+                  aria-label={t(label)}
+                  title={t(label)}
+                  onClick={() => onDiffChange({ paneView: view })}
+                >
+                  <Icon name={icon} size={14} />
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+    </>
+  );
+
+  return (
+    <>
+      {toolbarHost && createPortal(toolbar, toolbarHost)}
+      <div className="git-diff-pane">
 
       {status === "error" && (
         <div className="banner banner-warning" role="alert">
@@ -595,7 +599,7 @@ export function GitPane({
         </div>
       )}
       {note && status === "ready" && <div className="diff-notice">{note}</div>}
-      {status === "ready" && sourceMode === "diff" && formatOnlyCount > 0 && (
+      {status === "ready" && paneView === "render" && formatOnlyCount > 0 && (
         <div className="diff-notice">
           {t(
             "有 {0} 处改动仅涉及空白、缩进或 Markdown 标记，渲染结果与原文相同；黄色竖线表示这些源码行发生了变化。",
@@ -604,37 +608,30 @@ export function GitPane({
         </div>
       )}
 
-      <div className={isMarkdown ? "git-diff-scroll" : "git-diff-scroll git-diff-source"} ref={bodyRef}>
-        {status === "ready" && !isMarkdown ? (
-          sourceMode === "diff" && baseDiff && baseDiff.hunks.length === 0 ? (
+      <div
+        className={
+          paneView === "split" || !isMarkdown
+            ? "git-diff-scroll git-diff-source"
+            : "git-diff-scroll"
+        }
+        ref={bodyRef}
+      >
+        {status === "ready" && paneView === "split" ? (
+          noDiff ? (
             <p className="placeholder">{t("「{0}」与「{1}」没有差异。", labels.old, labels.next)}</p>
-          ) : sourceMode !== "diff" && sourceEmpty ? (
-            <p className="placeholder">{t("该提交中没有可显示的文件内容。")}</p>
           ) : (
             <SourceDiffPane
               oldText={result?.oldText ?? ""}
               newText={result?.newText ?? ""}
-              diff={sourceMode === "diff" ? baseDiff : null}
+              diff={baseDiff}
               language={sourceLanguageForFormat(document.format)}
-              mode={sourceMode}
+              granularity={diff.mode === "full" ? "full" : "collapse"}
               oldLabel={labels.old}
               newLabel={labels.next}
-              reveal={sourceMode === "diff" ? reveal : null}
+              reveal={reveal}
             />
           )
-        ) : status === "ready" && sourceMode !== "diff" ? (
-          sourceEmpty ? (
-            <p className="placeholder">{t("该提交中没有可显示的文件内容。")}</p>
-          ) : (
-            <RenderedMarkdown
-              html={sourceMode === "before" ? oldHtml : html}
-              filePath={document.path}
-              sourceKey={`git-diff:${document.id}:${sourceMode}`}
-              diff={null}
-              className="git-diff-body"
-            />
-          )
-        ) : status === "ready" && model && model.diff.hunks.length > 0 ? (
+        ) : status === "ready" && paneView === "render" && model && !noDiff ? (
           <RenderedMarkdown
             html={html}
             filePath={document.path}
@@ -642,6 +639,7 @@ export function GitPane({
             diff={model}
             onDiffModeChange={(mode) => onDiffChange({ mode })}
             className="git-diff-body"
+            plainFences
           />
         ) : (
           <p className="placeholder">
@@ -655,6 +653,7 @@ export function GitPane({
           </p>
         )}
       </div>
-    </div>
+      </div>
+    </>
   );
 }

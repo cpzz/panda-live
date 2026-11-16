@@ -94,19 +94,18 @@ export function DiffControls({
         type="button"
         className={enabled ? "statusbar-button diff-toggle active" : "statusbar-button diff-toggle"}
         aria-pressed={enabled}
-        title={dirty ? t("显示改动（包含未保存修改）") : t("显示改动（Ctrl+Shift+D）")}
+        aria-label={t("显示改动")}
+        title={
+          dirty
+            ? t("显示改动（包含未保存修改）")
+            : baseLabel
+              ? t("显示改动（Ctrl+Shift+D）{0}", baseLabel)
+              : t("显示改动（Ctrl+Shift+D）")
+        }
         onClick={onToggle}
         disabled={disabled}
       >
-        <span className="diff-sign" aria-hidden="true">
-          ±
-        </span>
-        <span className="diff-label">{t("显示改动")}</span>
-        {baseLabel && (
-          <span className="diff-baseline" aria-hidden="true">
-            {baseLabel}
-          </span>
-        )}
+        <Icon name="compare" size={12} />
         {enabled && dirty && <span className="diff-dirty-dot" aria-label={t("包含未保存修改")} />}
       </button>
 
@@ -190,7 +189,7 @@ export function DiffControls({
                     setListOpen(false);
                   }}
                 >
-                  <option value="full">{t("全文标注")}</option>
+                  <option value="full">{t("全文显示")}</option>
                   <option value="collapse">{t("折叠未改动")}</option>
                   <option value="fragments">{t("仅改动片段")}</option>
                 </select>
@@ -199,7 +198,7 @@ export function DiffControls({
                   className="statusbar-meta"
                   title={t("所见即所得为编辑态，无法隐藏可编辑内容；粒度仅适用于预览")}
                 >
-                  {t("全文标注")}
+                  {t("全文显示")}
                 </span>
               )}
             </div>

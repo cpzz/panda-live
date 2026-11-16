@@ -970,6 +970,8 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   /** 模式条左侧的块级工具栏挂载点；由 React 回调 ref 写入。 */
   const [modeToolbarHost, setModeToolbarHost] = useState<HTMLDivElement | null>(null);
+  /** git 模式下模式条左侧的 Git 工具区挂载点；GitPane 通过 portal 渲染到这里。 */
+  const [gitToolbarHost, setGitToolbarHost] = useState<HTMLDivElement | null>(null);
   /** 进入 Git 差异前的模式，用于工具栏按钮切回。 */
   const modeBeforeGitRef = useRef<EditorMode>("source");
   // 「放大查看」对话框：承载内嵌图表块的放大视图；svg 已由图表服务消毒。
@@ -1049,12 +1051,15 @@ export function App() {
   const activeContent = active?.content ?? "";
   const activeFormat = active?.format ?? "";
   const activeId = active?.id ?? "";
-  // 模式条：只对支持渲染预览的文本格式显示；二进制（PDF/图片）由专用只读面板展示。
-  const modeBarVisible = Boolean(active) && !activeIsBinary && formatHasPreview(activeFormat);
+  // 模式条：所有文本格式都显示（含只有「源码」的代码文件）；二进制由专用只读面板展示。
+  // git 模式下同一栏左侧显示 Git 工具，右侧显示模式按钮 + git 按钮。见 §21.15。
+  const modeBarVisible = Boolean(active) && !activeIsBinary;
   const modeBarModes: EditorMode[] =
     active?.format === "markdown"
-      ? ["source", "split", "preview", "wysiwyg"]
-      : ["source", "split", "preview"];
+      ? ["wysiwyg", "source", "split", "preview"]
+      : formatHasPreview(activeFormat)
+        ? ["source", "split", "preview"]
+        : ["source"];
   const showModeBarDivider =
     modeBarVisible && state.mode === "wysiwyg" && active?.format === "markdown" && !active.readOnly;
 
@@ -1105,15 +1110,15 @@ export function App() {
       }
     });
   };
-  /** 打开提交详情中的文件：基线为该提交，新侧为工作区。 */
-  const openCommitFile = (hash: string, file: string): void => {
+  /** 打开提交详情中的文件：对比该提交与其父提交（只看这次改动）。 */
+  const openCommitFile = (shortHash: string, file: string): void => {
     if (!gitRoot) return;
     const filePath = `${gitRoot.replace(/[\\/]+$/u, "")}/${file}`;
     void manager.openPath(filePath).then(() => {
       const current = manager.getState();
       const doc = current.documents.find((item) => item.id === current.activeId);
       if (!doc || doc.path !== filePath) return;
-      updateDiffOption(doc.id, { base: "commit", ref: hash, target: "buffer", paneMode: "baseline" });
+      updateDiffOption(doc.id, { paneMode: "refs", refA: `${shortHash}^`, refB: shortHash });
       if (doc.format !== "pdf" && doc.format !== "image") {
         if (current.mode !== "git") modeBeforeGitRef.current = current.mode;
         manager.setMode("git");
@@ -1892,7 +1897,7 @@ export function App() {
     },
     {
       id: "diff.mode.full",
-      title: t("差异视图：全文标注"),
+      title: t("差异视图：全文显示"),
       run: () => updateDiffOption(activeId, { mode: "full" }),
     },
     {
@@ -2027,8 +2032,7 @@ export function App() {
           </span>
         </div>
         <div className="toolbar-spacer" />
-        {/* 视图模式在模式条，Git 差异入口收敛到侧栏/状态栏/命令面板。见 §22.9。 */}
-        <span className="toolbar-divider" aria-hidden="true" />
+        {/* Git 显示模式入口已移到编辑区模式条最右侧的 git 按钮。见 §21.15。 */}
         <button
           type="button"
           className="icon-button toolbar-icon"
@@ -2112,7 +2116,7 @@ export function App() {
                   }}
                   onOpenFile={(filePath) => openGitFile(filePath, "buffer")}
                   onOpenStagedFile={(filePath) => openGitFile(filePath, "index")}
-                  onOpenCommitFile={(hash, file) => openCommitFile(hash, file)}
+                  onOpenCommitFile={(shortHash, file) => openCommitFile(shortHash, file)}
                   onOpenConflictFile={(filePath) => void manager.openPath(filePath)}
                 />
               }
@@ -2401,8 +2405,17 @@ export function App() {
           <div className="editor-area">
             {modeBarVisible && (
               <div className="mode-bar">
-                <div className="mode-bar-tools" ref={setModeToolbarHost} />
-                {showModeBarDivider && <span className="mode-bar-divider" aria-hidden="true" />}
+                {state.mode === "git" ? (
+                  // git 工具左对齐；由 GitPane portal 填充。
+                  <div className="mode-bar-git" ref={setGitToolbarHost} />
+                ) : (
+                  <>
+                    <div className="mode-bar-tools" ref={setModeToolbarHost} />
+                    {showModeBarDivider && (
+                      <span className="mode-bar-divider" aria-hidden="true" />
+                    )}
+                  </>
+                )}
                 <div className="mode-bar-modes" role="group" aria-label={t("视图模式")}>
                   {modeBarModes.map((mode) => (
                     <button
@@ -2412,12 +2425,37 @@ export function App() {
                       aria-pressed={state.mode === mode}
                       aria-label={t(MODE_LABELS[mode]!)}
                       data-tip={t(MODE_LABELS[mode]!)}
-                      onClick={() => manager.setMode(mode)}
+                      onClick={() => {
+                        // git 模式下点其它显示模式＝退出 git 并切换模式。
+                        if (state.mode === "git") leaveGitView();
+                        manager.setMode(mode);
+                      }}
                       disabled={mode === "wysiwyg" && active.format !== "markdown"}
                     >
                       <Icon name={MODE_ICONS[mode]} />
                     </button>
                   ))}
+                  {gitState.snapshot?.inRepo && (
+                    <button
+                      type="button"
+                      className={
+                        state.mode === "git"
+                          ? "mode-button mode-button-git active"
+                          : "mode-button mode-button-git"
+                      }
+                      aria-pressed={state.mode === "git"}
+                      aria-label={t("Git 差异")}
+                      data-tip={
+                        state.mode === "git" ? t("退出 Git 差异") : t("打开 Git 差异")
+                      }
+                      onClick={() => {
+                        if (state.mode === "git") leaveGitView();
+                        else enterGitView();
+                      }}
+                    >
+                      <Icon name={MODE_ICONS.git} />
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -2520,8 +2558,8 @@ export function App() {
                 active={state.mode === "git" && !activeIsBinary}
                 diff={activeDiff ?? DEFAULT_DOC_DIFF}
                 refreshKey={diffRefresh}
+                toolbarHost={state.mode === "git" ? gitToolbarHost : null}
                 onDiffChange={(patch) => updateDiffOption(active.id, patch)}
-                onReturnToEdit={leaveGitView}
               />
             </section>
             <section
@@ -2689,37 +2727,31 @@ export function App() {
               ? (workspace.roots[0]?.root.name ?? t("无工作区"))
               : t("{0} 个工作区", workspace.roots.length)}
         </span>
-        <DiffControls
-          enabled={diffEnabled && !activeIsBinary}
-          state={diffState}
-          items={diffItems}
-          currentIndex={diffIndex}
-          disabled={!active || activeIsBinary}
-          dirty={active?.dirty ?? false}
-          mode={diffMode}
-          baseLabel={diffBaselineLabel}
-          modeAvailable={state.mode !== "wysiwyg"}
-          onToggle={() => {
-            if (state.mode === "git") {
-              // Git 差异视图下点击开关：返回编辑视图并保持标注开启。
-              updateDiffOption(activeId, { enabled: true });
-              leaveGitView();
-              return;
-            }
-            updateDiffOption(activeId, { enabled: !diffEnabled });
-          }}
-          onModeChange={(mode) => updateDiffOption(activeId, { mode })}
-          onRefresh={() => setDiffRefresh((value) => value + 1)}
-          onPrev={() => navigateDiff(-1)}
-          onNext={() => navigateDiff(1)}
-          onOpenFullDiff={enterGitView}
-          onJump={(index) => {
-            const line = diffAnchors[index];
-            if (line === undefined) return;
-            setDiffIndex(index);
-            revealDiffAt(line);
-          }}
-        />
+        {state.mode !== "git" && (
+          <DiffControls
+            enabled={diffEnabled && !activeIsBinary}
+            state={diffState}
+            items={diffItems}
+            currentIndex={diffIndex}
+            disabled={!active || activeIsBinary}
+            dirty={active?.dirty ?? false}
+            mode={diffMode}
+            baseLabel={diffBaselineLabel}
+            modeAvailable={state.mode !== "wysiwyg"}
+            onToggle={() => updateDiffOption(activeId, { enabled: !diffEnabled })}
+            onModeChange={(mode) => updateDiffOption(activeId, { mode })}
+            onRefresh={() => setDiffRefresh((value) => value + 1)}
+            onPrev={() => navigateDiff(-1)}
+            onNext={() => navigateDiff(1)}
+            onOpenFullDiff={enterGitView}
+            onJump={(index) => {
+              const line = diffAnchors[index];
+              if (line === undefined) return;
+              setDiffIndex(index);
+              revealDiffAt(line);
+            }}
+          />
+        )}
         <button
           type="button"
           className={perfVisible ? "statusbar-button active" : "statusbar-button"}

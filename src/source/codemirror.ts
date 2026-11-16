@@ -25,6 +25,7 @@ import {
   HighlightStyle,
   StreamLanguage,
   bracketMatching,
+  codeFolding,
   defaultHighlightStyle,
   foldGutter,
   foldKeymap,
@@ -719,6 +720,25 @@ function createState(
       syntaxHighlighting(pandaHighlight),
       pandaTheme,
       diffExtension,
+      // 折叠占位显示「⋯ N 行未改动」；Git 对比用 setLineFolds 折叠未改动区域。
+      codeFolding({
+        preparePlaceholder: (state, value: { from: number; to: number }) => {
+          const fromLine = state.doc.lineAt(value.from).number;
+          const toLine = state.doc.lineAt(value.to).number;
+          return Math.max(1, toLine - fromLine + 1);
+        },
+        placeholderDOM: (view, onclick, prepared?: number) => {
+          const element = document.createElement("span");
+          element.className = "cm-foldPlaceholder";
+          // 只读的 Git 对比显示「⋯ N 行未改动」；可编辑模式的语法折叠保持简洁的「⋯」。
+          const readOnly = view.state.facet(EditorState.readOnly);
+          element.textContent =
+            readOnly && typeof prepared === "number" ? t("⋯ {0} 行未改动", prepared) : "⋯";
+          element.title = t("展开");
+          element.onclick = onclick;
+          return element;
+        },
+      }),
       EditorState.readOnly.of(readOnly),
       EditorView.editable.of(!readOnly),
       updateListener,
@@ -910,6 +930,49 @@ export class SourceEditor {
       const lineInfo = state.doc.line(line);
       const range = foldable(state, lineInfo.from, lineInfo.to);
       if (range) effects.push(foldEffect.of(range));
+    }
+    if (effects.length > 0) this.view.dispatch({ effects });
+  }
+
+  /**
+   * 按行区间折叠（1 基、闭区间）；用于 Git 对比隐藏未改动区域。
+   * 先展开现有折叠，避免与语法折叠或上次结果叠加。
+   */
+  setLineFolds(ranges: ReadonlyArray<{ fromLine: number; toLine: number }>): void {
+    const state = this.view.state;
+    const effects: Array<StateEffect<unknown>> = [];
+    const current = state.field(foldState, false);
+    if (current && current.size > 0) {
+      const cursor = current.iter();
+      while (cursor.value) {
+        effects.push(unfoldEffect.of({ from: cursor.from, to: cursor.to }));
+        cursor.next();
+      }
+    }
+    for (const range of ranges) {
+      const from = Math.max(1, Math.min(range.fromLine, state.doc.lines));
+      const to = Math.min(state.doc.lines, range.toLine);
+      if (to <= from) continue;
+      effects.push(
+        foldEffect.of({ from: state.doc.line(from).from, to: state.doc.line(to).to }),
+      );
+    }
+    if (effects.length > 0) this.view.dispatch({ effects });
+  }
+
+  /** 展开包含指定行的折叠（逐处跳转前调用，保证目标行可见）。 */
+  unfoldAtLine(line: number): void {
+    const state = this.view.state;
+    const folds = state.field(foldState, false);
+    if (!folds || folds.size === 0) return;
+    const pos = state.doc.line(Math.max(1, Math.min(line, state.doc.lines))).from;
+    const effects: Array<StateEffect<unknown>> = [];
+    const cursor = folds.iter();
+    while (cursor.value) {
+      if (cursor.from <= pos && pos <= cursor.to) {
+        effects.push(unfoldEffect.of({ from: cursor.from, to: cursor.to }));
+      }
+      cursor.next();
     }
     if (effects.length > 0) this.view.dispatch({ effects });
   }
