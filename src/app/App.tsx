@@ -1092,6 +1092,48 @@ export function App() {
   useEffect(() => {
     void git.setPath(gitProbePath);
   }, [git, gitProbePath]);
+  /** Git 差异面板的「新」侧：按文档记录工作区或暂存区，默认工作区。 */
+  const [gitDiffTargets, setGitDiffTargets] = useState<
+    Record<string, "worktree" | "index">
+  >({});
+  const gitDiffTarget: "worktree" | "index" = activeId
+    ? (gitDiffTargets[activeId] ?? "worktree")
+    : "worktree";
+  const setGitDiffTarget = useCallback(
+    (target: "worktree" | "index") => {
+      const id = manager.getState().activeId;
+      if (!id) return;
+      setGitDiffTargets((current) =>
+        current[id] === target ? current : { ...current, [id]: target },
+      );
+    },
+    [manager],
+  );
+  const openGitFile = useCallback(
+    (filePath: string, target: "worktree" | "index") => {
+      void manager.openPath(filePath).then(() => {
+        const current = manager.getState();
+        const doc = current.documents.find((item) => item.id === current.activeId);
+        if (!doc || doc.path !== filePath) return;
+        setGitDiffTargets((previous) => ({ ...previous, [doc.id]: target }));
+        if (formatHasPreview(doc.format)) manager.setMode("git");
+      });
+    },
+    [manager],
+  );
+  // 文档关闭后清理对应目标，避免长期运行时状态增长。
+  useEffect(() => {
+    const openIds = new Set(state.documents.map((document) => document.id));
+    setGitDiffTargets((current) => {
+      const keys = Object.keys(current);
+      if (keys.every((id) => openIds.has(id))) return current;
+      const next: typeof current = {};
+      for (const id of keys) {
+        if (openIds.has(id)) next[id] = current[id]!;
+      }
+      return next;
+    });
+  }, [state.documents]);
   useEffect(() => {
     const onFocus = (): void => {
       void git.refresh();
@@ -1120,6 +1162,11 @@ export function App() {
   >({});
   const [diffIndex, setDiffIndex] = useState(-1);
   const [diffRefresh, setDiffRefresh] = useState(0);
+  // Git 写操作成功后刷新已打开的差异视图，避免基线（HEAD/索引）变更后仍显示旧结果。
+  useEffect(() => {
+    if (gitState.version === 0) return;
+    setDiffRefresh((value) => value + 1);
+  }, [gitState.version]);
   const activeDiff = activeId ? diffOptions[activeId] : undefined;
   const diffEnabled = activeDiff?.enabled ?? false;
   const diffBase = activeDiff?.base ?? "head";
@@ -1810,10 +1857,15 @@ export function App() {
       id: "git.stageAll",
       title: t("暂存全部更改"),
       run: () => {
-        const paths =
-          git.getState().snapshot?.changes
-            .filter((change) => !change.staged && !change.conflicted)
-            .map((change) => change.path) ?? [];
+        const paths = [
+          ...new Set(
+            (git.getState().snapshot?.changes ?? [])
+              .filter((change) => !change.staged && !change.conflicted)
+              .flatMap((change) =>
+                change.origPath ? [change.origPath, change.path] : [change.path],
+              ),
+          ),
+        ];
         if (paths.length > 0) void git.stage(paths).catch(() => undefined);
       },
     },
@@ -1878,7 +1930,14 @@ export function App() {
       title: t("视图模式：预览"),
       run: () => manager.setMode("preview"),
     },
-    { id: "view.mode.git", title: t("视图模式：Git 差异"), run: () => manager.setMode("git") },
+    {
+      id: "view.mode.git",
+      title: t("视图模式：Git 差异"),
+      run: () => {
+        setGitDiffTarget("worktree");
+        manager.setMode("git");
+      },
+    },
     ...(import.meta.env.DEV
       ? [
           {
@@ -2018,6 +2077,7 @@ export function App() {
                 );
               } else {
                 modeBeforeGitRef.current = state.mode;
+                setGitDiffTarget("worktree");
                 manager.setMode("git");
               }
             }}
@@ -2071,19 +2131,13 @@ export function App() {
                   selectedRepo={gitRepoSelected}
                   onSelectRepo={setGitRepoChoice}
                   onSaveAll={async () => {
-                    if (!gitRoot) return;
-                    await manager.saveDocumentsInRoot(gitRoot);
+                    if (!gitRoot) return true;
+                    const saved = await manager.saveDocumentsInRoot(gitRoot);
                     await git.refresh();
+                    return saved;
                   }}
-                  onOpenFile={(filePath) => {
-                    void manager.openPath(filePath).then(() => {
-                      const current = manager.getState();
-                      const doc = current.documents.find((item) => item.id === current.activeId);
-                      if (doc?.path === filePath && formatHasPreview(doc.format)) {
-                        manager.setMode("git");
-                      }
-                    });
-                  }}
+                  onOpenFile={(filePath) => openGitFile(filePath, "worktree")}
+                  onOpenStagedFile={(filePath) => openGitFile(filePath, "index")}
                 />
               }
               sourceControlCount={gitState.snapshot?.changes.length ?? 0}
@@ -2485,9 +2539,10 @@ export function App() {
               aria-label={t("Git 差异")}
             >
               <GitPane
-                key={active.id}
+                key={`${active.id}:${gitDiffTarget}`}
                 document={active}
                 active={state.mode === "git" && !activeIsBinary}
+                initialTarget={gitDiffTarget}
               />
             </section>
             <section

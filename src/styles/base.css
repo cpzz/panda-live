@@ -4058,21 +4058,34 @@ body.resizing * {
   background: var(--surface-hover);
 }
 
+/* 键盘聚焦时给出与悬停一致的可见反馈。 */
+.git-change-row:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+/* 删除项没有可打开的当前内容，不显示可点击指针。 */
+.git-change-row-static {
+  cursor: default;
+}
+
 .git-change-status {
-  flex: 0 0 14px;
-  width: 14px;
+  flex: 0 0 16px;
+  width: 16px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 10.5px;
   text-align: center;
+  white-space: pre;
   color: var(--muted);
 }
 
-.git-change-status.status-a {
+.git-change-status.status-added,
+.git-change-status.status-untracked {
   color: var(--accent);
 }
 
-.git-change-status.status-d,
-.git-change-status.status-u {
+.git-change-status.status-deleted,
+.git-change-status.status-conflicted {
   color: var(--danger);
 }
 
@@ -4181,6 +4194,14 @@ body.resizing * {
   padding-left: 16px;
   font-family: var(--font-mono);
   font-size: 11px;
+}
+
+.git-commit-detail .git-detail-more {
+  list-style: none;
+  margin-left: -16px;
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: 10.5px;
 }
 
 .git-status-button {

@@ -226,6 +226,120 @@ test("M39：多根工作区切换仓库", async () => {
   }
 });
 
+/** M39：重命名条目在暂存、取消暂存与放弃时需要同时处理旧路径与新路径。 */
+test("M39：重命名条目与已暂存差异", async () => {
+  test.setTimeout(180_000);
+  const repo = await fs.mkdtemp(path.join(os.tmpdir(), "panda-rename-"));
+  const userDataDir = await fs.mkdtemp(path.join(os.tmpdir(), "panda-rename-ud-"));
+  const oldPath = path.join(repo, "old.md");
+  const newPath = path.join(repo, "new.md");
+  await initRepo(repo);
+  await fs.writeFile(oldPath, "# 旧文件\n", "utf8");
+  await git(repo, ["add", "."]);
+  await git(repo, ["commit", "-m", "初始提交"]);
+  // 已暂存的重命名：porcelain v2 记录为 type 2，新路径在前、旧路径在后。
+  await git(repo, ["mv", "old.md", "new.md"]);
+
+  const app = await electron.launch({
+    args: ["."],
+    cwd: CWD,
+    env: { ...process.env, PANDA_USER_DATA_DIR: userDataDir },
+  });
+  try {
+    const page = await app.firstWindow();
+    page.on("dialog", (dialog) => void dialog.accept());
+    await openFolder(page, app, repo);
+    await page.getByRole("tab", { name: "Git", exact: true }).click();
+
+    const renameRow = page.locator(".git-change-row").filter({ hasText: "old.md → new.md" });
+    await expect(renameRow).toHaveCount(1, { timeout: 20_000 });
+
+    // 已暂存条目打开 Git 差异时默认对比暂存区。
+    await renameRow.locator(".git-change-path").click();
+    await expect(page.getByRole("combobox", { name: "对比基线" })).toHaveValue("index", {
+      timeout: 20_000,
+    });
+    await expect(page.locator(".git-diff-pane")).toBeVisible();
+
+    // 取消暂存：旧路径回到未暂存删除，新路径从未跟踪开始。
+    await renameRow.getByRole("button", { name: "取消暂存", exact: true }).click();
+    await expect(page.locator(".git-change-row").filter({ hasText: "new.md" })).toHaveCount(1, {
+      timeout: 20_000,
+    });
+    expect(await git(repo, ["status", "--porcelain"])).toContain("D old.md");
+    expect(await git(repo, ["status", "--porcelain"])).toContain("?? new.md");
+
+    // 放弃：已跟踪删除恢复文件，未跟踪文件移入回收站，工作区回到干净状态。
+    await page
+      .locator(".git-change-row")
+      .filter({ hasText: "old.md" })
+      .getByRole("button", { name: "放弃修改", exact: true })
+      .click();
+    await expect(page.locator(".git-change-row").filter({ hasText: "old.md" })).toHaveCount(0, {
+      timeout: 20_000,
+    });
+    expect(await fs.readFile(oldPath, "utf8")).toContain("旧文件");
+
+    await page
+      .locator(".git-change-row")
+      .filter({ hasText: "new.md" })
+      .getByRole("button", { name: "放弃修改", exact: true })
+      .click();
+    await expect(page.locator(".git-clean")).toHaveText("工作区没有变更", { timeout: 20_000 });
+    expect(await git(repo, ["status", "--porcelain"])).toBe("");
+    await expect(fs.access(newPath)).rejects.toThrow();
+  } finally {
+    await app.close();
+    await fs.rm(repo, { recursive: true, force: true });
+    await fs.rm(userDataDir, { recursive: true, force: true });
+  }
+});
+
+/** M39：放弃已暂存的重命名（含未暂存修改）需要同时处理旧路径与新路径。 */
+test("M39：放弃重命名条目", async () => {
+  test.setTimeout(180_000);
+  const repo = await fs.mkdtemp(path.join(os.tmpdir(), "panda-rename-discard-"));
+  const userDataDir = await fs.mkdtemp(path.join(os.tmpdir(), "panda-rename-discard-ud-"));
+  const oldPath = path.join(repo, "old.md");
+  const newPath = path.join(repo, "new.md");
+  await initRepo(repo);
+  await fs.writeFile(oldPath, "# 旧文件\n", "utf8");
+  await git(repo, ["add", "."]);
+  await git(repo, ["commit", "-m", "初始提交"]);
+  await git(repo, ["mv", "old.md", "new.md"]);
+  // 重命名后再修改新路径：同一条目同时出现在「已暂存」与「更改」。
+  await fs.writeFile(newPath, "# 旧文件\n\n重命名后的修改。\n", "utf8");
+
+  const app = await electron.launch({
+    args: ["."],
+    cwd: CWD,
+    env: { ...process.env, PANDA_USER_DATA_DIR: userDataDir },
+  });
+  try {
+    const page = await app.firstWindow();
+    page.on("dialog", (dialog) => void dialog.accept());
+    await openFolder(page, app, repo);
+    await page.getByRole("tab", { name: "Git", exact: true }).click();
+
+    const unstagedRow = page
+      .locator(".git-change-group")
+      .filter({ hasText: "更改" })
+      .locator(".git-change-row")
+      .filter({ hasText: "old.md → new.md" });
+    await expect(unstagedRow).toHaveCount(1, { timeout: 20_000 });
+    await unstagedRow.getByRole("button", { name: "放弃修改", exact: true }).click();
+
+    await expect(page.locator(".git-clean")).toHaveText("工作区没有变更", { timeout: 20_000 });
+    expect(await git(repo, ["status", "--porcelain"])).toBe("");
+    expect(await fs.readFile(oldPath, "utf8")).toContain("旧文件");
+    await expect(fs.access(newPath)).rejects.toThrow();
+  } finally {
+    await app.close();
+    await fs.rm(repo, { recursive: true, force: true });
+    await fs.rm(userDataDir, { recursive: true, force: true });
+  }
+});
+
 /** M39：非 Git 仓库时给出明确空状态。 */
 test("M39：非仓库降级提示", async () => {
   test.setTimeout(120_000);

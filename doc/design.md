@@ -2089,7 +2089,9 @@ interface RenderedDiff {
 - 多根工作区：面板顶部提供仓库切换器，列出所有工作区目录；默认跟随当前文档所在仓库，切换文档时回到该文档所属仓库；
 - 状态栏右侧提供分支按钮：分支名 + `↑ahead ↓behind` + 进行中的操作；点击展开侧栏 Git 标签；
 - 命令面板提供：打开 Git、刷新 Git、暂存全部更改、fetch / pull / push；
-- 点击变更项打开对应文件；若格式支持渲染预览，同时切换到 Git 差异视图（§21），否则停留在源码模式；
+- 点击变更项打开对应文件；若格式支持渲染预览，同时切换到 Git 差异视图（§21），否则停留在源码模式。已暂存项默认对比「HEAD ⇄ 暂存区」，更改与未跟踪项对比工作区；Git 差异面板的「对比基线」下拉可随时切换工作区 / 暂存区；
+- 变更行的状态列保留 porcelain 两位状态码（索引 + 工作区，如 `MM`、`R `、`??`、`UU`），tooltip 显示原始字符；
+- 提交框在仓库存在未保存文档时先确认并「全部保存」，并明确提示提交只包含已暂存内容；切换仓库时清空提交草稿与 Amend；
 - 工具栏的 Git 按钮用于切换当前文档的 Git 差异视图，与侧栏 Git 面板互相独立。
 
 ### 22.3 数据契约与刷新
@@ -2113,7 +2115,9 @@ interface GitSnapshot {
 - `GitChange.path` 为**仓库根下的相对路径**，重命名保留 `origPath`；`staged` / `unstaged` / `untracked` / `conflicted` 为派生布尔值，`indexStatus` / `worktreeStatus` 保留 porcelain 原始字符；
 - 仓库探测路径：当前活动文档所在目录优先，否则取首个工作区根；探测成功后把仓库根登记为允许根（§22.5）；
 - 渲染进程 `GitStore` 以 `useSyncExternalStore` 暴露快照、分支、提交与 `loading` / `busy` / `error`；写操作串行（`busy` 非空时忽略新操作），完成后并行刷新快照、分支与日志；
-- 刷新时机：窗口重新获得焦点、文档从「未保存」变为「已保存」、每次 Git 操作后、手动刷新；`refresh` 使用递增 token 丢弃过期响应，避免快速切换文件时旧结果覆盖新结果；
+- 每次成功写操作递增 `version`，已打开的 Git 差异视图据此重新读取基线（HEAD / 索引可能已变化）；
+- 刷新时机：窗口重新获得焦点、文档从「未保存」变为「已保存」、每次 Git 操作后、手动刷新；
+- `refresh`、提交详情与写操作都以「探测路径 / 仓库根 + 递增 token」双重校验，切换仓库后旧请求的结果一律丢弃；写操作进行中禁用仓库切换器；
 - 首版不监听 `.git` 目录，外部终端操作需手动刷新或等窗口焦点变化。
 
 ### 22.4 主进程命令与解析
@@ -2123,7 +2127,7 @@ interface GitSnapshot {
 | 状态 | `status --porcelain=v2 --branch -z --untracked-files=normal` | NUL 分隔；`1/2/u/?` 记录，`2` 记录额外消费原路径 |
 | 暂存 | `--literal-pathspecs add -- <paths>` | 禁止通配符展开 |
 | 取消暂存 | `restore --staged -- <paths>` | 空仓库无 HEAD 时回退 `rm -r --cached` |
-| 放弃修改 | `restore --source=HEAD --staged --worktree -- <paths>` | 同时恢复工作区与暂存区 |
+| 放弃修改 | `restore --source=HEAD --staged --worktree -- <paths>` | 同时恢复工作区与暂存区；HEAD 中不存在的路径（重命名新路径、新增文件）改为 `rm --cached` + 删除工作区文件 |
 | 提交 | `commit --file - [--amend]` | 提交信息经 stdin 传入，避免临时文件与引号问题 |
 | 分支 | `for-each-ref --format=%(refname)%09%(refname:short)%09%(HEAD)%09%(upstream:short) refs/heads refs/remotes` | 过滤远程 `HEAD` |
 | 切换 / 创建 | `check-ref-format --branch <name>` + `switch [ -c ] <name>` | 创建与切换统一走 `switch` |
@@ -2157,13 +2161,13 @@ interface GitSnapshot {
 2. 用户在编辑器中自行解决后，点击「标记为已解决」执行 `git add <path>`，冲突项转入已暂存分组；
 3. 面板顶部显示当前进行中的 merge / rebase / cherry-pick，提供「继续」与「中止」；
 4. 「继续」执行对应 `--continue`，提交信息交给 Git（`GIT_EDITOR=true` 接受默认信息）；仍有未解决冲突时 Git 返回失败，stderr 显示在错误 banner；
-5. 「中止」执行对应 `--abort`，恢复操作前状态。
+5. 「中止」执行对应 `--abort`，恢复操作前状态；面板会先二次确认，避免误触丢弃中间状态。
 
 ### 22.7 历史视图
 
 - 首版为「最近提交列表 + 提交详情」，不做提交图；
-- 列表最多 50 条，显示标题、短 hash 与作者；点击后读取详情；
-- 详情包含标题、作者、ISO 时间、完整正文与变更文件列表；
+- 列表最多 50 条，显示标题、短 hash、作者与本地化时间；点击后读取详情；
+- 详情包含标题、作者、本地化时间、完整正文与变更文件列表；文件超过 100 个时其余折叠为计数提示，避免大提交阻塞界面；
 - 不提供回滚、revert、cherry-pick 到当前分支等写操作。
 
 ### 22.8 已知限制

@@ -236,14 +236,43 @@ export class GitService {
     return this.snapshot(root, commandLine);
   }
 
-  /** 放弃已跟踪文件的修改（同时恢复暂存区与工作区）。 */
+  /**
+   * 放弃已跟踪文件的修改（同时恢复暂存区与工作区）。
+   * 重命名会同时传入旧路径与新路径；新路径在 HEAD 中不存在时无法 restore，
+   * 需要从索引移除并删除工作区文件，避免整条命令失败。
+   */
   async discard(root: string, paths: string[], commandLine?: string): Promise<GitSnapshot> {
     const command = parseGitCommand(commandLine);
-    await runGit(
-      ["restore", "--source=HEAD", "--staged", "--worktree", "--", ...paths],
-      root,
-      command,
-    );
+    const restorable: string[] = [];
+    const absent: string[] = [];
+    for (const relative of paths) {
+      try {
+        await runGit(["cat-file", "-e", `HEAD:./${relative}`], root, command);
+        restorable.push(relative);
+      } catch (error) {
+        if (error instanceof PandaError) throw error;
+        absent.push(relative);
+      }
+    }
+    if (restorable.length > 0) {
+      await runGit(
+        ["restore", "--source=HEAD", "--staged", "--worktree", "--", ...restorable],
+        root,
+        command,
+      );
+    }
+    for (const relative of absent) {
+      const absolute = path.resolve(root, relative);
+      const rel = path.relative(root, absolute);
+      // IPC 已校验路径；这里再做一次防御，避免删除仓库外的文件。
+      if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) continue;
+      await runGit(
+        ["rm", "-r", "-f", "--cached", "--quiet", "--ignore-unmatch", "--", relative],
+        root,
+        command,
+      );
+      await fs.rm(absolute, { recursive: true, force: true }).catch(() => undefined);
+    }
     return this.snapshot(root, commandLine);
   }
 

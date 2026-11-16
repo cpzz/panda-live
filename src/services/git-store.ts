@@ -12,6 +12,8 @@ export interface GitStoreState {
   /** 正在执行的 Git 操作名称；非空时禁用写操作按钮。 */
   busy: string | null;
   error: string | null;
+  /** 每次成功写操作后递增，供差异视图等订阅方刷新基线。 */
+  version: number;
 }
 
 function joinPath(root: string, relative: string): string {
@@ -32,10 +34,12 @@ export class GitStore {
     loading: false,
     busy: null,
     error: null,
+    version: 0,
   };
 
   private readonly listeners = new Set<(state: GitStoreState) => void>();
   private refreshToken = 0;
+  private detailToken = 0;
 
   readonly getState = (): GitStoreState => this.state;
 
@@ -53,12 +57,17 @@ export class GitStore {
   /** 切换探测路径；同一路径重复设置时保留现有快照。 */
   async setPath(path: string | null): Promise<void> {
     if (this.state.path === path) return;
+    // 作废在途的刷新与提交详情，避免旧仓库结果覆盖新状态。
+    this.refreshToken += 1;
+    this.detailToken += 1;
     this.patch({
       path,
       snapshot: null,
       branches: [],
       commits: [],
       detail: null,
+      loading: false,
+      busy: null,
       error: null,
     });
     if (path) await this.refresh();
@@ -71,19 +80,20 @@ export class GitStore {
     this.patch({ loading: true, error: null });
     try {
       const snapshot = await window.panda.git.snapshot({ path });
-      if (token !== this.refreshToken) return;
+      if (token !== this.refreshToken || this.state.path !== path) return;
       if (!snapshot.inRepo || !snapshot.root) {
         this.patch({ snapshot, branches: [], commits: [], loading: false });
         return;
       }
+      const root = snapshot.root;
       const [branches, commits] = await Promise.all([
-        window.panda.git.branches({ root: snapshot.root }).catch(() => []),
-        window.panda.git.log({ root: snapshot.root, limit: 50 }).catch(() => []),
+        window.panda.git.branches({ root }).catch(() => []),
+        window.panda.git.log({ root, limit: 50 }).catch(() => []),
       ]);
-      if (token !== this.refreshToken) return;
+      if (token !== this.refreshToken || this.state.path !== path) return;
       this.patch({ snapshot, branches, commits, loading: false });
     } catch (error) {
-      if (token !== this.refreshToken) return;
+      if (token !== this.refreshToken || this.state.path !== path) return;
       this.patch({ loading: false, error: describeError(error) });
     }
   }
@@ -150,10 +160,14 @@ export class GitStore {
   async loadCommitDetail(hash: string): Promise<void> {
     const root = this.root;
     if (!root) return;
+    const token = ++this.detailToken;
     try {
       const detail = await window.panda.git.commitDetail({ root, hash });
+      // 仓库已切换或又发起了新的详情请求时丢弃旧结果。
+      if (token !== this.detailToken || this.root !== root) return;
       this.patch({ detail, error: null });
     } catch (error) {
+      if (token !== this.detailToken || this.root !== root) return;
       this.patch({ error: describeError(error) });
     }
   }
@@ -172,16 +186,32 @@ export class GitStore {
   ): Promise<void> {
     const root = this.root;
     if (!root || this.state.busy) return;
+    // 作废操作开始前在途的刷新，避免旧快照晚到覆盖操作结果。
+    this.refreshToken += 1;
     this.patch({ busy: label, error: null });
     try {
       const snapshot = await action(root);
+      // 操作期间切换了仓库：结果不属于当前仓库，直接丢弃。
+      if (this.root !== root) return;
       const [branches, commits] = await Promise.all([
         window.panda.git.branches({ root }).catch(() => this.state.branches),
         window.panda.git.log({ root, limit: 50 }).catch(() => this.state.commits),
       ]);
-      this.patch({ snapshot, branches, commits, busy: null });
+      if (this.root !== root) return;
+      // 作废操作期间发起的刷新：它们读到的可能是操作前的状态。
+      this.refreshToken += 1;
+      this.patch({
+        snapshot,
+        branches,
+        commits,
+        loading: false,
+        busy: null,
+        version: this.state.version + 1,
+      });
     } catch (error) {
-      this.patch({ busy: null, error: describeError(error) });
+      if (this.root !== root) return;
+      this.refreshToken += 1;
+      this.patch({ loading: false, busy: null, error: describeError(error) });
       throw error;
     }
   }

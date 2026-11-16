@@ -1,63 +1,101 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { GitChange } from "../shared/git";
 import type { GitStore, GitStoreState } from "../services/git-store";
-import { t } from "../i18n";
+import { localeTag, t } from "../i18n";
 import { Icon } from "./icons";
 
 interface GitPanelProps {
   store: GitStore;
   state: GitStoreState;
-  /** 打开仓库内文件并进入 Git 差异视图。 */
+  /** 打开仓库内文件并进入 Git 差异视图（工作区对比）。 */
   onOpenFile(path: string): void;
+  /** 打开已暂存文件并进入 Git 差异视图（HEAD 对比暂存区）。 */
+  onOpenStagedFile(path: string): void;
   /** 仓库内未保存文档数量；>0 时提示 Git 只读取磁盘内容。 */
   dirtyCount: number;
   /** 可切换的工作区目录（多根工作区与工作区外的当前文件目录）。 */
   repos: Array<{ path: string; name: string }>;
   selectedRepo: string | null;
   onSelectRepo(path: string): void;
-  onSaveAll(): Promise<void>;
+  /** 保存仓库内全部文档；返回 false 表示仍有文档未保存成功。 */
+  onSaveAll(): Promise<boolean>;
+}
+
+/** 单个变更涉及的全部路径；重命名/复制需要同时处理旧路径与新路径。 */
+function changePaths(change: GitChange): string[] {
+  return change.origPath && change.origPath !== change.path
+    ? [change.origPath, change.path]
+    : [change.path];
+}
+
+/** 消除重复路径，避免重命名条目在批量操作中重复执行。 */
+function allPaths(changes: GitChange[]): string[] {
+  return [...new Set(changes.flatMap(changePaths))];
 }
 
 function joinPath(root: string, relative: string): string {
   return `${root.replace(/[\\/]+$/u, "")}/${relative}`;
 }
 
+/** 保留 porcelain v2 的两位状态码：第一位是索引，第二位是工作区。 */
 function statusLabel(change: GitChange): string {
-  if (change.conflicted) return "U";
-  if (change.untracked) return "?";
-  const code = change.staged ? change.indexStatus : change.worktreeStatus;
-  return code === "." ? "M" : code;
+  if (change.untracked) return "??";
+  const index = change.indexStatus === "." ? " " : change.indexStatus;
+  const worktree = change.worktreeStatus === "." ? " " : change.worktreeStatus;
+  return `${index}${worktree}`;
+}
+
+/** 历史与详情统一显示本地时间，ISO 字符串仅在 tooltip 中保留。 */
+function formatCommitDate(iso: string): string {
+  const time = Date.parse(iso);
+  if (Number.isNaN(time)) return iso;
+  return new Date(time).toLocaleString(localeTag(), {
+    dateStyle: "medium",
+    timeStyle: "short",
+    hour12: false,
+  });
 }
 
 function ChangeRow({
   change,
-  root,
-  onOpenFile,
+  onOpen,
   onStage,
   onUnstage,
   onDiscard,
   disabled,
 }: {
   change: GitChange;
-  root: string;
-  onOpenFile(path: string): void;
-  onStage?(path: string): void;
-  onUnstage?(path: string): void;
+  onOpen(change: GitChange): void;
+  onStage?(change: GitChange): void;
+  onUnstage?(change: GitChange): void;
   onDiscard?(change: GitChange): void;
   disabled: boolean;
 }) {
   const display = change.origPath ? `${change.origPath} → ${change.path}` : change.path;
+  // 工作区没有文件内容时（删除、或已暂存重命名后又删除新路径）无法打开。
+  const staticRow = change.kind === "deleted" || change.worktreeStatus === "D";
+  const label = statusLabel(change);
   return (
     <div
-      className="git-change-row"
+      className={staticRow ? "git-change-row git-change-row-static" : "git-change-row"}
       title={display}
+      tabIndex={staticRow ? undefined : 0}
       onClick={() => {
-        if (change.kind === "deleted") return;
-        onOpenFile(joinPath(root, change.path));
+        if (!staticRow) onOpen(change);
+      }}
+      onKeyDown={(event) => {
+        // 只处理行本身获得焦点时的按键，避免与行内操作按钮的 Enter/Space 重复触发。
+        if (event.target !== event.currentTarget) return;
+        if (staticRow || (event.key !== "Enter" && event.key !== " ")) return;
+        event.preventDefault();
+        onOpen(change);
       }}
     >
-      <span className={`git-change-status status-${statusLabel(change).toLowerCase()}`}>
-        {statusLabel(change)}
+      <span
+        className={`git-change-status status-${change.kind}`}
+        title={`${change.indexStatus}${change.worktreeStatus}`}
+      >
+        {label}
       </span>
       <span className="git-change-path">{display}</span>
       <span className="git-change-actions" onClick={(event) => event.stopPropagation()}>
@@ -68,7 +106,7 @@ function ChangeRow({
             title={change.conflicted ? t("标记为已解决") : t("暂存")}
             aria-label={change.conflicted ? t("标记为已解决") : t("暂存")}
             disabled={disabled}
-            onClick={() => onStage(change.path)}
+            onClick={() => onStage(change)}
           >
             <Icon name="file-plus" size={13} />
           </button>
@@ -80,7 +118,7 @@ function ChangeRow({
             title={t("取消暂存")}
             aria-label={t("取消暂存")}
             disabled={disabled}
-            onClick={() => onUnstage(change.path)}
+            onClick={() => onUnstage(change)}
           >
             <Icon name="reset" size={13} />
           </button>
@@ -107,6 +145,7 @@ export function GitPanel({
   store,
   state,
   onOpenFile,
+  onOpenStagedFile,
   dirtyCount,
   repos,
   selectedRepo,
@@ -116,10 +155,14 @@ export function GitPanel({
   const [tab, setTab] = useState<"changes" | "history">("changes");
   const [message, setMessage] = useState("");
   const [amend, setAmend] = useState(false);
+  /** 提交前的保存阶段尚未进入 store.busy，用本地状态防止重复提交。 */
+  const [committing, setCommitting] = useState(false);
   const [branchOpen, setBranchOpen] = useState(false);
   const branchWrapRef = useRef<HTMLDivElement>(null);
+  const branchMenuRef = useRef<HTMLDivElement>(null);
   const [newBranch, setNewBranch] = useState("");
   const [detailHash, setDetailHash] = useState<string | null>(null);
+  const previousRepoRef = useRef(selectedRepo);
 
   const snapshot = state.snapshot;
   const root = snapshot?.root ?? null;
@@ -137,12 +180,32 @@ export function GitPanel({
     [changes],
   );
   const stagedCount = groups.staged.length;
-  const canCommit = stagedCount > 0 && message.trim().length > 0 && !busy;
+  const canCommit = stagedCount > 0 && message.trim().length > 0 && !busy && !committing;
+  const commitHint = committing
+    ? t("提交中…")
+    : busy
+      ? t("正在执行其他 Git 操作")
+      : stagedCount === 0
+        ? t("请先暂存文件")
+        : message.trim().length === 0
+          ? t("请填写提交信息")
+          : t("提交（Ctrl+Enter）");
   const localBranches = state.branches.filter((branch) => !branch.remote);
 
-  // 分支菜单：点击外部或按 Esc 关闭。
+  // 切换仓库时清空提交草稿与 Amend，避免把上一个仓库的信息带到新仓库。
+  useEffect(() => {
+    if (previousRepoRef.current === selectedRepo) return;
+    previousRepoRef.current = selectedRepo;
+    setMessage("");
+    setAmend(false);
+    setDetailHash(null);
+    setTab("changes");
+  }, [selectedRepo]);
+
+  // 分支菜单：点击外部或按 Esc 关闭；打开后把焦点移入第一项。
   useEffect(() => {
     if (!branchOpen) return;
+    branchMenuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
     const onPointerDown = (event: PointerEvent): void => {
       if (event.target instanceof Node && !branchWrapRef.current?.contains(event.target)) {
         setBranchOpen(false);
@@ -159,7 +222,18 @@ export function GitPanel({
     };
   }, [branchOpen]);
 
-  // 多根工作区：允许切换到其他目录对应的仓库。
+  // 多根工作区：允许切换到其他目录对应的仓库；操作进行中禁止切换。
+  // 同名目录用路径后缀区分，避免下拉里出现无法辨别的重复项。
+  const repoLabels = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const repo of repos) counts.set(repo.name, (counts.get(repo.name) ?? 0) + 1);
+    return new Map(
+      repos.map((repo) => [
+        repo.path,
+        (counts.get(repo.name) ?? 0) > 1 ? `${repo.name} — ${repo.path}` : repo.name,
+      ]),
+    );
+  }, [repos]);
   const repoPicker =
     repos.length > 1 ? (
       <label className="git-repo-picker">
@@ -169,11 +243,15 @@ export function GitPanel({
           aria-label={t("选择仓库")}
           title={repos.find((repo) => repo.path === selectedRepo)?.path ?? ""}
           value={selectedRepo ?? ""}
-          onChange={(event) => onSelectRepo(event.target.value)}
+          disabled={busy || committing}
+          onChange={(event) => {
+            if (busy || committing) return;
+            onSelectRepo(event.target.value);
+          }}
         >
           {repos.map((repo) => (
             <option key={repo.path} value={repo.path}>
-              {repo.name}
+              {repoLabels.get(repo.path) ?? repo.name}
             </option>
           ))}
         </select>
@@ -196,29 +274,72 @@ export function GitPanel({
     );
   }
 
+  const openChange = (change: GitChange, target: "worktree" | "index"): void => {
+    if (change.kind === "deleted") return;
+    const absolute = joinPath(root, change.path);
+    if (target === "index") {
+      onOpenStagedFile(absolute);
+    } else {
+      onOpenFile(absolute);
+    }
+  };
+  // 同一路径可能同时出现在已暂存与更改分组：只有已暂存分组对比索引。
+  const openWorktreeChange = (change: GitChange): void => openChange(change, "worktree");
+  const openStagedChange = (change: GitChange): void => openChange(change, "index");
+
   const confirmDiscard = (targets: GitChange[]): void => {
-    const names = targets.map((change) => change.path).join("\n");
-    if (!window.confirm(t("确定放弃以下文件的修改吗？\n{0}", names))) return;
-    const tracked = targets.filter((change) => !change.untracked).map((change) => change.path);
-    const untracked = targets.filter((change) => change.untracked).map((change) => change.path);
+    const names = targets
+      .map((change) => (change.origPath ? `${change.origPath} → ${change.path}` : change.path))
+      .join("\n");
+    const hasUntracked = targets.some((change) => change.untracked);
+    const prompt = hasUntracked
+      ? t(
+          "确定放弃以下文件的修改吗？\n{0}\n\n未跟踪文件将移入系统回收站。",
+          names,
+        )
+      : t("确定放弃以下文件的修改吗？\n{0}", names);
+    if (!window.confirm(prompt)) return;
+    const tracked = allPaths(targets.filter((change) => !change.untracked));
+    const untracked = allPaths(targets.filter((change) => change.untracked));
     void store.discard(tracked, untracked).catch(() => undefined);
   };
 
-  const sync = (action: "fetch" | "pull" | "push"): void => {
-    if (dirtyCount > 0 && action !== "fetch") {
-      if (!window.confirm(t("仓库内有 {0} 个未保存文档，Git 只使用磁盘内容。是否继续？", dirtyCount))) {
+  const confirmDirty = (action: "pull" | "push" | "checkout" | "commit"): boolean => {
+    if (dirtyCount === 0) return true;
+    if (action === "commit") {
+      return window.confirm(
+        t(
+          "仓库内有 {0} 个未保存文档，提交只会包含已暂存内容。是否先保存全部文档？",
+          dirtyCount,
+        ),
+      );
+    }
+    const text =
+      action === "checkout"
+        ? t("仓库内有 {0} 个未保存文档，切换分支只使用磁盘内容。是否继续？", dirtyCount)
+        : t("仓库内有 {0} 个未保存文档，Git 只使用磁盘内容。是否继续？", dirtyCount);
+    return window.confirm(text);
+  };
+
+  const push = (): void => {
+    if (!snapshot.upstream) {
+      if (!snapshot.branch || snapshot.detached) {
+        void store.push().catch(() => undefined);
         return;
       }
+      if (!window.confirm(t("分支「{0}」没有上游分支，是否推送并设置上游？", snapshot.branch))) {
+        return;
+      }
+      void store.push(true).catch(() => undefined);
+      return;
     }
+    void store.push().catch(() => undefined);
+  };
+
+  const sync = (action: "fetch" | "pull" | "push"): void => {
+    if (action !== "fetch" && !confirmDirty(action)) return;
     if (action === "push") {
-      void store.push().catch(async (error: unknown) => {
-        const text = error instanceof Error ? error.message : String(error);
-        if (/no upstream|upstream branch/iu.test(text) && snapshot.branch) {
-          if (window.confirm(t("分支「{0}」没有上游分支，是否推送并设置上游？", snapshot.branch))) {
-            await store.push(true).catch(() => undefined);
-          }
-        }
-      });
+      push();
       return;
     }
     void (action === "fetch" ? store.fetch() : store.pull()).catch(() => undefined);
@@ -227,16 +348,41 @@ export function GitPanel({
   const checkout = (branch: string): void => {
     setBranchOpen(false);
     if (branch === snapshot.branch) return;
-    if (dirtyCount > 0) {
-      if (!window.confirm(t("仓库内有 {0} 个未保存文档，切换分支只使用磁盘内容。是否继续？", dirtyCount))) {
-        return;
-      }
-    }
+    if (!confirmDirty("checkout")) return;
     void store.checkout(branch).catch(() => undefined);
   };
 
+  const runCommit = (): void => {
+    const text = message.trim();
+    if (!text || stagedCount === 0 || busy || committing) return;
+    if (!confirmDirty("commit")) return;
+    setCommitting(true);
+    void (async () => {
+      try {
+        if (dirtyCount > 0) {
+          const saved = await onSaveAll();
+          // 保存失败时不再提交，避免把磁盘上的旧内容当作最新改动。
+          if (!saved) return;
+        }
+        await store.commit(text, amend);
+        // 提交期间用户可能继续输入；只清空本次提交使用的文本。
+        setMessage((current) => (current.trim() === text ? "" : current));
+        setAmend(false);
+      } finally {
+        setCommitting(false);
+      }
+    })().catch(() => undefined);
+  };
+
+  const abortLabel =
+    snapshot.operation === "merge"
+      ? t("合并")
+      : snapshot.operation === "rebase"
+        ? t("变基")
+        : t("拣选");
+
   return (
-    <div className="git-panel">
+    <div className="git-panel" aria-busy={busy}>
       {repoPicker}
       <div className="git-panel-header">
         <div className="git-branch-wrap" ref={branchWrapRef}>
@@ -252,9 +398,29 @@ export function GitPanel({
             <Icon name="chevron-down" size={12} />
           </button>
           {branchOpen && (
-            <div className="git-branch-menu" role="menu">
+            <div
+              className="git-branch-menu"
+              role="menu"
+              ref={branchMenuRef}
+              onKeyDown={(event) => {
+                if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+                const items = Array.from(
+                  event.currentTarget.querySelectorAll<HTMLElement>(
+                    '[role="menuitem"]:not([disabled]), .git-branch-input, .git-branch-create button:not([disabled])',
+                  ),
+                );
+                if (items.length === 0) return;
+                event.preventDefault();
+                const current = items.indexOf(document.activeElement as HTMLElement);
+                const next =
+                  event.key === "ArrowDown"
+                    ? (current + 1 + items.length) % items.length
+                    : (current - 1 + items.length) % items.length;
+                items[next]?.focus();
+              }}
+            >
               {localBranches.map((branch) => (
-                <div key={branch.name} className="git-branch-row">
+                <div key={branch.name} className="git-branch-row" role="none">
                   <button
                     type="button"
                     className={branch.current ? "git-branch-item active" : "git-branch-item"}
@@ -283,6 +449,7 @@ export function GitPanel({
               ))}
               <form
                 className="git-branch-create"
+                role="none"
                 onSubmit={(event) => {
                   event.preventDefault();
                   const name = newBranch.trim();
@@ -312,12 +479,22 @@ export function GitPanel({
           <button
             type="button"
             className="git-icon-button"
+            title={t("刷新")}
+            aria-label={t("刷新")}
+            disabled={busy}
+            onClick={() => void store.refresh()}
+          >
+            <Icon name="refresh" size={13} />
+          </button>
+          <button
+            type="button"
+            className="git-icon-button"
             title={t("获取（fetch）")}
             aria-label={t("获取")}
             disabled={busy}
             onClick={() => sync("fetch")}
           >
-            <Icon name="refresh" size={13} />
+            <Icon name="reset" size={13} />
           </button>
           <button
             type="button"
@@ -345,7 +522,13 @@ export function GitPanel({
       {state.error && (
         <div className="banner banner-warning git-error" role="alert">
           <span className="banner-text">{state.error}</span>
-          <button type="button" className="git-icon-button" onClick={() => store.dismissError()}>
+          <button
+            type="button"
+            className="git-icon-button"
+            title={t("关闭")}
+            aria-label={t("关闭")}
+            onClick={() => store.dismissError()}
+          >
             <Icon name="close" size={12} />
           </button>
         </div>
@@ -353,7 +536,11 @@ export function GitPanel({
       {dirtyCount > 0 && (
         <div className="git-dirty-notice">
           <span>{t("有 {0} 个未保存文档，Git 操作只使用磁盘内容。", dirtyCount)}</span>
-          <button type="button" className="button small" onClick={() => void onSaveAll()}>
+          <button
+            type="button"
+            className="button small"
+            onClick={() => void onSaveAll().catch(() => undefined)}
+          >
             {t("全部保存")}
           </button>
         </div>
@@ -379,7 +566,16 @@ export function GitPanel({
             type="button"
             className="button small ghost"
             disabled={busy}
-            onClick={() => void store.abort().catch(() => undefined)}
+            onClick={() => {
+              if (
+                !window.confirm(
+                  t("确定中止{0}吗？当前操作的中间状态会被丢弃。", abortLabel),
+                )
+              ) {
+                return;
+              }
+              void store.abort().catch(() => undefined);
+            }}
           >
             {t("中止")}
           </button>
@@ -421,13 +617,7 @@ export function GitPanel({
               onKeyDown={(event) => {
                 if ((event.ctrlKey || event.metaKey) && event.key === "Enter" && canCommit) {
                   event.preventDefault();
-                  void store
-                    .commit(message.trim(), amend)
-                    .then(() => {
-                      setMessage("");
-                      setAmend(false);
-                    })
-                    .catch(() => undefined);
+                  runCommit();
                 }
               }}
             />
@@ -444,18 +634,10 @@ export function GitPanel({
                 type="button"
                 className="button small primary"
                 disabled={!canCommit}
-                title={canCommit ? t("提交（Ctrl+Enter）") : t("请先暂存文件并填写提交信息")}
-                onClick={() => {
-                  void store
-                    .commit(message.trim(), amend)
-                    .then(() => {
-                      setMessage("");
-                      setAmend(false);
-                    })
-                    .catch(() => undefined);
-                }}
+                title={commitHint}
+                onClick={runCommit}
               >
-                {state.busy === "提交" ? t("提交中…") : t("提交")}
+                {state.busy === "提交" || committing ? t("提交中…") : t("提交")}
               </button>
             </div>
           </div>
@@ -474,9 +656,10 @@ export function GitPanel({
                 <ChangeRow
                   key={change.path}
                   change={change}
-                  root={root}
-                  onOpenFile={onOpenFile}
-                  onStage={(path) => void store.stage([path]).catch(() => undefined)}
+                  onOpen={openWorktreeChange}
+                  onStage={(target) =>
+                    void store.stage(changePaths(target)).catch(() => undefined)
+                  }
                   disabled={busy}
                 />
               ))}
@@ -493,9 +676,7 @@ export function GitPanel({
                   className="git-group-action"
                   disabled={busy}
                   onClick={() =>
-                    void store
-                      .unstage(groups.staged.map((change) => change.path))
-                      .catch(() => undefined)
+                    void store.unstage(allPaths(groups.staged)).catch(() => undefined)
                   }
                 >
                   {t("全部取消暂存")}
@@ -505,10 +686,10 @@ export function GitPanel({
                 <ChangeRow
                   key={change.path}
                   change={change}
-                  root={root}
-                  onOpenFile={onOpenFile}
-                  onUnstage={(path) => void store.unstage([path]).catch(() => undefined)}
-                  onDiscard={(target) => confirmDiscard([target])}
+                  onOpen={openStagedChange}
+                  onUnstage={(target) =>
+                    void store.unstage(changePaths(target)).catch(() => undefined)
+                  }
                   disabled={busy}
                 />
               ))}
@@ -525,9 +706,7 @@ export function GitPanel({
                   className="git-group-action"
                   disabled={busy}
                   onClick={() =>
-                    void store
-                      .stage(groups.unstaged.map((change) => change.path))
-                      .catch(() => undefined)
+                    void store.stage(allPaths(groups.unstaged)).catch(() => undefined)
                   }
                 >
                   {t("全部暂存")}
@@ -537,9 +716,8 @@ export function GitPanel({
                 <ChangeRow
                   key={change.path}
                   change={change}
-                  root={root}
-                  onOpenFile={onOpenFile}
-                  onStage={(path) => void store.stage([path]).catch(() => undefined)}
+                  onOpen={openWorktreeChange}
+                  onStage={(target) => void store.stage(changePaths(target)).catch(() => undefined)}
                   onDiscard={(target) => confirmDiscard([target])}
                   disabled={busy}
                 />
@@ -557,9 +735,7 @@ export function GitPanel({
                   className="git-group-action"
                   disabled={busy}
                   onClick={() =>
-                    void store
-                      .stage(groups.untracked.map((change) => change.path))
-                      .catch(() => undefined)
+                    void store.stage(allPaths(groups.untracked)).catch(() => undefined)
                   }
                 >
                   {t("全部暂存")}
@@ -569,9 +745,8 @@ export function GitPanel({
                 <ChangeRow
                   key={change.path}
                   change={change}
-                  root={root}
-                  onOpenFile={onOpenFile}
-                  onStage={(path) => void store.stage([path]).catch(() => undefined)}
+                  onOpen={openWorktreeChange}
+                  onStage={(target) => void store.stage(changePaths(target)).catch(() => undefined)}
                   onDiscard={(target) => confirmDiscard([target])}
                   disabled={busy}
                 />
@@ -588,6 +763,7 @@ export function GitPanel({
               className="git-icon-button"
               title={t("刷新历史")}
               aria-label={t("刷新历史")}
+              disabled={busy}
               onClick={() => void store.refresh()}
             >
               <Icon name="refresh" size={12} />
@@ -599,7 +775,7 @@ export function GitPanel({
               key={commit.hash}
               type="button"
               className={detailHash === commit.hash ? "git-commit-row active" : "git-commit-row"}
-              title={`${commit.hash}\n${commit.author}\n${commit.date}`}
+              title={`${commit.hash}\n${commit.author}\n${formatCommitDate(commit.date)}`}
               onClick={() => {
                 setDetailHash(commit.hash);
                 void store.loadCommitDetail(commit.hash);
@@ -607,7 +783,7 @@ export function GitPanel({
             >
               <span className="git-commit-subject">{commit.subject}</span>
               <span className="git-commit-meta">
-                {commit.shortHash} · {commit.author}
+                {commit.shortHash} · {commit.author} · {formatCommitDate(commit.date)}
               </span>
             </button>
           ))}
@@ -615,16 +791,22 @@ export function GitPanel({
             <div className="git-commit-detail">
               <h3>{state.detail.subject}</h3>
               <p className="git-commit-detail-meta">
-                {state.detail.shortHash} · {state.detail.author} · {state.detail.date}
+                {state.detail.shortHash} · {state.detail.author} ·{" "}
+                {formatCommitDate(state.detail.date)}
               </p>
               {state.detail.body.trim() && <pre>{state.detail.body.trim()}</pre>}
               {state.detail.files.length > 0 && (
                 <>
                   <h4>{t("变更文件")}</h4>
                   <ul>
-                    {state.detail.files.map((file) => (
+                    {state.detail.files.slice(0, 100).map((file) => (
                       <li key={file}>{file}</li>
                     ))}
+                    {state.detail.files.length > 100 && (
+                      <li className="git-detail-more">
+                        {t("还有 {0} 个文件…", state.detail.files.length - 100)}
+                      </li>
+                    )}
                   </ul>
                 </>
               )}
@@ -633,7 +815,11 @@ export function GitPanel({
         </div>
       )}
 
-      {state.busy && <div className="git-busy">{t("{0}…", t(state.busy))}</div>}
+      {state.busy && (
+        <div className="git-busy" role="status" aria-live="polite">
+          {t("{0}…", t(state.busy))}
+        </div>
+      )}
     </div>
   );
 }

@@ -27,11 +27,15 @@ interface RefText {
 export function GitPane({
   document,
   active,
+  initialTarget = "worktree",
 }: {
   document: DocumentState;
   active: boolean;
+  /** 从侧栏「已暂存」进入时默认对比暂存区。 */
+  initialTarget?: "worktree" | "index";
 }) {
   const [compareMode, setCompareMode] = useState<CompareMode>("buffer");
+  const [compareTarget, setCompareTarget] = useState<"worktree" | "index">(initialTarget);
   const [singleDraft, setSingleDraft] = useState("HEAD");
   const [singleRef, setSingleRef] = useState("HEAD");
   const [aDraft, setADraft] = useState("HEAD~1");
@@ -137,9 +141,27 @@ export function GitPane({
             const source = await read(singleRef);
             if (cancelled) return;
             oldText = source.text;
-            newText = document.content;
             oldLabel = singleRef.trim();
-            newLabel = t("当前");
+            if (compareTarget === "index") {
+              // 暂存区内容作为「新」侧，展示 HEAD（或指定提交） ⇄ 索引 的已暂存差异。
+              const staged = await window.panda.git.diff({
+                path,
+                base: "index",
+                newText: "",
+              });
+              if (cancelled) return;
+              if (!staged.inRepo) {
+                throw new Error(t("未检测到 Git 仓库，请检查设置 → Git 中的 Git 命令"));
+              }
+              newText = staged.oldText ?? "";
+              newLabel = t("暂存区");
+              if (staged.oldText === null) {
+                notes.push(t("该文件在暂存区中没有内容，按全文删除显示"));
+              }
+            } else {
+              newText = document.content;
+              newLabel = t("当前");
+            }
             if (source.missing) {
               notes.push(
                 source.reason === "untracked"
@@ -211,6 +233,7 @@ export function GitPane({
   }, [
     active,
     compareMode,
+    compareTarget,
     document.content,
     document.encoding,
     document.format,
@@ -340,6 +363,18 @@ export function GitPane({
         </div>
 
         {status === "loading" && <span className="git-diff-state">{t("读取中…")}</span>}
+        {compareMode === "buffer" && (
+          <select
+            className="git-diff-view"
+            aria-label={t("对比基线")}
+            title={t("对比基线")}
+            value={compareTarget}
+            onChange={(event) => setCompareTarget(event.target.value as "worktree" | "index")}
+          >
+            <option value="worktree">{t("工作区")}</option>
+            <option value="index">{t("暂存区")}</option>
+          </select>
+        )}
         {status === "ready" && sourceMode === "diff" && isMarkdown && (
           <select
             className="git-diff-view"
