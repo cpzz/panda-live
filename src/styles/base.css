@@ -968,6 +968,118 @@ button {
   background: var(--surface-muted);
 }
 
+/* GitPane 顶栏：文件名 + 基线 chip + 弹层。见 §22.9。 */
+.git-diff-file {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.git-chip-wrap {
+  position: relative;
+}
+
+.git-diff-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.git-chip-popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 260px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.git-chip-option {
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.git-chip-option:hover {
+  background: var(--surface-hover);
+}
+
+.git-chip-option.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.git-chip-form {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 8px;
+  border-top: 1px solid var(--border);
+}
+
+.git-chip-form > label {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.git-chip-refs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.git-chip-refs .git-diff-input {
+  width: 84px;
+}
+
+.git-diff-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.git-diff-count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  display: inline-flex;
+  gap: 4px;
+  padding-right: 4px;
+}
+
+.git-diff-add {
+  color: var(--diff-add-fg);
+}
+
+.git-diff-del {
+  color: var(--diff-del-fg);
+}
+
 .git-icon-button {
   display: inline-flex;
   align-items: center;
@@ -3209,6 +3321,22 @@ body.resizing * {
   color: var(--diff-del-fg);
 }
 
+/* 状态栏开关上的被动基线标签：只读文本，不是控件。见 §22.9。 */
+.diff-baseline {
+  margin-left: 4px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--muted);
+}
+
+/* 改动列表弹层底部：进入 GitPane 完整差异视图。 */
+.diff-list-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
 .diff-unavailable {
   cursor: help;
   text-decoration: underline dotted;
@@ -4208,6 +4336,26 @@ body.resizing * {
   padding-left: 16px;
   font-family: var(--font-mono);
   font-size: 11px;
+}
+
+/* 提交详情的文件行可点击：打开该提交 ⇄ 工作区 的差异。见 §22.9。 */
+.git-commit-detail .git-detail-file {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 1px 2px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.git-commit-detail .git-detail-file:hover {
+  text-decoration: underline;
 }
 
 .git-commit-detail .git-detail-more {

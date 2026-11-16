@@ -5,7 +5,7 @@ import {
   type DiffHunk,
   type LineDiff,
 } from "../diff/compute";
-import type { DiffBase, GitBaselineReason } from "../shared/diff";
+import type { DiffBase, DiffFlags, GitBaselineReason } from "../shared/diff";
 import { describeError, getErrorCode } from "../shared/errors";
 import { getLocale, t } from "../i18n";
 
@@ -46,6 +46,7 @@ export function useDocumentDiff({
   enabled,
   base,
   ref,
+  flags,
   refreshKey,
   onFallback,
 }: {
@@ -54,6 +55,8 @@ export function useDocumentDiff({
   base: DiffBase;
   /** `base === "commit"` 时用于读取基线的提交引用。 */
   ref: string;
+  /** 与 GitPane 共享的忽略参数。 */
+  flags: DiffFlags;
   /** 手动重算信号：连续输入进入「改动待刷新」后由用户触发。 */
   refreshKey: number;
   onFallback(): void;
@@ -204,7 +207,11 @@ export function useDocumentDiff({
           }
 
           // oldText 为 null 表示基线中不存在该文件，按全文新增处理。
-          const diff = computeLineDiff(oldText ?? "", target.content);
+          const diff = computeLineDiff(oldText ?? "", target.content, {
+            ignoreWhitespace: flags.whitespace,
+            ignoreBlankLines: flags.blankLines,
+            ignoreCrAtEol: flags.crAtEol,
+          });
           previousRef.current = { documentId: target.id, diff };
           readyRef.current = { documentId: target.id, content: target.content, at: Date.now() };
           staleSinceRef.current = null;
@@ -264,6 +271,9 @@ export function useDocumentDiff({
     enabled,
     base,
     ref,
+    flags.whitespace,
+    flags.blankLines,
+    flags.crAtEol,
     refreshKey,
   ]);
 

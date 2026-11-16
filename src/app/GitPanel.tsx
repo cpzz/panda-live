@@ -11,6 +11,10 @@ interface GitPanelProps {
   onOpenFile(path: string): void;
   /** 打开已暂存文件并进入 Git 差异视图（HEAD 对比暂存区）。 */
   onOpenStagedFile(path: string): void;
+  /** 打开提交详情中的文件并进入 Git 差异视图（该提交对比工作区）。 */
+  onOpenCommitFile(hash: string, file: string): void;
+  /** 冲突项只打开文件本身：冲突标记需在源码模式处理，不进入只读差异视图。 */
+  onOpenConflictFile(path: string): void;
   /** 仓库内未保存文档数量；>0 时提示 Git 只读取磁盘内容。 */
   dirtyCount: number;
   /** 可切换的工作区目录（多根工作区与工作区外的当前文件目录）。 */
@@ -146,6 +150,8 @@ export function GitPanel({
   state,
   onOpenFile,
   onOpenStagedFile,
+  onOpenCommitFile,
+  onOpenConflictFile,
   dirtyCount,
   repos,
   selectedRepo,
@@ -656,7 +662,7 @@ export function GitPanel({
                 <ChangeRow
                   key={change.path}
                   change={change}
-                  onOpen={openWorktreeChange}
+                  onOpen={() => onOpenConflictFile(joinPath(root, change.path))}
                   onStage={(target) =>
                     void store.stage(changePaths(target)).catch(() => undefined)
                   }
@@ -787,31 +793,43 @@ export function GitPanel({
               </span>
             </button>
           ))}
-          {state.detail && (
+          {state.detail && (() => {
+            const detail = state.detail;
+            return (
             <div className="git-commit-detail">
-              <h3>{state.detail.subject}</h3>
+              <h3>{detail.subject}</h3>
               <p className="git-commit-detail-meta">
-                {state.detail.shortHash} · {state.detail.author} ·{" "}
-                {formatCommitDate(state.detail.date)}
+                {detail.shortHash} · {detail.author} ·{" "}
+                {formatCommitDate(detail.date)}
               </p>
-              {state.detail.body.trim() && <pre>{state.detail.body.trim()}</pre>}
-              {state.detail.files.length > 0 && (
+              {detail.body.trim() && <pre>{detail.body.trim()}</pre>}
+              {detail.files.length > 0 && (
                 <>
                   <h4>{t("变更文件")}</h4>
                   <ul>
-                    {state.detail.files.slice(0, 100).map((file) => (
-                      <li key={file}>{file}</li>
+                    {detail.files.slice(0, 100).map((file) => (
+                      <li key={file}>
+                        <button
+                          type="button"
+                          className="git-detail-file"
+                          title={t("查看该提交与工作区的差异")}
+                          onClick={() => onOpenCommitFile(detail.hash, file)}
+                        >
+                          {file}
+                        </button>
+                      </li>
                     ))}
-                    {state.detail.files.length > 100 && (
+                    {detail.files.length > 100 && (
                       <li className="git-detail-more">
-                        {t("还有 {0} 个文件…", state.detail.files.length - 100)}
+                        {t("还有 {0} 个文件…", detail.files.length - 100)}
                       </li>
                     )}
                   </ul>
                 </>
               )}
             </div>
-          )}
+            );
+          })()}
         </div>
       )}
 

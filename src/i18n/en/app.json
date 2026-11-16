@@ -73,7 +73,7 @@
   "视图模式：源码": "View mode: Source",
   "视图模式：分栏": "View mode: Split",
   "视图模式：预览": "View mode: Preview",
-  "视图模式：Git 差异": "View mode: Git Diff",
+  "打开 Git 差异视图": "Open Git Diff View",
   "切换性能浮层": "Toggle performance overlay",
   "折叠工作区": "Collapse workspace",
   "展开工作区": "Expand workspace",

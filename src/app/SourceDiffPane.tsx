@@ -18,6 +18,7 @@ export function SourceDiffPane({
   mode,
   oldLabel,
   newLabel,
+  reveal = null,
 }: {
   oldText: string;
   newText: string;
@@ -26,9 +27,17 @@ export function SourceDiffPane({
   mode: SourceDiffMode;
   oldLabel: string;
   newLabel: string;
+  /** 逐处跳转：把右侧编辑器光标移动到指定行。 */
+  reveal?: { line: number; token: number } | null;
 }) {
   const oldHostRef = useRef<HTMLDivElement>(null);
   const newHostRef = useRef<HTMLDivElement>(null);
+  const newEditorRef = useRef<SourceEditor | null>(null);
+
+  useEffect(() => {
+    if (!reveal) return;
+    newEditorRef.current?.setCursor({ line: reveal.line, column: 1 });
+  }, [reveal]);
 
   useEffect(() => {
     const editors: SourceEditor[] = [];
@@ -50,6 +59,7 @@ export function SourceDiffPane({
 
     const oldEditor = mode === "after" ? null : create(oldHostRef.current, oldText);
     const newEditor = mode === "before" ? null : create(newHostRef.current, newText);
+    newEditorRef.current = newEditor;
     if (diff) {
       oldEditor?.setDiffMarkers(oldLineMarkers(diff));
       newEditor?.setDiffMarkers(newLineMarkers(diff));
@@ -57,6 +67,7 @@ export function SourceDiffPane({
 
     return () => {
       for (const editor of editors) editor.destroy();
+      newEditorRef.current = null;
     };
   }, [diff, language, mode, newText, oldText]);
 

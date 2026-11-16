@@ -79,8 +79,11 @@ test("M26：渲染态差异——源码 gutter、预览词级标记与删除幽�
     await expect(page.locator(".markdown-body ins.diff-inline-add")).toHaveCount(0);
     await expect(page.locator("[data-diff-ghost]")).toHaveCount(0);
 
-    // 独立 Git 差异视图：临时目录不是 Git 仓库，应给出可操作提示。
-    await page.getByRole("button", { name: "Git 差异", exact: true }).click();
+    // 独立 Git 差异视图（命令面板进入）：临时目录不是 Git 仓库，
+    // 共享状态已回落到「上次保存」，chip 应跟随显示，不再重复报错。
+    await page.keyboard.press("Control+Shift+P");
+    await page.keyboard.type("打开 Git 差异视图");
+    await page.keyboard.press("Enter");
     await expect(page.locator(".git-diff-bar")).toBeVisible();
     await expect(page.getByRole("button", { name: "对比", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "源文件", exact: true })).toBeVisible();
@@ -88,6 +91,11 @@ test("M26：渲染态差异——源码 gutter、预览词级标记与删除幽�
     await expect(page.getByRole("button", { name: "忽略空白", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "忽略空行", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "忽略行尾 CR", exact: true })).toBeVisible();
+    await expect(page.locator(".git-diff-chip")).toContainText("上次保存");
+
+    // 手动切到「工作区 ⇄ HEAD」预设：非仓库应给出可操作提示。
+    await page.locator(".git-diff-chip").click();
+    await page.getByRole("menuitem", { name: "工作区 ⇄ HEAD" }).click();
     await expect(page.locator(".git-diff-pane .banner")).toContainText(
       /未找到 Git|未检测到 Git 仓库/,
     );

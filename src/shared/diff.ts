@@ -10,6 +10,46 @@ export type GitDiffBase = Exclude<DiffBase, "lastSave">;
 /** 渲染态差异的视图粒度。见 doc/design.md §21.6、§21.8.2。 */
 export type DiffViewMode = "full" | "collapse" | "fragments";
 
+/** 与 git diff 对齐的比较选项，状态栏就地标注与 GitPane 共享。 */
+export interface DiffFlags {
+  whitespace: boolean;
+  blankLines: boolean;
+  crAtEol: boolean;
+}
+
+/**
+ * 每个文档的差异状态：状态栏就地标注与 GitPane 差异视图的唯一事实源。
+ * 就地标注始终比较 `base ⇄ 缓冲区`；`target/paneMode/refA/refB` 只影响 GitPane。
+ * 见 doc/design.md §21.8、§22.9。
+ */
+export interface DocDiffState {
+  /** 状态栏就地标注开关。 */
+  enabled: boolean;
+  base: DiffBase;
+  /** `base === "commit"` 时的提交引用。 */
+  ref: string;
+  /** GitPane 的「新」侧：工作区缓冲区或暂存区。 */
+  target: "buffer" | "index";
+  mode: DiffViewMode;
+  flags: DiffFlags;
+  /** GitPane 比较模式：基线⇄新侧，或提交⇄提交。 */
+  paneMode: "baseline" | "refs";
+  refA: string;
+  refB: string;
+}
+
+export const DEFAULT_DOC_DIFF: DocDiffState = {
+  enabled: false,
+  base: "head",
+  ref: "",
+  target: "buffer",
+  mode: "full",
+  flags: { whitespace: false, blankLines: false, crAtEol: true },
+  paneMode: "baseline",
+  refA: "HEAD~1",
+  refB: "HEAD",
+};
+
 export interface GitDiffRequest {
   path: string;
   base: GitDiffBase;

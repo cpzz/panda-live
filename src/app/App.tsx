@@ -37,7 +37,7 @@ import { DiffControls, type DiffListItem } from "./DiffControls";
 import { diffLineMarkers, describeHunk, useDocumentDiff } from "./useDocumentDiff";
 import { hunkAnchorLine, type DiffHunk } from "../diff/compute";
 import type { PreviewDiffModel } from "../diff/preview";
-import type { DiffBase, DiffViewMode } from "../shared/diff";
+import { DEFAULT_DOC_DIFF, type DiffViewMode, type DocDiffState } from "../shared/diff";
 import { Icon, PandaMark, fileIconForPath, type IconName } from "./icons";
 import { OutlinePanel } from "./OutlinePanel";
 import { PdfPreview, PdfDocumentPreview } from "./PdfPreview";
@@ -1092,48 +1092,51 @@ export function App() {
   useEffect(() => {
     void git.setPath(gitProbePath);
   }, [git, gitProbePath]);
-  /** Git 差异面板的「新」侧：按文档记录工作区或暂存区，默认工作区。 */
-  const [gitDiffTargets, setGitDiffTargets] = useState<
-    Record<string, "worktree" | "index">
-  >({});
-  const gitDiffTarget: "worktree" | "index" = activeId
-    ? (gitDiffTargets[activeId] ?? "worktree")
-    : "worktree";
-  const setGitDiffTarget = useCallback(
-    (target: "worktree" | "index") => {
-      const id = manager.getState().activeId;
-      if (!id) return;
-      setGitDiffTargets((current) =>
-        current[id] === target ? current : { ...current, [id]: target },
-      );
-    },
-    [manager],
-  );
-  const openGitFile = useCallback(
-    (filePath: string, target: "worktree" | "index") => {
-      void manager.openPath(filePath).then(() => {
-        const current = manager.getState();
-        const doc = current.documents.find((item) => item.id === current.activeId);
-        if (!doc || doc.path !== filePath) return;
-        setGitDiffTargets((previous) => ({ ...previous, [doc.id]: target }));
-        if (formatHasPreview(doc.format)) manager.setMode("git");
-      });
-    },
-    [manager],
-  );
-  // 文档关闭后清理对应目标，避免长期运行时状态增长。
-  useEffect(() => {
-    const openIds = new Set(state.documents.map((document) => document.id));
-    setGitDiffTargets((current) => {
-      const keys = Object.keys(current);
-      if (keys.every((id) => openIds.has(id))) return current;
-      const next: typeof current = {};
-      for (const id of keys) {
-        if (openIds.has(id)) next[id] = current[id]!;
+  /** 打开仓库内文件并进入 GitPane：target 决定「新」侧是工作区还是暂存区。 */
+  const openGitFile = (filePath: string, target: "buffer" | "index"): void => {
+    void manager.openPath(filePath).then(() => {
+      const current = manager.getState();
+      const doc = current.documents.find((item) => item.id === current.activeId);
+      if (!doc || doc.path !== filePath) return;
+      updateDiffOption(doc.id, { base: "head", ref: "", target, paneMode: "baseline" });
+      if (doc.format !== "pdf" && doc.format !== "image") {
+        if (current.mode !== "git") modeBeforeGitRef.current = current.mode;
+        manager.setMode("git");
       }
-      return next;
     });
-  }, [state.documents]);
+  };
+  /** 打开提交详情中的文件：基线为该提交，新侧为工作区。 */
+  const openCommitFile = (hash: string, file: string): void => {
+    if (!gitRoot) return;
+    const filePath = `${gitRoot.replace(/[\\/]+$/u, "")}/${file}`;
+    void manager.openPath(filePath).then(() => {
+      const current = manager.getState();
+      const doc = current.documents.find((item) => item.id === current.activeId);
+      if (!doc || doc.path !== filePath) return;
+      updateDiffOption(doc.id, { base: "commit", ref: hash, target: "buffer", paneMode: "baseline" });
+      if (doc.format !== "pdf" && doc.format !== "image") {
+        if (current.mode !== "git") modeBeforeGitRef.current = current.mode;
+        manager.setMode("git");
+      }
+    });
+  };
+  /** 进入 GitPane（保持当前共享基线）。 */
+  const enterGitView = (): void => {
+    const current = manager.getState();
+    const doc = current.documents.find((item) => item.id === current.activeId);
+    if (!doc || doc.format === "pdf" || doc.format === "image") return;
+    if (current.mode !== "git") modeBeforeGitRef.current = current.mode;
+    manager.setMode("git");
+  };
+  /** 返回 GitPane 之前的编辑视图。 */
+  const leaveGitView = (): void => {
+    const target = modeBeforeGitRef.current;
+    manager.setMode(
+      (target === "split" || target === "preview") && !formatHasPreview(active?.format ?? "")
+        ? "source"
+        : target,
+    );
+  };
   useEffect(() => {
     const onFocus = (): void => {
       void git.refresh();
@@ -1156,10 +1159,8 @@ export function App() {
     if (saved) void git.refresh();
   }, [state.documents, git]);
 
-  // 渲染态差异：每个文档独立保存开关与基线。见 doc/design.md §21.8.1。
-  const [diffOptions, setDiffOptions] = useState<
-    Record<string, { enabled: boolean; base: DiffBase; mode: DiffViewMode; ref: string }>
-  >({});
+  // 渲染态差异：每个文档一份共享状态，驱动状态栏就地标注与 GitPane。见 §21.8.1、§22.9。
+  const [diffOptions, setDiffOptions] = useState<Record<string, DocDiffState>>({});
   const [diffIndex, setDiffIndex] = useState(-1);
   const [diffRefresh, setDiffRefresh] = useState(0);
   // Git 写操作成功后刷新已打开的差异视图，避免基线（HEAD/索引）变更后仍显示旧结果。
@@ -1172,6 +1173,14 @@ export function App() {
   const diffBase = activeDiff?.base ?? "head";
   const diffMode = activeDiff?.mode ?? "full";
   const diffRef = activeDiff?.ref ?? "";
+  const diffFlags = activeDiff?.flags ?? DEFAULT_DOC_DIFF.flags;
+  const diffBaselineLabel = !activeDiff
+    ? ""
+    : activeDiff.base === "head"
+      ? "⇄ HEAD"
+      : activeDiff.base === "commit"
+        ? `⇄ ${(activeDiff.ref.trim() || "HEAD").slice(0, 8)}`
+        : `⇄ ${t("上次保存")}`;
 
   useEffect(() => {
     if (!activeId) return;
@@ -1181,10 +1190,8 @@ export function App() {
         : {
             ...current,
             [activeId]: {
+              ...DEFAULT_DOC_DIFF,
               enabled: settingsRef.current.diff.defaultOn,
-              base: "head",
-              mode: "full",
-              ref: "",
             },
           },
     );
@@ -1204,18 +1211,10 @@ export function App() {
     });
   }, [state.documents]);
 
-  const updateDiffOption = (
-    id: string,
-    patch: Partial<{ enabled: boolean; base: DiffBase; mode: DiffViewMode; ref: string }>,
-  ): void => {
+  const updateDiffOption = (id: string, patch: Partial<DocDiffState>): void => {
     if (!id) return;
     setDiffOptions((current) => {
-      const previous = current[id] ?? {
-        enabled: false,
-        base: "head" as DiffBase,
-        mode: "full" as DiffViewMode,
-        ref: "",
-      };
+      const previous = current[id] ?? DEFAULT_DOC_DIFF;
       return { ...current, [id]: { ...previous, ...patch } };
     });
     setDiffIndex(-1);
@@ -1227,6 +1226,7 @@ export function App() {
     enabled: diffEnabled && !activeIsBinary,
     base: diffBase,
     ref: diffRef,
+    flags: diffFlags,
     refreshKey: diffRefresh,
     onFallback: () => {
       const id = activeRef.current?.id;
@@ -1932,11 +1932,8 @@ export function App() {
     },
     {
       id: "view.mode.git",
-      title: t("视图模式：Git 差异"),
-      run: () => {
-        setGitDiffTarget("worktree");
-        manager.setMode("git");
-      },
+      title: t("打开 Git 差异视图"),
+      run: () => enterGitView(),
     },
     ...(import.meta.env.DEV
       ? [
@@ -2030,33 +2027,7 @@ export function App() {
           </span>
         </div>
         <div className="toolbar-spacer" />
-        {/* 视图模式已移到文件内容区顶部的固定模式条；主工具栏暂保留 Git 差异入口。 */}
-        <div className="mode-switch" role="group" aria-label={t(MODE_LABELS.git!)}>
-          <button
-            type="button"
-            className={state.mode === "git" ? "mode-button active" : "mode-button"}
-            aria-pressed={state.mode === "git"}
-            aria-label={t(MODE_LABELS.git!)}
-            data-tip={t(MODE_LABELS.git!)}
-            onClick={() => {
-              if (state.mode === "git") {
-                const target = modeBeforeGitRef.current;
-                manager.setMode(
-                  (target === "split" || target === "preview") && !formatHasPreview(active?.format ?? "")
-                    ? "source"
-                    : target,
-                );
-              } else {
-                modeBeforeGitRef.current = state.mode;
-                setGitDiffTarget("worktree");
-                manager.setMode("git");
-              }
-            }}
-            disabled={!active || activeIsBinary}
-          >
-            <Icon name={MODE_ICONS.git} />
-          </button>
-        </div>
+        {/* 视图模式在模式条，Git 差异入口收敛到侧栏/状态栏/命令面板。见 §22.9。 */}
         <span className="toolbar-divider" aria-hidden="true" />
         <button
           type="button"
@@ -2139,8 +2110,10 @@ export function App() {
                     await git.refresh();
                     return saved;
                   }}
-                  onOpenFile={(filePath) => openGitFile(filePath, "worktree")}
+                  onOpenFile={(filePath) => openGitFile(filePath, "buffer")}
                   onOpenStagedFile={(filePath) => openGitFile(filePath, "index")}
+                  onOpenCommitFile={(hash, file) => openCommitFile(hash, file)}
+                  onOpenConflictFile={(filePath) => void manager.openPath(filePath)}
                 />
               }
               sourceControlCount={gitState.snapshot?.changes.length ?? 0}
@@ -2542,10 +2515,13 @@ export function App() {
               aria-label={t("Git 差异")}
             >
               <GitPane
-                key={`${active.id}:${gitDiffTarget}`}
+                key={active.id}
                 document={active}
                 active={state.mode === "git" && !activeIsBinary}
-                initialTarget={gitDiffTarget}
+                diff={activeDiff ?? DEFAULT_DOC_DIFF}
+                refreshKey={diffRefresh}
+                onDiffChange={(patch) => updateDiffOption(active.id, patch)}
+                onReturnToEdit={leaveGitView}
               />
             </section>
             <section
@@ -2721,12 +2697,22 @@ export function App() {
           disabled={!active || activeIsBinary}
           dirty={active?.dirty ?? false}
           mode={diffMode}
+          baseLabel={diffBaselineLabel}
           modeAvailable={state.mode !== "wysiwyg"}
-          onToggle={() => updateDiffOption(activeId, { enabled: !diffEnabled })}
+          onToggle={() => {
+            if (state.mode === "git") {
+              // Git 差异视图下点击开关：返回编辑视图并保持标注开启。
+              updateDiffOption(activeId, { enabled: true });
+              leaveGitView();
+              return;
+            }
+            updateDiffOption(activeId, { enabled: !diffEnabled });
+          }}
           onModeChange={(mode) => updateDiffOption(activeId, { mode })}
           onRefresh={() => setDiffRefresh((value) => value + 1)}
           onPrev={() => navigateDiff(-1)}
           onNext={() => navigateDiff(1)}
+          onOpenFullDiff={enterGitView}
           onJump={(index) => {
             const line = diffAnchors[index];
             if (line === undefined) return;

@@ -20,6 +20,8 @@ interface DiffControlsProps {
   disabled: boolean;
   dirty: boolean;
   mode: DiffViewMode;
+  /** 当前共享基线的被动标签（如 `⇄ HEAD`），非控件。见 §22.9。 */
+  baseLabel: string;
   /** 所见即所得为编辑态，不提供折叠/片段粒度。 */
   modeAvailable: boolean;
   onToggle(): void;
@@ -28,12 +30,14 @@ interface DiffControlsProps {
   onPrev(): void;
   onNext(): void;
   onJump(index: number): void;
+  /** 打开 GitPane 完整差异视图（同一共享状态）。 */
+  onOpenFullDiff(): void;
 }
 
 /**
  * 状态栏的改动入口：开关、计数、上下一处与改动列表。
- * 基线/提交选择由独立 Git 差异面板负责，状态栏不再重复。
- * 见 doc/design.md §21.8.1–§21.8.3。
+ * 开关只跟随共享 diffOptions，基线选择由 GitPane 与侧栏负责。
+ * 见 doc/design.md §21.8.1–§21.8.3、§22.9。
  */
 export function DiffControls({
   enabled,
@@ -43,6 +47,7 @@ export function DiffControls({
   disabled,
   dirty,
   mode,
+  baseLabel,
   modeAvailable,
   onToggle,
   onModeChange,
@@ -50,6 +55,7 @@ export function DiffControls({
   onPrev,
   onNext,
   onJump,
+  onOpenFullDiff,
 }: DiffControlsProps) {
   const [listOpen, setListOpen] = useState(false);
 
@@ -96,6 +102,11 @@ export function DiffControls({
           ±
         </span>
         <span className="diff-label">{t("显示改动")}</span>
+        {baseLabel && (
+          <span className="diff-baseline" aria-hidden="true">
+            {baseLabel}
+          </span>
+        )}
         {enabled && dirty && <span className="diff-dirty-dot" aria-label={t("包含未保存修改")} />}
       </button>
 
@@ -218,6 +229,18 @@ export function DiffControls({
                 </li>
               ))}
             </ul>
+            <div className="diff-list-footer">
+              <button
+                type="button"
+                className="button small"
+                onClick={() => {
+                  setListOpen(false);
+                  onOpenFullDiff();
+                }}
+              >
+                {t("查看完整差异")}
+              </button>
+            </div>
           </div>
         </>
       )}

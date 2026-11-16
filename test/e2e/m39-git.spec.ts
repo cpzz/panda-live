@@ -84,6 +84,11 @@ test("M39：源代码管理变更、提交与分支", async () => {
     await expect(page.locator(".git-commit-detail h3")).toHaveText("更新说明");
     await expect(page.locator(".git-commit-detail")).toContainText("note.md");
 
+    // 点击提交详情的文件行：进入「提交 ⇄ 工作区」差异视图，chip 跟随共享基线。
+    await page.locator(".git-detail-file").first().click();
+    await expect(page.locator(".git-diff-pane")).toBeVisible({ timeout: 20_000 });
+    await expect(page.locator(".git-diff-chip")).toContainText("工作区 ⇄", { timeout: 20_000 });
+
     // 创建并切换分支。
     await page.getByRole("tab", { name: "更改", exact: true }).click();
     await branchButton.click();
@@ -254,11 +259,9 @@ test("M39：重命名条目与已暂存差异", async () => {
     const renameRow = page.locator(".git-change-row").filter({ hasText: "old.md → new.md" });
     await expect(renameRow).toHaveCount(1, { timeout: 20_000 });
 
-    // 已暂存条目打开 Git 差异时默认对比暂存区。
+    // 已暂存条目打开 Git 差异时默认对比暂存区（基线 chip 显示 HEAD ⇄ 暂存区）。
     await renameRow.locator(".git-change-path").click();
-    await expect(page.getByRole("combobox", { name: "对比基线" })).toHaveValue("index", {
-      timeout: 20_000,
-    });
+    await expect(page.locator(".git-diff-chip")).toContainText("暂存区", { timeout: 20_000 });
     await expect(page.locator(".git-diff-pane")).toBeVisible();
 
     // 取消暂存：旧路径回到未暂存删除，新路径从未跟踪开始。
