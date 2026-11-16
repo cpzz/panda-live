@@ -18,7 +18,8 @@ async function launchWithFile(
   await app.evaluate(({ dialog }, target) => {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
   }, filePath);
-  await page.getByRole("button", { name: "打开", exact: true }).click();
+  await page.locator(".app").waitFor();
+  await page.keyboard.press("Control+O");
   await expect(page.locator(".tab-name")).toHaveText(path.basename(filePath));
   // Markdown 默认以所见即所得打开；这些用例验证源码编辑器能力。
   await page.getByRole("button", { name: "源码", exact: true }).click();
@@ -93,7 +94,8 @@ test("M7：标签支持拖拽排序与中键关闭", async () => {
   await app.evaluate(({ dialog }, targets) => {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: targets });
   }, [first, second]);
-  await page.getByRole("button", { name: "打开", exact: true }).click();
+  await page.locator(".app").waitFor();
+  await page.keyboard.press("Control+O");
 
   const tabs = page.locator(".tab");
   try {

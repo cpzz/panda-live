@@ -73,7 +73,8 @@ test("M5：示例扩展新增 .adoc 格式，禁用后回退纯文本", async ()
     await app.evaluate(({ dialog }, target) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
     }, path0);
-    await page.getByRole("button", { name: "打开", exact: true }).click();
+    await page.locator(".app").waitFor();
+    await page.keyboard.press("Control+O");
     await expect(page.locator(".tab-name")).toHaveText("sample.adoc");
     await expect(page.locator(".extension-preview h1")).toHaveText("示例标题", { timeout: 15_000 });
     await expect(page.locator(".extension-preview p")).toHaveText("正文段落");
@@ -82,7 +83,7 @@ test("M5：示例扩展新增 .adoc 格式，禁用后回退纯文本", async ()
     await page.locator(".cm-content").click();
     await page.keyboard.press("Control+A");
     await page.keyboard.type("= 更新标题\n\n更新正文");
-    await page.getByRole("button", { name: "保存", exact: true }).click();
+    await page.getByRole("button", { name: "保存文件", exact: true }).click();
     await expect(page.locator(".tab-dot")).toHaveCount(0, { timeout: 10_000 });
     const saved = await fs.readFile(path0, "utf8");
     expect(saved).toContain("更新标题");
@@ -93,7 +94,8 @@ test("M5：示例扩展新增 .adoc 格式，禁用后回退纯文本", async ()
     await app.evaluate(({ dialog }, target) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
     }, path0);
-    await page.getByRole("button", { name: "打开", exact: true }).click();
+    await page.locator(".app").waitFor();
+    await page.keyboard.press("Control+O");
     await expect(page.locator(".tab-name")).toHaveText("sample.adoc");
     await expect(page.locator(".preview-pane .placeholder")).toContainText("暂不支持渲染预览", {
       timeout: 15_000,

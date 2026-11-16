@@ -23,7 +23,8 @@ test("M38：WYSIWYG 格式工具栏与斜杠命令", async () => {
     await app.evaluate(({ dialog }, target) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
     }, filePath);
-    await page.getByRole("button", { name: "打开", exact: true }).click();
+    await page.locator(".app").waitFor();
+    await page.keyboard.press("Control+O");
     await expect(page.locator(".markdown-body h1")).toHaveText("标题", { timeout: 15_000 });
     await page.getByRole("button", { name: "所见即所得", exact: true }).click();
 
@@ -233,7 +234,8 @@ test("M38：嵌套引用与页内锚点跳转", async () => {
     await app.evaluate(({ dialog }, target) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
     }, filePath);
-    await page.getByRole("button", { name: "打开", exact: true }).click();
+    await page.locator(".app").waitFor();
+    await page.keyboard.press("Control+O");
     await page.getByRole("button", { name: "所见即所得", exact: true }).click();
     const editor = page.locator(".prose-editor");
     await editor.waitFor();
@@ -299,7 +301,8 @@ test("M38：粘贴与原始 Markdown 语法保留", async () => {
     await app.evaluate(({ dialog }, target) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
     }, filePath);
-    await page.getByRole("button", { name: "打开", exact: true }).click();
+    await page.locator(".app").waitFor();
+    await page.keyboard.press("Control+O");
     await page.getByRole("button", { name: "所见即所得", exact: true }).click();
     const editor = page.locator(".prose-editor");
     await editor.waitFor();
@@ -367,14 +370,16 @@ test("M38：切换标签时视图模式按格式回退", async () => {
       }, target);
     };
     await mockOpen(markdownPath);
-    await page.getByRole("button", { name: "打开", exact: true }).click();
+    await page.locator(".app").waitFor();
+    await page.keyboard.press("Control+O");
     await page.getByRole("button", { name: "所见即所得", exact: true }).click();
     const editor = page.locator(".prose-editor");
     await expect(editor).toBeVisible();
 
     // 打开非 Markdown 标签：当前模式不支持，自动切到源码。
     await mockOpen(textPath);
-    await page.getByRole("button", { name: "打开", exact: true }).click();
+    await page.locator(".app").waitFor();
+    await page.keyboard.press("Control+O");
     await expect(page.locator(".pane.source-pane")).toBeVisible();
     await expect(page.locator(".cm-content")).toContainText("纯文本内容");
     await expect(editor).toBeHidden();
@@ -423,7 +428,8 @@ test("M38：表格内代码块提示与引用式链接改地址", async () => {
     await app.evaluate(({ dialog }, target) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
     }, filePath);
-    await page.getByRole("button", { name: "打开", exact: true }).click();
+    await page.locator(".app").waitFor();
+    await page.keyboard.press("Control+O");
     await page.getByRole("button", { name: "所见即所得", exact: true }).click();
     const editor = page.locator(".prose-editor");
     await editor.waitFor();
@@ -478,7 +484,8 @@ test("M38：粘贴 Markdown 文本与图片", async () => {
     await app.evaluate(({ dialog }, target) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
     }, filePath);
-    await page.getByRole("button", { name: "打开", exact: true }).click();
+    await page.locator(".app").waitFor();
+    await page.keyboard.press("Control+O");
     const editor = page.locator(".prose-editor");
     await editor.waitFor();
 
@@ -657,7 +664,8 @@ test("M38：模式条布局与默认模式", async () => {
     };
 
     await mockOpen(markdownPath);
-    await page.getByRole("button", { name: "打开", exact: true }).click();
+    await page.locator(".app").waitFor();
+    await page.keyboard.press("Control+O");
     const editor = page.locator(".prose-editor");
     // 打开 Markdown 默认进入所见即所得，模式条固定在文件窗口顶部。
     await expect(editor).toBeVisible();
@@ -686,12 +694,14 @@ test("M38：模式条布局与默认模式", async () => {
 
     // 打开 .txt：没有渲染预览，只有源码模式，模式条隐藏。
     await mockOpen(textPath);
-    await page.getByRole("button", { name: "打开", exact: true }).click();
+    await page.locator(".app").waitFor();
+    await page.keyboard.press("Control+O");
     await expect(page.locator(".mode-bar")).toHaveCount(0);
 
     // 从 .txt（源码）再打开 Markdown：仍然默认所见即所得。
     await mockOpen(secondPath);
-    await page.getByRole("button", { name: "打开", exact: true }).click();
+    await page.locator(".app").waitFor();
+    await page.keyboard.press("Control+O");
     await expect(page.locator(".prose-editor")).toBeVisible();
     await expect(page.locator(".mode-bar .mode-bar-modes button")).toHaveCount(4);
     await expect(page.locator(".mode-bar .mode-bar-modes button").nth(3)).toHaveAttribute(
@@ -723,7 +733,8 @@ test("M38：图表代码编辑开关", async () => {
     await app.evaluate(({ dialog }, target) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
     }, filePath);
-    await page.getByRole("button", { name: "打开", exact: true }).click();
+    await page.locator(".app").waitFor();
+    await page.keyboard.press("Control+O");
     await page.getByRole("button", { name: "所见即所得", exact: true }).click();
     const editor = page.locator(".prose-editor");
     const toggle = page.getByRole("button", { name: "编辑代码", exact: true });
@@ -785,7 +796,8 @@ test("M38：另存为代码格式后回落源码模式", async () => {
     await app.evaluate(({ dialog }, target) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
     }, markdownPath);
-    await page.getByRole("button", { name: "打开", exact: true }).click();
+    await page.locator(".app").waitFor();
+    await page.keyboard.press("Control+O");
     await expect(page.locator(".prose-editor")).toBeVisible();
 
     await app.evaluate(({ dialog }, target) => {

@@ -22,7 +22,8 @@ test("M17：保存换行符与行号设置生效", async () => {
     await app.evaluate(({ dialog }, target) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
     }, filePath);
-    await page.getByRole("button", { name: "打开", exact: true }).click();
+    await page.locator(".app").waitFor();
+    await page.keyboard.press("Control+O");
     await expect(page.locator(".tab-name")).toHaveText("crlf.md");
     await expect(page.locator(".statusbar")).toContainText("CRLF");
     // Markdown 默认以所见即所得打开；换行符/缩进设置作用于源码编辑器。
@@ -54,7 +55,7 @@ test("M17：保存换行符与行号设置生效", async () => {
     await page.keyboard.type("缩进");
     const withTab = await page.locator(".cm-content").innerText();
     expect(withTab).toContain("    缩进");
-    await page.getByRole("button", { name: "保存", exact: true }).click();
+    await page.getByRole("button", { name: "保存文件", exact: true }).click();
     await expect(page.locator(".tab-dot")).toHaveCount(0, { timeout: 10_000 });
     await expect(page.locator(".statusbar")).toContainText("LF");
 

@@ -79,7 +79,8 @@ test("M33：源码编辑器支持语法折叠、标题分节与章节折叠", as
     await app.evaluate(({ dialog }, target) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
     }, mdPath);
-    await page.getByRole("button", { name: "打开", exact: true }).click();
+    await page.locator(".app").waitFor();
+    await page.keyboard.press("Control+O");
     await expect(page.locator(".tab-name")).toHaveText("fold.md");
     // Markdown 默认所见即所得；折叠能力在源码模式验证。
     await page.getByRole("button", { name: "源码", exact: true }).click();
@@ -106,7 +107,8 @@ test("M33：源码编辑器支持语法折叠、标题分节与章节折叠", as
     await app.evaluate(({ dialog }, target) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
     }, jsonPath);
-    await page.getByRole("button", { name: "打开", exact: true }).click();
+    await page.locator(".app").waitFor();
+    await page.keyboard.press("Control+O");
     await expect(page.locator(".tab-item.active .tab-name")).toHaveText("sample.json");
     const jsonGutter = page.locator(".pane:not([hidden]) .cm-foldGutter span:visible");
     await expect(jsonGutter.first()).toBeVisible({ timeout: 15_000 });
@@ -117,7 +119,8 @@ test("M33：源码编辑器支持语法折叠、标题分节与章节折叠", as
     await app.evaluate(({ dialog }, target) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
     }, texPath);
-    await page.getByRole("button", { name: "打开", exact: true }).click();
+    await page.locator(".app").waitFor();
+    await page.keyboard.press("Control+O");
     await expect(page.locator(".tab-item.active .tab-name")).toHaveText("sections.tex");
     const texGutter = page.locator(".pane:not([hidden]) .cm-foldGutter span:visible");
     await expect(texGutter).toHaveCount(3, { timeout: 15_000 });
@@ -128,7 +131,8 @@ test("M33：源码编辑器支持语法折叠、标题分节与章节折叠", as
     await app.evaluate(({ dialog }, target) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
     }, pumlPath);
-    await page.getByRole("button", { name: "打开", exact: true }).click();
+    await page.locator(".app").waitFor();
+    await page.keyboard.press("Control+O");
     await expect(page.locator(".tab-item.active .tab-name")).toHaveText("blocks.puml");
     const pumlGutter = page.locator(".pane:not([hidden]) .cm-foldGutter span:visible");
     await expect(pumlGutter).toHaveCount(2, { timeout: 15_000 });

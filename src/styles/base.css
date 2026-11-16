@@ -2025,6 +2025,20 @@ body.resizing * {
   user-select: none;
 }
 
+/* 文档操作（新建/打开/保存）与工作区操作之间的紧凑分组。 */
+.sidebar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.sidebar-divider {
+  width: 1px;
+  height: 14px;
+  margin: 0 3px;
+  background: var(--border);
+}
+
 .sidebar-title {
   flex: 1;
   min-width: 0;

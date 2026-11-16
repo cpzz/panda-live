@@ -26,7 +26,8 @@ test("M12：表格焦点工具条支持增删行列、对齐与删除表格", as
     await app.evaluate(({ dialog }, target) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
     }, filePath);
-    await page.getByRole("button", { name: "打开", exact: true }).click();
+    await page.locator(".app").waitFor();
+    await page.keyboard.press("Control+O");
     await expect(page.locator(".tab-name")).toHaveText("table.md");
 
     await page.getByRole("button", { name: "所见即所得", exact: true }).click();

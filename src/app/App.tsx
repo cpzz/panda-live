@@ -2019,35 +2019,6 @@ export function App() {
         >
           <Icon name={workspace.visible ? "sidebar-close" : "sidebar-open"} />
         </button>
-        <span className="toolbar-divider" aria-hidden="true" />
-        <button
-          type="button"
-          className="icon-button toolbar-icon"
-          aria-label={t("新建")}
-          data-tip={t("新建（Ctrl+N）")}
-          onClick={() => manager.newDocument()}
-        >
-          <Icon name="file-plus" />
-        </button>
-        <button
-          type="button"
-          className="icon-button toolbar-icon"
-          aria-label={t("打开")}
-          data-tip={t("打开（Ctrl+O）")}
-          onClick={() => void manager.openFiles()}
-        >
-          <Icon name="folder-open" />
-        </button>
-        <button
-          type="button"
-          className="icon-button toolbar-icon"
-          aria-label={t("保存")}
-          data-tip={t("保存（Ctrl+S）")}
-          onClick={() => void manager.saveDocument(state.activeId ?? "")}
-          disabled={!active}
-        >
-          <Icon name="save" />
-        </button>
         <div className="toolbar-spacer" />
         <div className={active?.dirty ? "toolbar-doc dirty" : "toolbar-doc"}>
           <span className="toolbar-doc-dot" aria-hidden="true" />
@@ -2112,6 +2083,38 @@ export function App() {
           <>
             <WorkspacePanel
               store={workspaces}
+              actions={
+                <>
+                  <button
+                    type="button"
+                    className="icon-button"
+                    aria-label={t("新建文件")}
+                    title={t("新建文件")}
+                    onClick={() => manager.newDocument()}
+                  >
+                    <Icon name="file-plus" />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-button"
+                    aria-label={t("打开文件夹")}
+                    title={t("打开文件夹")}
+                    onClick={() => void workspaces.openPicker()}
+                  >
+                    <Icon name="folder-open" />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-button"
+                    aria-label={t("保存文件")}
+                    title={t("保存文件")}
+                    onClick={() => void manager.saveDocument(state.activeId ?? "")}
+                    disabled={!active}
+                  >
+                    <Icon name="save" />
+                  </button>
+                </>
+              }
               activePath={
                 state.documents.find((doc) => doc.id === state.activeId)?.path ?? null
               }

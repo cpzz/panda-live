@@ -29,7 +29,8 @@ test("M14：标签溢出时提供全部标签下拉并可切换", async () => {
     await app.evaluate(({ dialog }, targets) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: targets });
     }, files);
-    await page.getByRole("button", { name: "打开", exact: true }).click();
+    await page.locator(".app").waitFor();
+    await page.keyboard.press("Control+O");
 
     const tabs = page.locator(".tabstrip-items .tab");
     await expect(tabs).toHaveCount(12, { timeout: 30_000 });

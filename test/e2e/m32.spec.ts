@@ -47,7 +47,8 @@ test("M32：打开 PDF 文档显示只读预览", async () => {
     await app.evaluate(({ dialog }, target) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
     }, filePath);
-    await page.getByRole("button", { name: "打开", exact: true }).click();
+    await page.locator(".app").waitFor();
+    await page.keyboard.press("Control+O");
     await expect(page.locator(".tab-name")).toHaveText("sample.pdf");
 
     // PDF 面板可见，页面槽位与 canvas 渲染完成（首次加载需拉起 pdfjs chunk 与 worker）。

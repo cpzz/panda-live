@@ -49,7 +49,7 @@ test("M0：打开、编辑、预览、保存并保留 BOM 与 CRLF", async () =>
 
   await expect(page.locator(".preview-pane .markdown-body h1")).toHaveText("更新标题");
 
-  await page.getByRole("button", { name: "保存", exact: true }).click();
+  await page.getByRole("button", { name: "保存文件", exact: true }).click();
   await expect(page.locator(".tab-dot")).toHaveCount(0);
 
   const raw = await fs.readFile(filePath);

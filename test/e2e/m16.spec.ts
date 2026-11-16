@@ -22,7 +22,8 @@ test("M16：公式编辑可复制 MathML 到剪贴板", async () => {
     await app.evaluate(({ dialog }, target) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
     }, filePath);
-    await page.getByRole("button", { name: "打开", exact: true }).click();
+    await page.locator(".app").waitFor();
+    await page.keyboard.press("Control+O");
     await expect(page.locator(".tab-name")).toHaveText("formula.md");
 
     await page.getByRole("button", { name: "所见即所得", exact: true }).click();

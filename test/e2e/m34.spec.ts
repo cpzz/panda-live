@@ -26,7 +26,8 @@ test("M34：预览代码块提供复制按钮", async () => {
     await app.evaluate(({ dialog }, target) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
     }, filePath);
-    await page.getByRole("button", { name: "打开", exact: true }).click();
+    await page.locator(".app").waitFor();
+    await page.keyboard.press("Control+O");
     await expect(page.locator(".tab-name")).toHaveText("copy.md");
     await page.getByRole("button", { name: "预览", exact: true }).click();
     await expect(page.locator(".preview-pane .markdown-body pre.shiki")).toBeVisible({ timeout: 20_000 });

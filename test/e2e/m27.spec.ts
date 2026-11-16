@@ -36,7 +36,8 @@ test("M27：界面语言可在设置中于中英文之间切换", async () => {
     await app.evaluate(({ dialog }, target) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
     }, filePath);
-    await page.getByRole("button", { name: "打开", exact: true }).click();
+    await page.locator(".app").waitFor();
+    await page.keyboard.press("Control+O");
     await expect(page.locator(".tab-name")).toHaveText("locale.md");
 
     // 默认中文：工具栏为中文按钮。
@@ -56,8 +57,8 @@ test("M27：界面语言可在设置中于中英文之间切换", async () => {
     await expect(page.getByRole("button", { name: "Source", exact: true })).toBeVisible({
       timeout: 20_000,
     });
-    // 工具栏 Save 与打开着的设置对话框内 Save 同名，限定工具栏图标避免 strict 冲突。
-    await expect(page.locator(".toolbar-icon[aria-label='Save']")).toBeVisible();
+    // 保存按钮位于侧栏标题栏，与打开着的设置对话框内 Save 同名，限定侧栏避免 strict 冲突。
+    await expect(page.locator(".sidebar-header [aria-label='Save File']")).toBeVisible();
 
     // 保存不关闭窗口：同一对话框切换语言后标题变为 Settings；切回中文。
     const dialogEn = page.getByRole("dialog", { name: "Settings" });

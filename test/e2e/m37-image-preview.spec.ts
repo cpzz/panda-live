@@ -26,7 +26,8 @@ test("M37：图片预览与缩放快捷键", async () => {
     await app.evaluate(({ dialog }, target) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
     }, filePath);
-    await page.getByRole("button", { name: "打开", exact: true }).click();
+    await page.locator(".app").waitFor();
+    await page.keyboard.press("Control+O");
     await expect(page.locator(".tab-name")).toHaveText("pixel.png");
 
     // 图片渲染在缩放视图内，工具栏与图表一致。
@@ -68,7 +69,8 @@ test("M37：BMP、JPG、GIF 图片格式", async () => {
       await app.evaluate(({ dialog }, target) => {
         dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
       }, path.resolve("examples", name));
-      await page.getByRole("button", { name: "打开", exact: true }).click();
+      await page.locator(".app").waitFor();
+    await page.keyboard.press("Control+O");
       await expect(page.locator(".tab-item.active .tab-name")).toHaveText(name);
 
       const image = page.locator(".image-pane img");
@@ -114,7 +116,8 @@ test("M37：SVG 文档源码与安全预览", async () => {
     await app.evaluate(({ dialog }, target) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
     }, filePath);
-    await page.getByRole("button", { name: "打开", exact: true }).click();
+    await page.locator(".app").waitFor();
+    await page.keyboard.press("Control+O");
     await expect(page.locator(".tab-item.active .tab-name")).toHaveText("sample.svg");
 
     // 文本格式：模式条提供 源码 / 分栏 / 预览，不显示「所见即所得」。
@@ -144,7 +147,8 @@ test("M37：SVG 文档源码与安全预览", async () => {
     await app.evaluate(({ dialog }, target) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
     }, path.resolve("examples", "34-image.svg"));
-    await page.getByRole("button", { name: "打开", exact: true }).click();
+    await page.locator(".app").waitFor();
+    await page.keyboard.press("Control+O");
     await expect(page.locator(".tab-item.active .tab-name")).toHaveText("34-image.svg");
     const exampleImage = page.locator(".diagram-viewer-body img");
     await expect(exampleImage).toBeVisible({ timeout: 15_000 });

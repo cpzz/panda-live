@@ -29,6 +29,8 @@ interface WorkspacePanelProps {
   sourceControlCount?: number;
   /** 外部请求切换侧栏标签（如点击状态栏分支）。 */
   tabRequest?: { tab: SidebarTab; token: number } | null;
+  /** 标题栏右侧的文档操作（新建/打开/保存），由外部提供以复用文档管理器。 */
+  actions?: ReactNode;
 }
 
 type SidebarTab = "files" | "outline" | "source-control";
@@ -185,6 +187,7 @@ export function WorkspacePanel({
   sourceControl,
   sourceControlCount,
   tabRequest,
+  actions,
 }: WorkspacePanelProps) {
   const state = useSyncExternalStore(store.subscribe, store.getState);
   const [prompt, setPrompt] = useState<PromptState | null>(null);
@@ -333,26 +336,22 @@ export function WorkspacePanel({
                 ? (state.roots[0]?.root.name ?? t("工作区"))
                 : t("{0} 个文件夹", state.roots.length)}
           </span>
+          {actions && (
+            <>
+              <span className="sidebar-actions">{actions}</span>
+              <span className="sidebar-divider" aria-hidden="true" />
+            </>
+          )}
           <button
             type="button"
             className="icon-button"
-            title={t("打开文件夹")}
-            aria-label={t("打开文件夹")}
-            onClick={() => void store.openPicker()}
+            title={t("刷新全部")}
+            aria-label={t("刷新全部")}
+            disabled={state.roots.length === 0}
+            onClick={() => void store.refresh()}
           >
-            <Icon name="folder-open" />
+            <Icon name="refresh" />
           </button>
-          {state.roots.length > 0 && (
-            <button
-              type="button"
-              className="icon-button"
-              title={t("刷新全部")}
-              aria-label={t("刷新工作区")}
-              onClick={() => void store.refresh()}
-            >
-              <Icon name="refresh" />
-            </button>
-          )}
         </div>
 
         <div className="sidebar-tabs" role="tablist" aria-label={t("侧栏视图")}>

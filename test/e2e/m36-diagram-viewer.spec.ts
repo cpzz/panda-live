@@ -38,7 +38,8 @@ test("M36：图表缩放与持久缓存回归", async () => {
       await app.evaluate(({ dialog }, target) => {
         dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
       }, mmdPath);
-      await page.getByRole("button", { name: "打开", exact: true }).click();
+      await page.locator(".app").waitFor();
+      await page.keyboard.press("Control+O");
 
       const svg = page.locator(".diagram-viewer-body svg");
       await expect(svg).toHaveCount(1, { timeout: 30_000 });
@@ -144,7 +145,8 @@ test("M36：图表缩放与持久缓存回归", async () => {
       await app.evaluate(({ dialog }, target) => {
         dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
       }, mdPath);
-      await page.getByRole("button", { name: "打开", exact: true }).click();
+      await page.locator(".app").waitFor();
+      await page.keyboard.press("Control+O");
       // Markdown 默认所见即所得；图表布局在渲染预览中验证。
       await page.getByRole("button", { name: "预览", exact: true }).click();
       const preview = page.locator(".preview-pane .markdown-body");

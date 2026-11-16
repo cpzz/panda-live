@@ -25,7 +25,8 @@ async function openFile(
   await app.evaluate(({ dialog }, target) => {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
   }, filePath);
-  await page.getByRole("button", { name: "打开", exact: true }).click();
+  await page.locator(".app").waitFor();
+  await page.keyboard.press("Control+O");
   await expect(page.locator(".tab-name")).toHaveText(path.basename(filePath));
 }
 

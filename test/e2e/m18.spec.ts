@@ -30,7 +30,8 @@ test("M18：预览代码高亮背景随主题切换", async () => {
     await app.evaluate(({ dialog }, target) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
     }, filePath);
-    await page.getByRole("button", { name: "打开", exact: true }).click();
+    await page.locator(".app").waitFor();
+    await page.keyboard.press("Control+O");
     // Markdown 默认以所见即所得打开；本用例验证渲染预览。
     await page.getByRole("button", { name: "预览", exact: true }).click();
     await expect(page.locator(".pane:not([hidden]) .markdown-body pre.shiki")).toBeVisible({
@@ -88,7 +89,8 @@ test("M18：预览中代码高亮且图表围栏渲染为 SVG", async () => {
     await app.evaluate(({ dialog }, target) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
     }, filePath);
-    await page.getByRole("button", { name: "打开", exact: true }).click();
+    await page.locator(".app").waitFor();
+    await page.keyboard.press("Control+O");
     await expect(page.locator(".tab-name")).toHaveText("demo.md");
     await page.getByRole("button", { name: "预览", exact: true }).click();
 

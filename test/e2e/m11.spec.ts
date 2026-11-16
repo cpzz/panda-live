@@ -39,7 +39,8 @@ test("M11：命令面板支持过滤、执行与扩展命令", async () => {
     await app.evaluate(({ dialog }, target) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
     }, docPath);
-    await page.getByRole("button", { name: "打开", exact: true }).click();
+    await page.locator(".app").waitFor();
+    await page.keyboard.press("Control+O");
     await expect(page.locator(".tab-name")).toHaveText("note.md");
 
     // 打开命令面板并筛选“新建”，回车执行。
