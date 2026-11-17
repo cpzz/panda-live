@@ -505,3 +505,59 @@ test("M39：修订上次提交", async () => {
     await fs.rm(userDataDir, { recursive: true, force: true });
   }
 });
+
+/** M39：合并提交按第一父提交列出文件；历史每页 50 条并可加载更多。 */
+test("M39：合并提交文件列表与历史分页", async () => {
+  test.setTimeout(240_000);
+  const repo = await fs.mkdtemp(path.join(os.tmpdir(), "panda-merge-"));
+  const userDataDir = await fs.mkdtemp(path.join(os.tmpdir(), "panda-merge-ud-"));
+  await initRepo(repo);
+  await fs.writeFile(path.join(repo, "base.md"), "# 基础\n", "utf8");
+  await git(repo, ["add", "."]);
+  await git(repo, ["commit", "-m", "初始提交"]);
+  // 制造超过一页的历史，验证「加载更多」。
+  for (let index = 0; index < 55; index += 1) {
+    await git(repo, ["commit", "--allow-empty", "-m", `空提交 ${index + 1}`]);
+  }
+  const branch = await git(repo, ["rev-parse", "--abbrev-ref", "HEAD"]);
+  await git(repo, ["checkout", "-b", "feature"]);
+  await fs.writeFile(path.join(repo, "feature.md"), "# 功能\n", "utf8");
+  await git(repo, ["add", "."]);
+  await git(repo, ["commit", "-m", "功能提交"]);
+  await git(repo, ["checkout", branch]);
+  await fs.writeFile(path.join(repo, "main.md"), "# 主线\n", "utf8");
+  await git(repo, ["add", "."]);
+  await git(repo, ["commit", "-m", "主线提交"]);
+  await git(repo, ["merge", "feature", "-m", "合并功能分支"]);
+
+  const app = await electron.launch({
+    args: ["."],
+    cwd: CWD,
+    env: { ...process.env, PANDA_USER_DATA_DIR: userDataDir },
+  });
+  try {
+    const page = await app.firstWindow();
+    await openFolder(page, app, repo);
+    await page.getByRole("tab", { name: "Git", exact: true }).click();
+    await page.getByRole("tab", { name: "历史", exact: true }).click();
+
+    const rows = page.locator(".git-commit-row");
+    await expect(rows).toHaveCount(50, { timeout: 30_000 });
+    await page.getByRole("button", { name: "加载更多", exact: true }).click();
+    // 共 1 + 55 + 功能 + 主线 + 合并 = 59 个提交。
+    await expect(rows).toHaveCount(59, { timeout: 30_000 });
+    await expect(page.locator(".git-history-more")).toHaveCount(0);
+
+    // 合并提交默认没有文件列表；应按第一父提交列出合并进来的文件。
+    const mergeRow = rows.first();
+    await expect(mergeRow).toContainText("合并功能分支");
+    await mergeRow.click();
+    const detail = page.locator(".git-commit-expand");
+    await expect(detail).toContainText("feature.md", { timeout: 20_000 });
+    await expect(detail.locator(".git-detail-file")).toHaveCount(1);
+  } finally {
+    await app.close();
+    await fs.rm(repo, { recursive: true, force: true });
+    await fs.rm(userDataDir, { recursive: true, force: true });
+  }
+});

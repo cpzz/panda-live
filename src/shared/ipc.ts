@@ -474,6 +474,7 @@ export const ipcRequestSchemas = {
   "git:log": z.object({
     root: z.string().min(1),
     limit: z.number().int().min(1).max(200),
+    skip: z.number().int().min(0).optional(),
   }),
   "git:commitDetail": z.object({
     root: z.string().min(1),
@@ -607,7 +608,7 @@ export interface PandaApi {
     fetch(request: { root: string }): Promise<GitSnapshot>;
     pull(request: { root: string }): Promise<GitSnapshot>;
     push(request: { root: string; setUpstream: boolean }): Promise<GitSnapshot>;
-    log(request: { root: string; limit: number }): Promise<GitCommit[]>;
+    log(request: { root: string; limit: number; skip?: number }): Promise<GitCommit[]>;
     commitDetail(request: { root: string; hash: string }): Promise<GitCommitDetail>;
     abort(request: { root: string }): Promise<GitSnapshot>;
     continue(request: { root: string }): Promise<GitSnapshot>;

@@ -7,6 +7,8 @@ export interface GitStoreState {
   snapshot: GitSnapshot | null;
   branches: GitBranch[];
   commits: GitCommit[];
+  /** 历史列表是否还有更早的提交可加载。 */
+  commitsHasMore: boolean;
   detail: GitCommitDetail | null;
   loading: boolean;
   /** 正在执行的 Git 操作名称；非空时禁用写操作按钮。 */
@@ -20,6 +22,9 @@ function joinPath(root: string, relative: string): string {
   return `${root.replace(/[\\/]+$/u, "")}/${relative}`;
 }
 
+/** 历史列表每页条数；「加载更多」按该页大小追加。 */
+const COMMIT_PAGE_SIZE = 50;
+
 /**
  * 渲染进程侧 Git 状态：按探测路径加载快照、分支与最近提交。
  * 所有写操作经主进程 Git 服务执行，成功后刷新快照。见 doc/design.md Git 方案。
@@ -30,6 +35,7 @@ export class GitStore {
     snapshot: null,
     branches: [],
     commits: [],
+    commitsHasMore: false,
     detail: null,
     loading: false,
     busy: null,
@@ -40,6 +46,8 @@ export class GitStore {
   private readonly listeners = new Set<(state: GitStoreState) => void>();
   private refreshToken = 0;
   private detailToken = 0;
+  /** 当前已加载到的时间线深度；刷新时保持，切换仓库时重置。 */
+  private commitLimit = COMMIT_PAGE_SIZE;
 
   readonly getState = (): GitStoreState => this.state;
 
@@ -60,11 +68,13 @@ export class GitStore {
     // 作废在途的刷新与提交详情，避免旧仓库结果覆盖新状态。
     this.refreshToken += 1;
     this.detailToken += 1;
+    this.commitLimit = COMMIT_PAGE_SIZE;
     this.patch({
       path,
       snapshot: null,
       branches: [],
       commits: [],
+      commitsHasMore: false,
       detail: null,
       loading: false,
       busy: null,
@@ -82,19 +92,50 @@ export class GitStore {
       const snapshot = await window.panda.git.snapshot({ path });
       if (token !== this.refreshToken || this.state.path !== path) return;
       if (!snapshot.inRepo || !snapshot.root) {
-        this.patch({ snapshot, branches: [], commits: [], loading: false });
+        this.patch({ snapshot, branches: [], commits: [], commitsHasMore: false, loading: false });
         return;
       }
       const root = snapshot.root;
+      const limit = this.commitLimit;
       const [branches, commits] = await Promise.all([
         window.panda.git.branches({ root }).catch(() => []),
-        window.panda.git.log({ root, limit: 50 }).catch(() => []),
+        window.panda.git.log({ root, limit }).catch(() => []),
       ]);
       if (token !== this.refreshToken || this.state.path !== path) return;
-      this.patch({ snapshot, branches, commits, loading: false });
+      this.patch({
+        snapshot,
+        branches,
+        commits,
+        commitsHasMore: commits.length === limit,
+        loading: false,
+      });
     } catch (error) {
       if (token !== this.refreshToken || this.state.path !== path) return;
       this.patch({ loading: false, error: describeError(error) });
+    }
+  }
+
+  /** 追加更早的提交；返回追加后的历史是否还有下一页。 */
+  async loadMoreCommits(): Promise<void> {
+    const root = this.root;
+    if (!root || this.state.loading || !this.state.commitsHasMore) return;
+    const token = this.refreshToken;
+    const skip = this.state.commits.length;
+    try {
+      const page = await window.panda.git.log({ root, limit: COMMIT_PAGE_SIZE, skip });
+      if (token !== this.refreshToken || this.root !== root) return;
+      // 历史在分页期间可能被改写；按 hash 去重，避免重复条目。
+      const seen = new Set(this.state.commits.map((commit) => commit.hash));
+      const appended = page.filter((commit) => !seen.has(commit.hash));
+      this.commitLimit = skip + page.length;
+      this.patch({
+        commits: [...this.state.commits, ...appended],
+        commitsHasMore: page.length === COMMIT_PAGE_SIZE,
+        error: null,
+      });
+    } catch (error) {
+      if (token !== this.refreshToken || this.root !== root) return;
+      this.patch({ error: describeError(error) });
     }
   }
 
@@ -195,7 +236,7 @@ export class GitStore {
       if (this.root !== root) return;
       const [branches, commits] = await Promise.all([
         window.panda.git.branches({ root }).catch(() => this.state.branches),
-        window.panda.git.log({ root, limit: 50 }).catch(() => this.state.commits),
+        window.panda.git.log({ root, limit: this.commitLimit }).catch(() => this.state.commits),
       ]);
       if (this.root !== root) return;
       // 作废操作期间发起的刷新：它们读到的可能是操作前的状态。
@@ -204,6 +245,7 @@ export class GitStore {
         snapshot,
         branches,
         commits,
+        commitsHasMore: commits.length === this.commitLimit,
         loading: false,
         busy: null,
         version: this.state.version + 1,

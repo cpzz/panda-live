@@ -28,6 +28,7 @@
   "查看该提交与其父提交的差异": "Show this commit against its parent",
   "读取提交详情…": "Loading commit details…",
   "没有变更文件": "No changed files",
+  "加载更多": "Load more",
   "显示改动（Ctrl+Shift+D）{0}": "Show changes (Ctrl+Shift+D) {0}",
   "读取并对比": "Read and compare",
   "提交 A（旧）": "Commit A (old)",

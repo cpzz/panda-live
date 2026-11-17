@@ -176,6 +176,7 @@ export function GitPanel({
   const branchMenuRef = useRef<HTMLDivElement>(null);
   const [newBranch, setNewBranch] = useState("");
   const [detailHash, setDetailHash] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const previousRepoRef = useRef(selectedRepo);
 
   const snapshot = state.snapshot;
@@ -214,6 +215,7 @@ export function GitPanel({
     setMessage("");
     setAmend(false);
     setDetailHash(null);
+    setLoadingMore(false);
     setTab("changes");
   }, [selectedRepo]);
 
@@ -873,6 +875,21 @@ export function GitPanel({
               </div>
             );
           })}
+          {state.commitsHasMore && (
+            <div className="git-history-more">
+              <button
+                type="button"
+                className="button small ghost"
+                disabled={busy || loadingMore}
+                onClick={() => {
+                  setLoadingMore(true);
+                  void store.loadMoreCommits().finally(() => setLoadingMore(false));
+                }}
+              >
+                {loadingMore ? t("加载中…") : t("加载更多")}
+              </button>
+            </div>
+          )}
         </div>
       )}
 

@@ -240,3 +240,59 @@ describe.skipIf(!hasGit)("Git 基线读取", () => {
     }
   });
 });
+
+describe.skipIf(!hasGit)("Git 历史与提交详情", () => {
+  it("合并提交按第一父提交列出文件，首个提交也能列出文件", async () => {
+    const repo = mkdtempSync(path.join(tmpdir(), "panda-git-merge-"));
+    try {
+      initRepo(repo);
+      writeFileSync(path.join(repo, "a.txt"), "a\n", "utf8");
+      git(repo, "add", ".");
+      git(repo, "commit", "-m", "初始提交");
+      const firstHash = git(repo, "rev-parse", "HEAD").trim();
+      const branch = git(repo, "rev-parse", "--abbrev-ref", "HEAD").trim();
+
+      git(repo, "checkout", "-b", "feature");
+      writeFileSync(path.join(repo, "feature.txt"), "feature\n", "utf8");
+      git(repo, "add", ".");
+      git(repo, "commit", "-m", "功能提交");
+
+      git(repo, "checkout", branch);
+      writeFileSync(path.join(repo, "main.txt"), "main\n", "utf8");
+      git(repo, "add", ".");
+      git(repo, "commit", "-m", "主线提交");
+      git(repo, "merge", "feature", "-m", "合并功能分支");
+
+      const service = new GitService();
+      const merge = await service.commitDetail(repo, "HEAD");
+      expect(merge.subject).toBe("合并功能分支");
+      // 与 `git diff HEAD~1 --name-only` 一致：只列出第一父提交之后带来的文件。
+      expect(merge.files).toContain("feature.txt");
+      expect(merge.files).not.toContain("main.txt");
+
+      const root = await service.commitDetail(repo, firstHash);
+      expect(root.files).toContain("a.txt");
+    } finally {
+      rmTempRepo(repo);
+    }
+  });
+
+  it("log 支持 skip 分页且两页不重复", async () => {
+    const repo = mkdtempSync(path.join(tmpdir(), "panda-git-log-"));
+    try {
+      initRepo(repo);
+      for (let index = 0; index < 3; index += 1) {
+        writeFileSync(path.join(repo, "a.txt"), `${index}\n`, "utf8");
+        git(repo, "add", ".");
+        git(repo, "commit", "-m", `c${index}`);
+      }
+      const service = new GitService();
+      const firstPage = await service.log(repo, 2);
+      const secondPage = await service.log(repo, 2, 2);
+      expect(firstPage.map((commit) => commit.subject)).toEqual(["c2", "c1"]);
+      expect(secondPage.map((commit) => commit.subject)).toEqual(["c0"]);
+    } finally {
+      rmTempRepo(repo);
+    }
+  });
+});

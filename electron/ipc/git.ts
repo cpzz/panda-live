@@ -135,7 +135,7 @@ export function registerGitHandlers({
 
   handle("git:log", async (request): Promise<GitCommit[]> => {
     const root = await assertRoot(request.root);
-    return operation(() => git.log(root, request.limit, command()));
+    return operation(() => git.log(root, request.limit, request.skip ?? 0, command()));
   });
 
   handle("git:commitDetail", async (request): Promise<GitCommitDetail> => {

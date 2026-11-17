@@ -4628,6 +4628,12 @@ body.resizing * {
   font-size: 11px;
 }
 
+.git-history-more {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 4px;
+}
+
 .git-commit-row {
   display: flex;
   align-items: flex-start;

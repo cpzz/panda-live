@@ -365,14 +365,22 @@ export class GitService {
     return this.snapshot(root, commandLine);
   }
 
-  async log(root: string, limit: number, commandLine?: string): Promise<GitCommit[]> {
+  async log(
+    root: string,
+    limit: number,
+    skip = 0,
+    commandLine?: string,
+  ): Promise<GitCommit[]> {
     const command = parseGitCommand(commandLine);
     const count = Math.min(200, Math.max(1, Math.floor(limit)));
+    const offset = Math.max(0, Math.floor(skip));
     const output = await runGit(
       [
         "log",
         "-n",
         String(count),
+        "--skip",
+        String(offset),
         "--pretty=format:%H%x1f%h%x1f%s%x1f%an%x1f%aI%x1e",
       ],
       root,
@@ -394,7 +402,9 @@ export class GitService {
     );
     const [fullHash, shortHash, subject, author, date, body] = meta.stdout.split("\x1f");
     const files = await runGit(
-      ["show", "--name-only", "-z", "--format=", hash],
+      // 合并提交默认不输出文件列表：--first-parent 按第一父提交比较，
+      // 与 `git diff HEAD~1 --name-only` 一致；--root 保证首个提交也能列出文件。
+      ["show", "--first-parent", "--root", "--name-only", "-z", "--format=", hash],
       root,
       command,
     );
