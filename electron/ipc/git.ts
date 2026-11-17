@@ -4,6 +4,7 @@ import type {
   GitBranch,
   GitCommit,
   GitCommitDetail,
+  GitCompareResult,
   GitSnapshot,
 } from "../../src/shared/git";
 import { PandaError } from "../../src/shared/errors";
@@ -141,6 +142,21 @@ export function registerGitHandlers({
   handle("git:commitDetail", async (request): Promise<GitCommitDetail> => {
     const root = await assertRoot(request.root);
     return operation(() => git.commitDetail(root, request.hash, command()));
+  });
+
+  handle("git:fileLog", async (request): Promise<GitCommit[]> => {
+    const target = await files.assertAllowed(request.path);
+    return operation(() => git.fileLog(target, request.limit, request.skip ?? 0, command()));
+  });
+
+  handle("git:resolveRef", async (request): Promise<string | null> => {
+    const target = await files.assertAllowed(request.path);
+    return operation(() => git.resolveRef(target, request.ref, command()));
+  });
+
+  handle("git:compare", async (request): Promise<GitCompareResult> => {
+    const root = await assertRoot(request.root);
+    return operation(() => git.compare(root, request.base, request.target, command()));
   });
 
   handle("git:abort", async (request): Promise<GitSnapshot> => {

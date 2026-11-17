@@ -54,9 +54,36 @@ export interface GitCommit {
   author: string;
   /** ISO 8601 作者时间。 */
   date: string;
+  /** 完整提交信息（仅文件历史等需要气泡展示时返回）。 */
+  body?: string;
 }
 
 export interface GitCommitDetail extends GitCommit {
   body: string;
   files: string[];
+}
+
+/** 仓库级比较中的单文件状态（Git name-status 首字母）。 */
+export type GitCompareStatus = "A" | "M" | "D" | "R" | "C" | "T" | "U";
+
+export interface GitCompareFile {
+  path: string;
+  origPath?: string;
+  status: GitCompareStatus;
+  additions: number;
+  deletions: number;
+  binary: boolean;
+  /** 工作区未跟踪文件（只出现在 target 为工作区时）。 */
+  untracked?: boolean;
+}
+
+export interface GitCompareResult {
+  baseLabel: string;
+  /** null 表示目标为工作区。 */
+  targetLabel: string | null;
+  baseHash: string;
+  targetHash: string | null;
+  files: GitCompareFile[];
+  additions: number;
+  deletions: number;
 }

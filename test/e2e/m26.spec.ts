@@ -113,9 +113,9 @@ test("M26：渲染态差异——源码 gutter、预览词级标记与删除幽�
       page.locator(".git-source-diff .cm-foldPlaceholder").first(),
     ).toContainText("行未改动", { timeout: 10_000 });
 
-    // 手动切到「工作区 ⇄ HEAD」预设：非仓库应给出可操作提示。
+    // 手动切到「未暂存更改」（等价 git diff）：非仓库应给出可操作提示。
     await page.locator(".git-diff-chip").click();
-    await page.getByRole("menuitem", { name: "工作区 ⇄ HEAD" }).click();
+    await page.getByRole("menuitem", { name: /未暂存更改/ }).click();
     await expect(page.locator(".git-diff-pane .banner")).toContainText(
       /未找到 Git|未检测到 Git 仓库/,
     );

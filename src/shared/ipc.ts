@@ -4,6 +4,7 @@ import type {
   GitBranch,
   GitCommit,
   GitCommitDetail,
+  GitCompareResult,
   GitSnapshot,
 } from "./git";
 import type { PandaErrorPayload } from "./errors";
@@ -480,6 +481,20 @@ export const ipcRequestSchemas = {
     root: z.string().min(1),
     hash: z.string().min(1).max(64),
   }),
+  "git:fileLog": z.object({
+    path: z.string().min(1),
+    limit: z.number().int().min(1).max(200),
+    skip: z.number().int().min(0).optional(),
+  }),
+  "git:resolveRef": z.object({
+    path: z.string().min(1),
+    ref: z.string().min(1).max(255),
+  }),
+  "git:compare": z.object({
+    root: z.string().min(1),
+    base: z.string().min(1).max(255),
+    target: z.string().max(255).optional(),
+  }),
   "git:abort": z.object({ root: z.string().min(1) }),
   "git:continue": z.object({ root: z.string().min(1) }),
   "fs:trash": z.object({ path: z.string().min(1) }),
@@ -553,6 +568,9 @@ export interface IpcResponseMap {
   "git:push": GitSnapshot;
   "git:log": GitCommit[];
   "git:commitDetail": GitCommitDetail;
+  "git:fileLog": GitCommit[];
+  "git:resolveRef": string | null;
+  "git:compare": GitCompareResult;
   "git:abort": GitSnapshot;
   "git:continue": GitSnapshot;
   "fs:trash": void;
@@ -610,6 +628,9 @@ export interface PandaApi {
     push(request: { root: string; setUpstream: boolean }): Promise<GitSnapshot>;
     log(request: { root: string; limit: number; skip?: number }): Promise<GitCommit[]>;
     commitDetail(request: { root: string; hash: string }): Promise<GitCommitDetail>;
+    fileLog(request: { path: string; limit: number; skip?: number }): Promise<GitCommit[]>;
+    resolveRef(request: { path: string; ref: string }): Promise<string | null>;
+    compare(request: { root: string; base: string; target?: string }): Promise<GitCompareResult>;
     abort(request: { root: string }): Promise<GitSnapshot>;
     continue(request: { root: string }): Promise<GitSnapshot>;
   };

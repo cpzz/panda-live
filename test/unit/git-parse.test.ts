@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   parseCommitFiles,
+  parseDiffNameStatus,
+  parseDiffNumstat,
   parseGitBranches,
   parseGitLog,
   parseGitStatus,
@@ -102,7 +104,51 @@ describe("Git 分支与提交解析", () => {
     ]);
   });
 
+  it("解析完整提交信息（文件历史气泡）", () => {
+    const output =
+      "abc123\x1fabc123\x1f修复问题\x1fAlice\x1f2026-01-01T10:00:00+08:00\x1f修复问题\n\n补充说明\x1e";
+    expect(parseGitLog(output)).toEqual([
+      {
+        hash: "abc123",
+        shortHash: "abc123",
+        subject: "修复问题",
+        author: "Alice",
+        date: "2026-01-01T10:00:00+08:00",
+        body: "修复问题\n\n补充说明",
+      },
+    ]);
+  });
+
   it("解析提交文件列表", () => {
     expect(parseCommitFiles("\nsrc/a.ts\0docs/新.md\0")).toEqual(["src/a.ts", "docs/新.md"]);
+  });
+});
+
+describe("Git 比较解析", () => {
+  it("解析 name-status，含重命名与特殊字符路径", () => {
+    const output = [
+      "M\0src/a.ts\0",
+      "A\0docs/新 文件.md\0",
+      "D\0old.txt\0",
+      "R100\0old name.txt\0new name.txt\0",
+    ].join("");
+    expect(parseDiffNameStatus(output)).toEqual([
+      { status: "M", path: "src/a.ts" },
+      { status: "A", path: "docs/新 文件.md" },
+      { status: "D", path: "old.txt" },
+      { status: "R", path: "new name.txt", origPath: "old name.txt" },
+    ]);
+  });
+
+  it("解析 numstat，含重命名与二进制文件", () => {
+    const output = [
+      "2\t1\tsrc/a.ts\0",
+      "-\t-\tassets/logo.png\0",
+      "0\t0\t\0old name.txt\0new name.txt\0",
+    ].join("");
+    const stats = parseDiffNumstat(output);
+    expect(stats.get("src/a.ts")).toEqual({ additions: 2, deletions: 1, binary: false });
+    expect(stats.get("assets/logo.png")).toEqual({ additions: 0, deletions: 0, binary: true });
+    expect(stats.get("new name.txt")).toEqual({ additions: 0, deletions: 0, binary: false });
   });
 });

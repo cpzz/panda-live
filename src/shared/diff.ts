@@ -34,8 +34,8 @@ export interface DocDiffState {
   base: DiffBase;
   /** `base === "commit"` 时的提交引用。 */
   ref: string;
-  /** GitPane 的「新」侧：工作区缓冲区或暂存区。 */
-  target: "buffer" | "index";
+  /** GitPane 的「新」侧：编辑器缓冲区、工作区磁盘内容或暂存区。 */
+  target: "buffer" | "worktree" | "index";
   mode: DiffViewMode;
   flags: DiffFlags;
   /** GitPane 比较模式：基线⇄新侧，或提交⇄提交。 */

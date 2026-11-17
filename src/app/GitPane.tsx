@@ -5,8 +5,9 @@ import type { PreviewDiffModel } from "../diff/preview";
 import { renderMarkdownToHtml } from "../formats/markdown/preview";
 import type { DocumentState } from "../services/document-manager";
 import type { DocDiffState, GitBaselineReason, GitPaneView } from "../shared/diff";
+import type { GitCommit } from "../shared/git";
 import { describeError } from "../shared/errors";
-import { getLocale, t } from "../i18n";
+import { getLocale, localeTag, t } from "../i18n";
 import { sourceLanguageForFormat } from "../source/language";
 import { Icon, type IconName } from "./icons";
 import { DiffMinimap } from "./DiffMinimap";
@@ -40,6 +41,15 @@ const PANE_VIEW_LABELS: Record<GitPaneView, string> = {
   render: "预览对比",
 };
 
+/** 此文件提交历史每页条数（与弹层翻页一致）。 */
+const HISTORY_PAGE_SIZE = 20;
+
+function formatHistoryDate(iso: string): string {
+  const time = Date.parse(iso);
+  if (Number.isNaN(time)) return iso;
+  return new Date(time).toLocaleDateString(localeTag(), { month: "short", day: "numeric" });
+}
+
 /**
  * Git 差异面板：内容区只读显示差异；工具栏（对比方式、粒度、忽略参数、改动计数与跳转、
  * 对比/预览对比）通过 portal 渲染到模式条左侧，与「显示模式」按钮同栏。
@@ -56,9 +66,6 @@ export function GitPane({
 }: GitPaneProps) {
   const [chipOpen, setChipOpen] = useState(false);
   const chipWrapRef = useRef<HTMLDivElement>(null);
-  const [commitDraft, setCommitDraft] = useState(diff.ref || "HEAD~1");
-  const [aDraft, setADraft] = useState(diff.refA);
-  const [bDraft, setBDraft] = useState(diff.refB);
   const [status, setStatus] = useState<Status>("idle");
   const [message, setMessage] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -69,6 +76,12 @@ export function GitPane({
   const [listOpen, setListOpen] = useState(false);
   const [reveal, setReveal] = useState<{ line: number; token: number } | null>(null);
   const [minimapScroller, setMinimapScroller] = useState<HTMLElement | null>(null);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyCommits, setHistoryCommits] = useState<GitCommit[]>([]);
+  const [historyHasMore, setHistoryHasMore] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [activeCommitHash, setActiveCommitHash] = useState<string | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const isMarkdown = document.format === "markdown";
   // 预览对比只对支持渲染的格式有意义；其他格式回退为分栏。
@@ -103,10 +116,88 @@ export function GitPane({
     return Math.max(1, text.split("\n").length - 1);
   }, [result, diff.flags.crAtEol]);
 
-  // 外部改变基线（如点击历史提交的文件行）后同步输入草稿。
+  // 文件切换时回到第一页。
   useEffect(() => {
-    if (diff.base === "commit" && diff.ref) setCommitDraft(diff.ref);
-  }, [diff.base, diff.ref]);
+    setHistoryPage(1);
+  }, [document.path]);
+
+  // 对比弹层打开时读取当前文件的提交历史（按页读取）。
+  useEffect(() => {
+    if (!chipOpen || !document.path) return;
+    let cancelled = false;
+    setHistoryLoading(true);
+    setHistoryError(null);
+    const timer = setTimeout(() => {
+      void window.panda.git
+        .fileLog({
+          path: document.path!,
+          limit: HISTORY_PAGE_SIZE,
+          skip: (historyPage - 1) * HISTORY_PAGE_SIZE,
+        })
+        .then((commits) => {
+          if (cancelled) return;
+          setHistoryCommits(commits);
+          setHistoryHasMore(commits.length === HISTORY_PAGE_SIZE);
+        })
+        .catch((error) => {
+          if (cancelled) return;
+          setHistoryCommits([]);
+          setHistoryHasMore(false);
+          setHistoryError(describeError(error));
+        })
+        .finally(() => {
+          if (!cancelled) setHistoryLoading(false);
+        });
+    }, 150);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [chipOpen, document.path, historyPage, refreshKey]);
+
+  // 当前正在对比的提交不出现在历史列表中，避免选到无差异的自比较。
+  useEffect(() => {
+    if (
+      !chipOpen ||
+      !document.path ||
+      diff.paneMode !== "baseline" ||
+      (diff.base !== "head" && diff.base !== "commit")
+    ) {
+      setActiveCommitHash(null);
+      return;
+    }
+    const ref = diff.base === "head" ? "HEAD" : diff.ref.trim();
+    if (!ref) {
+      setActiveCommitHash(null);
+      return;
+    }
+    let cancelled = false;
+    void window.panda.git
+      .resolveRef({ path: document.path, ref })
+      .then((hash) => {
+        if (!cancelled) setActiveCommitHash(hash);
+      })
+      .catch(() => {
+        if (!cancelled) setActiveCommitHash(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [chipOpen, document.path, diff.paneMode, diff.base, diff.ref, refreshKey]);
+
+  const activeCommitRef = (
+    activeCommitHash ??
+    (diff.paneMode === "baseline" && diff.base === "commit" ? diff.ref.trim() : "")
+  ).toLowerCase();
+  const visibleHistory = useMemo(() => {
+    if (!activeCommitRef) return historyCommits;
+    return historyCommits.filter((commit) => {
+      const hash = commit.hash.toLowerCase();
+      return !(
+        hash.startsWith(activeCommitRef) || activeCommitRef.startsWith(commit.shortHash.toLowerCase())
+      );
+    });
+  }, [historyCommits, activeCommitRef]);
 
   // chip 弹层：点击外部或按 Esc 关闭。
   useEffect(() => {
@@ -130,11 +221,19 @@ export function GitPane({
   const baseName =
     diff.base === "head"
       ? "HEAD"
-      : diff.base === "commit"
-        ? (diff.ref.trim() || "HEAD~1")
-        : t("上次保存");
-  // 新侧永远是编辑器缓冲区：有未保存修改时显示「编辑器缓存」，否则等价于磁盘工作区。
-  const workingLabel = document.dirty ? t("编辑器缓存") : t("工作区");
+      : diff.base === "index"
+        ? t("暂存区")
+        : diff.base === "commit"
+          ? (diff.ref.trim() || "HEAD~1")
+          : t("上次保存");
+  // 新侧默认是编辑器缓冲区：有未保存修改时显示「编辑器缓存」，否则等价于磁盘工作区。
+  // 仓库级比较选择「工作区」时，新侧直接读取磁盘内容。
+  const workingLabel =
+    diff.target === "worktree"
+      ? t("工作区")
+      : document.dirty
+        ? t("编辑器缓存")
+        : t("工作区");
   const chipLabel =
     diff.paneMode === "refs"
       ? `${diff.refA} ⇄ ${diff.refB}`
@@ -281,6 +380,15 @@ export function GitPane({
               if (staged.oldText === null) {
                 notes.push(t("该文件在暂存区中没有内容，按全文删除显示"));
               }
+            } else if (diff.target === "worktree") {
+              // 仓库级比较的「工作区」侧读取磁盘，忽略未保存修改，与文件列表口径一致。
+              const disk = await window.panda.fs.readText({ path });
+              if (cancelled) return;
+              if (disk.encoding !== "utf-8" && disk.encoding !== "utf-8-bom") {
+                throw new Error(t("该编码不支持与 Git 基线对比，请改用 UTF-8 文件"));
+              }
+              newText = disk.content;
+              newLabel = t("工作区");
             } else {
               newText = document.content;
               newLabel = t("当前");
@@ -436,7 +544,12 @@ export function GitPane({
             aria-expanded={chipOpen}
             aria-label={t("对比方式")}
             title={t("对比方式")}
-            onClick={() => setChipOpen((open) => !open)}
+            onClick={() =>
+              setChipOpen((open) => {
+                if (!open) setHistoryPage(1);
+                return !open;
+              })
+            }
           >
             <Icon name="git" size={13} />
             <span>{chipLabel}</span>
@@ -444,100 +557,109 @@ export function GitPane({
           </button>
           {chipOpen && (
             <div className="git-chip-popover" role="menu" aria-label={t("对比方式")}>
-              <button
-                type="button"
-                role="menuitem"
-                className={
-                  diff.paneMode === "baseline" && diff.base === "head" && diff.target === "buffer"
-                    ? "git-chip-option active"
-                    : "git-chip-option"
-                }
-                onClick={() => applyPreset({ paneMode: "baseline", base: "head", target: "buffer" })}
-              >
-                {t("工作区 ⇄ HEAD")}
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                className={
-                  diff.paneMode === "baseline" && diff.base === "head" && diff.target === "index"
-                    ? "git-chip-option active"
-                    : "git-chip-option"
-                }
-                onClick={() => applyPreset({ paneMode: "baseline", base: "head", target: "index" })}
-              >
-                {t("HEAD ⇄ 暂存区")}
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                className={
-                  diff.paneMode === "baseline" && diff.base === "lastSave"
-                    ? "git-chip-option active"
-                    : "git-chip-option"
-                }
-                onClick={() =>
-                  applyPreset({ paneMode: "baseline", base: "lastSave", target: "buffer" })
-                }
-              >
-                {t("工作区 ⇄ 上次保存")}
-              </button>
-              <form
-                className="git-chip-form"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  const ref = commitDraft.trim();
-                  if (!ref) return;
-                  applyPreset({ paneMode: "baseline", base: "commit", ref, target: "buffer" });
-                }}
-              >
-                <label>{t("提交 ⇄ 工作区")}</label>
-                <input
-                  className="git-diff-input"
-                  aria-label={t("对比提交")}
-                  title={t("支持 HEAD、HEAD~n、分支、tag 与 commit id")}
-                  placeholder="HEAD~3 / commit id"
-                  value={commitDraft}
-                  onChange={(event) => setCommitDraft(event.target.value)}
-                />
-                <button type="submit" className="button small">
-                  {t("应用")}
+              <div className="git-chip-section">
+                <div className="git-chip-section-title">{t("与当前文件比较")}</div>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={
+                    diff.paneMode === "baseline" &&
+                    diff.base === "index" &&
+                    diff.target === "worktree"
+                      ? "git-chip-option active"
+                      : "git-chip-option"
+                  }
+                  onClick={() =>
+                    applyPreset({ paneMode: "baseline", base: "index", target: "worktree" })
+                  }
+                >
+                  <span className="git-chip-option-main">{t("未暂存更改")}</span>
+                  <span className="git-chip-option-meta">
+                    {t("工作区 ⇄ 暂存区（git diff）")}
+                  </span>
                 </button>
-              </form>
-              <form
-                className="git-chip-form"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  const a = aDraft.trim();
-                  const b = bDraft.trim();
-                  if (!a || !b) return;
-                  applyPreset({ paneMode: "refs", refA: a, refB: b });
-                }}
-              >
-                <label>{t("提交 ⇄ 提交")}</label>
-                <div className="git-chip-refs">
-                  <input
-                    className="git-diff-input"
-                    aria-label={t("提交 A（旧）")}
-                    title={t("支持 HEAD、HEAD~n、分支、tag 与 commit id")}
-                    placeholder={t("提交 A（旧）")}
-                    value={aDraft}
-                    onChange={(event) => setADraft(event.target.value)}
-                  />
-                  <span className="git-diff-side">⇄</span>
-                  <input
-                    className="git-diff-input"
-                    aria-label={t("提交 B（新）")}
-                    title={t("支持 HEAD、HEAD~n、分支、tag 与 commit id")}
-                    placeholder={t("提交 B（新）")}
-                    value={bDraft}
-                    onChange={(event) => setBDraft(event.target.value)}
-                  />
-                  <button type="submit" className="button small">
-                    {t("应用")}
-                  </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={
+                    diff.paneMode === "baseline" &&
+                    diff.base === "head" &&
+                    diff.target === "index"
+                      ? "git-chip-option active"
+                      : "git-chip-option"
+                  }
+                  onClick={() =>
+                    applyPreset({ paneMode: "baseline", base: "head", target: "index" })
+                  }
+                >
+                  <span className="git-chip-option-main">{t("已暂存更改")}</span>
+                  <span className="git-chip-option-meta">
+                    {t("HEAD ⇄ 暂存区（git diff --cached）")}
+                  </span>
+                </button>
+              </div>
+
+              <div className="git-chip-section">
+                <div className="git-chip-section-head">
+                  <span className="git-chip-section-title">{t("此文件的提交历史")}</span>
+                  <div className="git-chip-pager">
+                    <button
+                      type="button"
+                      className="git-chip-pager-button"
+                      aria-label={t("上一页")}
+                      title={t("上一页")}
+                      disabled={historyPage <= 1 || historyLoading}
+                      onClick={() => setHistoryPage((page) => Math.max(1, page - 1))}
+                    >
+                      ‹
+                    </button>
+                    <span>{t("第 {0} 页", historyPage)}</span>
+                    <button
+                      type="button"
+                      className="git-chip-pager-button"
+                      aria-label={t("下一页")}
+                      title={t("下一页")}
+                      disabled={!historyHasMore || historyLoading}
+                      onClick={() => setHistoryPage((page) => page + 1)}
+                    >
+                      ›
+                    </button>
+                  </div>
                 </div>
-              </form>
+                {historyLoading && <p className="git-chip-empty">{t("读取中…")}</p>}
+                {!historyLoading && historyError && (
+                  <p className="git-chip-empty">{historyError}</p>
+                )}
+                {!historyLoading && !historyError && visibleHistory.length === 0 && (
+                  <p className="git-chip-empty">{t("该文件还没有提交历史")}</p>
+                )}
+                {!historyLoading &&
+                  !historyError &&
+                  visibleHistory.map((commit) => (
+                    <button
+                      key={commit.hash}
+                      type="button"
+                      role="menuitem"
+                      className="git-chip-option git-chip-history-row"
+                      title={`${commit.body?.trim() || commit.subject}\n\n${commit.author} · ${commit.date}\n${commit.hash}`}
+                      onClick={() =>
+                        applyPreset({
+                          paneMode: "baseline",
+                          base: "commit",
+                          ref: commit.shortHash,
+                          target: "buffer",
+                        })
+                      }
+                    >
+                      <span className="git-chip-option-main">
+                        {commit.subject || commit.shortHash}
+                      </span>
+                      <span className="git-chip-option-meta">
+                        {commit.shortHash} · {formatHistoryDate(commit.date)}
+                      </span>
+                    </button>
+                  ))}
+              </div>
             </div>
           )}
         </div>

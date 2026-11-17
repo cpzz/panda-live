@@ -1,4 +1,10 @@
-import type { GitBranch, GitChange, GitChangeKind, GitCommit } from "../../src/shared/git";
+import type {
+  GitBranch,
+  GitChange,
+  GitChangeKind,
+  GitCommit,
+  GitCompareStatus,
+} from "../../src/shared/git";
 
 export interface ParsedStatus {
   branch: string | null;
@@ -139,13 +145,13 @@ export function parseGitBranches(output: string): GitBranch[] {
 const LOG_FIELD = "\x1f";
 const LOG_RECORD = "\x1e";
 
-/** 解析 `git log --pretty=format:%H%x1f%h%x1f%s%x1f%an%x1f%aI%x1e`。 */
+/** 解析 `git log --pretty=format:%H%x1f%h%x1f%s%x1f%an%x1f%aI%x1e`（可选第 6 段为完整提交信息）。 */
 export function parseGitLog(output: string): GitCommit[] {
   const commits: GitCommit[] = [];
   for (const record of output.split(LOG_RECORD)) {
     const clean = record.replace(/^\r?\n/u, "");
     if (!clean.trim()) continue;
-    const [hash, shortHash, subject, author, date] = clean.split(LOG_FIELD);
+    const [hash, shortHash, subject, author, date, body] = clean.split(LOG_FIELD);
     if (!hash || !shortHash) continue;
     commits.push({
       hash,
@@ -153,6 +159,7 @@ export function parseGitLog(output: string): GitCommit[] {
       subject: subject ?? "",
       author: author ?? "",
       date: date ?? "",
+      body: body?.trim() || undefined,
     });
   }
   return commits;
@@ -164,4 +171,72 @@ export function parseCommitFiles(output: string): string[] {
     .split("\0")
     .map((value) => value.replace(/^\r?\n/u, "").trim())
     .filter((value) => value.length > 0);
+}
+
+export interface ParsedDiffFile {
+  status: GitCompareStatus;
+  path: string;
+  origPath?: string;
+}
+
+/** 解析 `git diff --name-status -z --find-renames`；重命名/复制后跟旧路径与新路径。 */
+export function parseDiffNameStatus(output: string): ParsedDiffFile[] {
+  const tokens = output.split("\0");
+  const files: ParsedDiffFile[] = [];
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index] ?? "";
+    if (!token) continue;
+    const status = token[0] as GitCompareStatus;
+    if (status === "R" || status === "C") {
+      const origPath = tokens[index + 1];
+      const path = tokens[index + 2];
+      index += 2;
+      if (origPath && path) files.push({ status, path, origPath });
+      continue;
+    }
+    const path = tokens[index + 1];
+    index += 1;
+    if (path) files.push({ status, path });
+  }
+  return files;
+}
+
+export interface ParsedDiffStat {
+  additions: number;
+  deletions: number;
+  binary: boolean;
+}
+
+/**
+ * 解析 `git diff --numstat -z --find-renames`。
+ * 普通记录为 `增\t删\t路径\0`；重命名记录为 `增\t删\t\0旧路径\0新路径\0`。
+ * 二进制文件增删列均为 `-`。
+ */
+export function parseDiffNumstat(output: string): Map<string, ParsedDiffStat> {
+  const stats = new Map<string, ParsedDiffStat>();
+  const tokens = output.split("\0");
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index] ?? "";
+    if (!token) continue;
+    const firstTab = token.indexOf("\t");
+    if (firstTab < 0) continue;
+    const secondTab = token.indexOf("\t", firstTab + 1);
+    if (secondTab < 0) continue;
+    const added = token.slice(0, firstTab);
+    const deleted = token.slice(firstTab + 1, secondTab);
+    let filePath = token.slice(secondTab + 1);
+    if (!filePath) {
+      // 重命名：当前记录以空路径结尾，后面两个 token 是旧路径与新路径。
+      index += 2;
+      filePath = tokens[index] ?? "";
+    }
+    if (!filePath) continue;
+    const binary = added === "-" || deleted === "-";
+    stats.set(filePath, {
+      additions: binary ? 0 : Number.parseInt(added, 10) || 0,
+      deletions: binary ? 0 : Number.parseInt(deleted, 10) || 0,
+      binary,
+    });
+  }
+  return stats;
 }

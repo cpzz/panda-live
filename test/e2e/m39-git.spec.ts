@@ -562,7 +562,147 @@ test("M39：合并提交文件列表与历史分页", async () => {
   }
 });
 
-/** M39：对比视图改动标记、占位行对齐与左右滚动联动。 */
+/** M39：对比基线选择器：HEAD 状态、文件历史分页与当前提交排除。 */
+test("M39：对比基线选择器与文件历史分页", async () => {
+  test.setTimeout(240_000);
+  const repo = await fs.mkdtemp(path.join(os.tmpdir(), "panda-picker-"));
+  const userDataDir = await fs.mkdtemp(path.join(os.tmpdir(), "panda-picker-ud-"));
+  const historyFile = path.join(repo, "history.md");
+  const dirtyFile = path.join(repo, "dirty.md");
+  await initRepo(repo);
+  await fs.writeFile(historyFile, "# v0\n", "utf8");
+  await fs.writeFile(dirtyFile, "# dirty\n\n基础内容\n", "utf8");
+  await git(repo, ["add", "."]);
+  await git(repo, ["commit", "-m", "初始提交"]);
+  // 25 个提交改动 history.md，用于验证每页 20 条与当前 HEAD 排除。
+  for (let index = 1; index <= 24; index += 1) {
+    await fs.writeFile(historyFile, `# v${index}\n`, "utf8");
+    await git(repo, ["add", historyFile]);
+    await git(repo, ["commit", "-m", `历史提交 ${index}`]);
+  }
+  await fs.writeFile(dirtyFile, "# dirty\n\n磁盘已修改\n", "utf8");
+
+  const app = await electron.launch({
+    args: ["."],
+    cwd: CWD,
+    env: { ...process.env, PANDA_USER_DATA_DIR: userDataDir },
+  });
+  try {
+    const page = await app.firstWindow();
+    await openFolder(page, app, repo);
+
+    // 干净文件：只显示提交历史，不显示「与当前文件比较」。
+    await page.locator(".tree-name", { hasText: "history.md" }).click();
+    await page.keyboard.press("Control+Shift+P");
+    await page.keyboard.type("打开 Git 差异视图");
+    await page.keyboard.press("Enter");
+    await expect(page.locator(".git-diff-chip")).toBeVisible({ timeout: 20_000 });
+    await page.locator(".git-diff-chip").click();
+    const popover = page.locator(".git-chip-popover");
+    await expect(popover).toBeVisible();
+    await expect(popover).toContainText("未暂存更改");
+    await expect(popover).toContainText("已暂存更改");
+    // 当前基线 HEAD 从历史中排除：取 20 条显示 19 条。
+    await expect(page.locator(".git-chip-history-row")).toHaveCount(19, { timeout: 20_000 });
+    await popover.getByRole("button", { name: "下一页" }).click();
+    await expect(page.locator(".git-chip-history-row")).toHaveCount(5, { timeout: 20_000 });
+    await expect(popover).toContainText("第 2 页");
+    await page.keyboard.press("Escape");
+
+    // 有未保存修改：显示 HEAD 与上次保存。
+    await page.locator(".tree-name", { hasText: "dirty.md" }).click();
+    await page.getByRole("button", { name: "源码", exact: true }).click();
+    await page.locator(".cm-content").click();
+    await page.keyboard.press("Control+A");
+    await page.keyboard.type("# dirty\n\n编辑器未保存内容\n");
+    await page.keyboard.press("Control+Shift+P");
+    await page.keyboard.press("Control+A");
+    await page.keyboard.type("打开 Git 差异视图");
+    await page.keyboard.press("Enter");
+    await expect(page.locator(".git-diff-chip")).toBeVisible({ timeout: 20_000 });
+    await page.locator(".git-diff-chip").click();
+    const dirtyPopover = page.locator(".git-chip-popover");
+    await expect(dirtyPopover).toContainText("未暂存更改");
+    await expect(dirtyPopover).toContainText("已暂存更改");
+    await expect(dirtyPopover).toContainText("此文件的提交历史");
+  } finally {
+    await app.close();
+    await fs.rm(repo, { recursive: true, force: true });
+    await fs.rm(userDataDir, { recursive: true, force: true });
+  }
+});
+
+/** M39：边栏「比较」视图：双提交、工作区与手工输入。 */
+test("M39：仓库比较视图", async () => {
+  test.setTimeout(180_000);
+  const repo = await fs.mkdtemp(path.join(os.tmpdir(), "panda-compare-"));
+  const userDataDir = await fs.mkdtemp(path.join(os.tmpdir(), "panda-compare-ud-"));
+  const aFile = path.join(repo, "a.md");
+  await initRepo(repo);
+  await fs.writeFile(aFile, "# A\n\n第一版\n", "utf8");
+  await git(repo, ["add", "."]);
+  await git(repo, ["commit", "-m", "第一次提交"]);
+  await fs.writeFile(aFile, "# A\n\n第二版\n", "utf8");
+  await fs.writeFile(path.join(repo, "b.md"), "# B\n", "utf8");
+  await git(repo, ["add", "."]);
+  await git(repo, ["commit", "-m", "第二次提交"]);
+  await fs.writeFile(aFile, "# A\n\n工作区版本\n", "utf8");
+
+  const app = await electron.launch({
+    args: ["."],
+    cwd: CWD,
+    env: { ...process.env, PANDA_USER_DATA_DIR: userDataDir },
+  });
+  try {
+    const page = await app.firstWindow();
+    await openFolder(page, app, repo);
+    await page.getByRole("tab", { name: "Git", exact: true }).click();
+    await page.getByRole("tab", { name: "比较", exact: true }).click();
+
+    const files = page.locator(".git-compare-file");
+    await expect(files).toHaveCount(2, { timeout: 20_000 });
+    await expect(files.filter({ hasText: "a.md" })).toHaveCount(1);
+    await expect(files.filter({ hasText: "b.md" })).toHaveCount(1);
+
+    // 双提交：点击文件进入 HEAD~1 ⇄ HEAD 差异。
+    await files.filter({ hasText: "a.md" }).click();
+    await expect(page.locator(".git-diff-chip")).toContainText("HEAD~1 ⇄ HEAD", {
+      timeout: 20_000,
+    });
+    await page.getByRole("button", { name: "对比", exact: true }).click();
+    await expect(page.locator(".git-source-new .cm-content")).toContainText("第二版", {
+      timeout: 20_000,
+    });
+
+    // 目标切换为工作区：列表按磁盘内容重新计算，点击后对比工作区。
+    const targetInput = page.locator('.git-compare-input[aria-label="目标"]');
+    await targetInput.fill("");
+    await targetInput.press("Enter");
+    await expect(page.locator(".git-compare-summary")).toContainText("变更文件", {
+      timeout: 20_000,
+    });
+    await expect(files).toHaveCount(2, { timeout: 20_000 });
+    await files.filter({ hasText: "a.md" }).click();
+    await expect(page.locator(".git-diff-chip")).toContainText("工作区 ⇄ HEAD~1", {
+      timeout: 20_000,
+    });
+    await expect(page.locator(".git-source-new .cm-content")).toContainText("工作区版本", {
+      timeout: 20_000,
+    });
+
+    // 手工输入非法引用显示错误。
+    const baseInput = page.locator('.git-compare-input[aria-label="基准"]');
+    await baseInput.fill("no-such-ref");
+    await baseInput.press("Enter");
+    await expect(page.locator(".git-compare .banner-warning")).toContainText("no-such-ref", {
+      timeout: 20_000,
+    });
+  } finally {
+    await app.close();
+    await fs.rm(repo, { recursive: true, force: true });
+    await fs.rm(userDataDir, { recursive: true, force: true });
+  }
+});
 test("M39：对比视图改动标记与滚动联动", async () => {
   test.setTimeout(180_000);
   const repo = await fs.mkdtemp(path.join(os.tmpdir(), "panda-scroll-"));

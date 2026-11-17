@@ -1359,6 +1359,28 @@ export function App() {
       }
     });
   };
+  /** 打开「比较」视图中的文件：目标是工作区时读磁盘，双提交时对比两个引用。 */
+  const openCompareFile = (filePath: string, base: string, target: string | null): void => {
+    void manager.openPath(filePath).then(() => {
+      const current = manager.getState();
+      const doc = current.documents.find((item) => item.id === current.activeId);
+      if (!doc || doc.path !== filePath) return;
+      if (target) {
+        updateDiffOption(doc.id, { paneMode: "refs", refA: base, refB: target });
+      } else {
+        updateDiffOption(doc.id, {
+          paneMode: "baseline",
+          base: "commit",
+          ref: base,
+          target: "worktree",
+        });
+      }
+      if (doc.format !== "pdf" && doc.format !== "image") {
+        if (current.mode !== "git") modeBeforeGitRef.current = current.mode;
+        manager.setMode("git");
+      }
+    });
+  };
   /** 进入 GitPane（保持当前共享基线）。 */
   const enterGitView = (): void => {
     const current = manager.getState();
@@ -2362,6 +2384,7 @@ export function App() {
                   onOpenFile={(filePath) => openGitFile(filePath, "buffer")}
                   onOpenStagedFile={(filePath) => openGitFile(filePath, "index")}
                   onOpenCommitFile={(shortHash, file) => openCommitFile(shortHash, file)}
+                  onOpenCompareFile={openCompareFile}
                   onOpenConflictFile={(filePath) => void manager.openPath(filePath)}
                 />
               }

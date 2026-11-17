@@ -8,10 +8,19 @@ import type {
   GitBranch,
   GitCommit,
   GitCommitDetail,
+  GitCompareFile,
+  GitCompareResult,
   GitOperation,
   GitSnapshot,
 } from "../../src/shared/git";
-import { parseCommitFiles, parseGitBranches, parseGitLog, parseGitStatus } from "./git-parse";
+import {
+  parseCommitFiles,
+  parseDiffNameStatus,
+  parseDiffNumstat,
+  parseGitBranches,
+  parseGitLog,
+  parseGitStatus,
+} from "./git-parse";
 
 /** Git 命令统一超时；超时后不阻塞编辑。见 doc/design.md §21.3。 */
 const GIT_TIMEOUT_MS = 5_000;
@@ -387,6 +396,152 @@ export class GitService {
       command,
     );
     return parseGitLog(output.stdout);
+  }
+
+  /** 把相对文件路径对应的仓库中的引用解析成完整 commit hash；失败返回 null。 */
+  async resolveRef(filePath: string, ref: string, commandLine?: string): Promise<string | null> {
+    const command = parseGitCommand(commandLine);
+    const requested = (ref ?? "").trim();
+    if (!REF_PATTERN.test(requested)) return null;
+    const absolute = path.resolve(filePath);
+    const root = await this.resolveRepoRoot(path.dirname(absolute), command);
+    if (!root) return null;
+    return this.resolveCommit(requested, root, command);
+  }
+
+  /** 当前文件的提交历史（跟随重命名，包含合并提交）；供对比基线选择分页使用。 */
+  async fileLog(
+    filePath: string,
+    limit: number,
+    skip = 0,
+    commandLine?: string,
+  ): Promise<GitCommit[]> {
+    const command = parseGitCommand(commandLine);
+    const absolute = path.resolve(filePath);
+    const directory = path.dirname(absolute);
+    const root = await this.resolveRepoRoot(directory, command);
+    if (!root) {
+      throw new PandaError(
+        "E_GIT_OPERATION",
+        t("未检测到 Git 仓库，请检查设置 → Git 中的 Git 命令"),
+      );
+    }
+    const relative = path.relative(root, absolute);
+    if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
+      throw new PandaError("E_GIT_OPERATION", t("路径不在仓库范围内：{0}", filePath));
+    }
+    const count = Math.min(200, Math.max(1, Math.floor(limit)));
+    const offset = Math.max(0, Math.floor(skip));
+    // Git 的 --follow 会重写历史，`--skip` 与之组合时会失效；先多取再切片。
+    const fetchCount = Math.min(1000, count + offset);
+    try {
+      const output = await runGit(
+        [
+          "log",
+          "--follow",
+          "--full-history",
+          "-n",
+          String(fetchCount),
+          "--pretty=format:%H%x1f%h%x1f%s%x1f%an%x1f%aI%x1f%B%x1e",
+          "--",
+          relative.split(path.sep).join("/"),
+        ],
+        root,
+        command,
+        { timeout: GIT_STATUS_TIMEOUT_MS },
+      );
+      return parseGitLog(output.stdout).slice(offset, offset + count);
+    } catch (error) {
+      if (error instanceof PandaError) throw error;
+      const text = errorText(error);
+      // 空仓库（还没有 HEAD）或路径从未被跟踪时没有历史，按空列表返回。
+      if (text.includes("does not have any commits") || text.includes("unknown revision")) {
+        return [];
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * 仓库级比较：base 必填；target 为空表示工作区。
+   * 返回变更文件、状态与增删统计，供侧栏「比较」视图使用。
+   */
+  async compare(
+    root: string,
+    base: string,
+    target?: string,
+    commandLine?: string,
+  ): Promise<GitCompareResult> {
+    const command = parseGitCommand(commandLine);
+    const baseRef = (base ?? "").trim();
+    const targetRef = (target ?? "").trim();
+    if (!REF_PATTERN.test(baseRef)) {
+      throw new PandaError("E_GIT_OPERATION", t("提交引用不合法：{0}", baseRef));
+    }
+    if (targetRef && !REF_PATTERN.test(targetRef)) {
+      throw new PandaError("E_GIT_OPERATION", t("提交引用不合法：{0}", targetRef));
+    }
+    const baseHash = await this.resolveCommit(baseRef, root, command);
+    if (!baseHash) {
+      throw new PandaError("E_GIT_OPERATION", t("无法解析提交「{0}」", baseRef));
+    }
+    const targetHash = targetRef ? await this.resolveCommit(targetRef, root, command) : null;
+    if (targetRef && !targetHash) {
+      throw new PandaError("E_GIT_OPERATION", t("无法解析提交「{0}」", targetRef));
+    }
+
+    const range = targetHash ? [baseHash, targetHash] : [baseHash];
+    const [names, stats] = await Promise.all([
+      runGit(["diff", "--name-status", "-z", "--find-renames", ...range], root, command, {
+        timeout: GIT_STATUS_TIMEOUT_MS,
+      }),
+      runGit(["diff", "--numstat", "-z", "--find-renames", ...range], root, command, {
+        timeout: GIT_STATUS_TIMEOUT_MS,
+      }),
+    ]);
+    const statMap = parseDiffNumstat(stats.stdout);
+    const files: GitCompareFile[] = parseDiffNameStatus(names.stdout).map((file) => {
+      const stat = statMap.get(file.path);
+      return {
+        ...file,
+        additions: stat?.additions ?? 0,
+        deletions: stat?.deletions ?? 0,
+        binary: stat?.binary ?? false,
+      };
+    });
+
+    // `git diff` 不含未跟踪文件；目标为工作区时补上，保证「当前 ⇄ commit」完整。
+    if (!targetHash) {
+      const untracked = await runGit(
+        ["ls-files", "--others", "--exclude-standard", "-z"],
+        root,
+        command,
+        { timeout: GIT_STATUS_TIMEOUT_MS },
+      ).catch(() => null);
+      for (const item of (untracked?.stdout ?? "").split("\0")) {
+        if (!item) continue;
+        if (files.some((file) => file.path === item)) continue;
+        files.push({
+          path: item,
+          status: "A",
+          additions: 0,
+          deletions: 0,
+          binary: false,
+          untracked: true,
+        });
+      }
+    }
+
+    files.sort((left, right) => left.path.localeCompare(right.path));
+    return {
+      baseLabel: baseRef,
+      targetLabel: targetRef || null,
+      baseHash,
+      targetHash,
+      files,
+      additions: files.reduce((sum, file) => sum + file.additions, 0),
+      deletions: files.reduce((sum, file) => sum + file.deletions, 0),
+    };
   }
 
   async commitDetail(root: string, hash: string, commandLine?: string): Promise<GitCommitDetail> {

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { GitChange } from "../shared/git";
+import type { GitChange, GitCompareFile, GitCompareResult } from "../shared/git";
 import type { GitStore, GitStoreState } from "../services/git-store";
+import { describeError } from "../shared/errors";
 import { localeTag, t } from "../i18n";
 import { Icon } from "./icons";
 
@@ -13,6 +14,8 @@ interface GitPanelProps {
   onOpenStagedFile(path: string): void;
   /** 打开提交详情中的文件并进入 Git 显示模式（该提交 ⇄ 父提交）。 */
   onOpenCommitFile(shortHash: string, file: string): void;
+  /** 打开「比较」视图中的文件；target 为 null 表示目标为工作区。 */
+  onOpenCompareFile(filePath: string, base: string, target: string | null): void;
   /** 冲突项只打开文件本身：冲突标记需在源码模式处理，不进入只读差异视图。 */
   onOpenConflictFile(path: string): void;
   /** 仓库内未保存文档数量；>0 时提示 Git 只读取磁盘内容。 */
@@ -47,6 +50,24 @@ function statusLabel(change: GitChange): string {
   const index = change.indexStatus === "." ? " " : change.indexStatus;
   const worktree = change.worktreeStatus === "." ? " " : change.worktreeStatus;
   return `${index}${worktree}`;
+}
+
+/** 比较视图的单字母状态映射到现有状态色块样式。 */
+function compareKind(status: GitCompareFile["status"]): GitChange["kind"] {
+  switch (status) {
+    case "A":
+      return "added";
+    case "D":
+      return "deleted";
+    case "R":
+      return "renamed";
+    case "C":
+      return "copied";
+    case "U":
+      return "conflicted";
+    default:
+      return "modified";
+  }
 }
 
 /** 历史与详情统一显示本地时间，ISO 字符串仅在 tooltip 中保留。 */
@@ -157,6 +178,7 @@ export function GitPanel({
   onOpenFile,
   onOpenStagedFile,
   onOpenCommitFile,
+  onOpenCompareFile,
   onOpenConflictFile,
   dirtyCount,
   repos,
@@ -164,7 +186,7 @@ export function GitPanel({
   onSelectRepo,
   onSaveAll,
 }: GitPanelProps) {
-  const [tab, setTab] = useState<"changes" | "history">("changes");
+  const [tab, setTab] = useState<"changes" | "history" | "compare">("changes");
   const [message, setMessage] = useState("");
   const [amend, setAmend] = useState(false);
   /** 取消勾选或切换仓库时作废在途的 HEAD 提交信息读取。 */
@@ -177,6 +199,20 @@ export function GitPanel({
   const [newBranch, setNewBranch] = useState("");
   const [detailHash, setDetailHash] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [baseDraft, setBaseDraft] = useState("HEAD~1");
+  const [targetDraft, setTargetDraft] = useState("HEAD");
+  const [appliedCompare, setAppliedCompare] = useState({ base: "HEAD~1", target: "HEAD" });
+  const [compareResult, setCompareResult] = useState<GitCompareResult | null>(null);
+  const [compareStatus, setCompareStatus] = useState<"idle" | "loading" | "ready" | "error">(
+    "idle",
+  );
+  const [compareError, setCompareError] = useState<string | null>(null);
+  const [comparePicker, setComparePicker] = useState<"base" | "target" | null>(null);
+  const [pickerQuery, setPickerQuery] = useState("");
+  const [pickerLoadingMore, setPickerLoadingMore] = useState(false);
+  const compareTokenRef = useRef(0);
+  const compareWrapRef = useRef<HTMLDivElement>(null);
+  const compareTouchedRef = useRef(false);
   const previousRepoRef = useRef(selectedRepo);
 
   const snapshot = state.snapshot;
@@ -216,6 +252,15 @@ export function GitPanel({
     setAmend(false);
     setDetailHash(null);
     setLoadingMore(false);
+    setBaseDraft("HEAD~1");
+    setTargetDraft("HEAD");
+    setAppliedCompare({ base: "HEAD~1", target: "HEAD" });
+    setCompareResult(null);
+    setCompareStatus("idle");
+    setCompareError(null);
+    setComparePicker(null);
+    setPickerQuery("");
+    compareTouchedRef.current = false;
     setTab("changes");
   }, [selectedRepo]);
 
@@ -238,6 +283,88 @@ export function GitPanel({
       window.removeEventListener("keydown", onKeyDown, true);
     };
   }, [branchOpen]);
+
+  // 比较视图的提交选择器：点击外部或按 Esc 关闭。
+  useEffect(() => {
+    if (!comparePicker) return;
+    const onPointerDown = (event: PointerEvent): void => {
+      if (event.target instanceof Node && !compareWrapRef.current?.contains(event.target)) {
+        setComparePicker(null);
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") setComparePicker(null);
+    };
+    window.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("keydown", onKeyDown, true);
+    };
+  }, [comparePicker]);
+
+  // 比较视图：按已应用的引用读取差异文件列表；提交/引用变化时重新读取。
+  useEffect(() => {
+    if (tab !== "compare" || !root) return;
+    const base = appliedCompare.base.trim();
+    const target = appliedCompare.target.trim();
+    if (!base) return;
+    if (target && target.toLowerCase() === base.toLowerCase()) {
+      compareTokenRef.current += 1;
+      setCompareResult(null);
+      setCompareStatus("error");
+      setCompareError(t("两侧引用相同"));
+      return;
+    }
+    let cancelled = false;
+    const token = ++compareTokenRef.current;
+    setCompareStatus("loading");
+    setCompareError(null);
+    const timer = setTimeout(() => {
+      void window.panda.git
+        .compare({ root, base, target: target || undefined })
+        .then((result) => {
+          if (cancelled || token !== compareTokenRef.current) return;
+          setCompareResult(result);
+          setCompareStatus("ready");
+        })
+        .catch((error) => {
+          if (cancelled || token !== compareTokenRef.current) return;
+          setCompareResult(null);
+          setCompareStatus("error");
+          setCompareError(describeError(error));
+        });
+    }, 200);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [tab, root, appliedCompare, state.version, state.snapshot]);
+
+  // 仓库只有一个提交时，HEAD~1 不存在：自动退回 HEAD ⇄ 工作区。
+  useEffect(() => {
+    if (tab !== "compare" || compareTouchedRef.current || state.commits.length === 0) return;
+    if (
+      state.commits.length < 2 &&
+      appliedCompare.base === "HEAD~1" &&
+      appliedCompare.target === "HEAD"
+    ) {
+      setBaseDraft("HEAD");
+      setTargetDraft("");
+      setAppliedCompare({ base: "HEAD", target: "" });
+    }
+  }, [tab, state.commits, appliedCompare]);
+
+  const filteredPickerCommits = useMemo(() => {
+    const query = pickerQuery.trim().toLowerCase();
+    if (!query) return state.commits;
+    return state.commits.filter(
+      (commit) =>
+        commit.hash.toLowerCase().startsWith(query) ||
+        commit.shortHash.toLowerCase().startsWith(query) ||
+        commit.subject.toLowerCase().includes(query),
+    );
+  }, [state.commits, pickerQuery]);
 
   // 多根工作区：允许切换到其他目录对应的仓库；操作进行中禁止切换。
   // 同名目录用路径后缀区分，避免下拉里出现无法辨别的重复项。
@@ -422,6 +549,107 @@ export function GitPanel({
       : snapshot.operation === "rebase"
         ? t("变基")
         : t("拣选");
+
+  /** 应用一个比较引用；target 为空表示工作区。 */
+  const applyCompareRef = (which: "base" | "target", value: string): void => {
+    compareTouchedRef.current = true;
+    const ref = value.trim();
+    if (which === "base") {
+      if (!ref) return;
+      setBaseDraft(ref);
+      setAppliedCompare((current) => ({ ...current, base: ref }));
+    } else {
+      setTargetDraft(ref);
+      setAppliedCompare((current) => ({ ...current, target: ref }));
+    }
+    setComparePicker(null);
+    setPickerQuery("");
+  };
+
+  const swapCompare = (): void => {
+    compareTouchedRef.current = true;
+    const base = appliedCompare.base;
+    const target = appliedCompare.target.trim();
+    if (!target) return;
+    setBaseDraft(target);
+    setTargetDraft(base);
+    setAppliedCompare({ base: target, target: base });
+    setComparePicker(null);
+  };
+
+  const openCompareFileRow = (file: GitCompareFile): void => {
+    if (file.status === "D" || file.binary) return;
+    const base = appliedCompare.base.trim();
+    if (!base) return;
+    onOpenCompareFile(joinPath(root, file.path), base, appliedCompare.target.trim() || null);
+  };
+
+  /** 提交选择器；base 与 target 共用，target 额外提供「工作区」。 */
+  const commitPickerPanel = (which: "base" | "target") => (
+    <div className="git-compare-picker" role="listbox" aria-label={t("选择提交")}>
+      {which === "target" && (
+        <button
+          type="button"
+          role="option"
+          aria-selected={appliedCompare.target.trim() === ""}
+          className={
+            appliedCompare.target.trim() === ""
+              ? "git-compare-picker-row active"
+              : "git-compare-picker-row"
+          }
+          onClick={() => applyCompareRef("target", "")}
+        >
+          <span className="git-compare-picker-subject">{t("工作区")}</span>
+          <span className="git-compare-picker-meta">{t("磁盘内容（忽略未保存修改）")}</span>
+        </button>
+      )}
+      {pickerQuery.trim().length > 0 && (
+        <button
+          type="button"
+          role="option"
+          aria-selected={false}
+          className="git-compare-picker-row"
+          onClick={() => applyCompareRef(which, pickerQuery)}
+        >
+          <span className="git-compare-picker-subject">
+            {t("使用「{0}」", pickerQuery.trim())}
+          </span>
+          <span className="git-compare-picker-meta">{t("分支、tag、HEAD~n 或 commit id")}</span>
+        </button>
+      )}
+      {filteredPickerCommits.map((commit) => (
+        <button
+          key={commit.hash}
+          type="button"
+          role="option"
+          aria-selected={false}
+          className="git-compare-picker-row"
+          onClick={() => applyCompareRef(which, commit.shortHash)}
+        >
+          <span className="git-compare-picker-subject">{commit.subject || commit.shortHash}</span>
+          <span className="git-compare-picker-meta">
+            {commit.shortHash} · {formatCommitDate(commit.date)}
+          </span>
+        </button>
+      ))}
+      {filteredPickerCommits.length === 0 && !pickerQuery.trim() && (
+        <p className="git-compare-picker-empty">{t("还没有提交")}</p>
+      )}
+      {state.commitsHasMore && (
+        <button
+          type="button"
+          className="git-compare-picker-more"
+          disabled={pickerLoadingMore || busy}
+          onClick={() => {
+            setPickerLoadingMore(true);
+            void store.loadMoreCommits().finally(() => setPickerLoadingMore(false));
+          }}
+        >
+          {pickerLoadingMore ? t("读取中…") : t("加载更多")}
+        </button>
+      )}
+    </div>
+  );
 
   return (
     <div className="git-panel" aria-busy={busy}>
@@ -644,9 +872,183 @@ export function GitPanel({
         >
           {t("历史")}
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "compare"}
+          className={tab === "compare" ? "sidebar-tab active" : "sidebar-tab"}
+          onClick={() => setTab("compare")}
+        >
+          {t("比较")}
+        </button>
       </div>
 
-      {tab === "changes" ? (
+      {tab === "compare" ? (
+        <div className="git-panel-body git-compare">
+          <div className="git-compare-controls" ref={compareWrapRef}>
+            <div className="git-compare-field">
+              <div className="git-compare-label-row">
+                <span className="git-compare-label">{t("基准")}</span>
+                <button
+                  type="button"
+                  className="git-compare-swap"
+                  aria-label={t("交换比较方向")}
+                  title={t("交换比较方向")}
+                  disabled={!appliedCompare.target.trim()}
+                  onClick={swapCompare}
+                >
+                  ⇄
+                </button>
+              </div>
+              <div className="git-compare-input-row">
+                <input
+                  className="git-compare-input"
+                  aria-label={t("基准")}
+                  value={baseDraft}
+                  placeholder="HEAD~1 / 分支 / commit"
+                  onFocus={() => {
+                    setComparePicker("base");
+                    setPickerQuery(baseDraft);
+                  }}
+                  onChange={(event) => {
+                    compareTouchedRef.current = true;
+                    setBaseDraft(event.target.value);
+                    setComparePicker("base");
+                    setPickerQuery(event.target.value);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      applyCompareRef("base", baseDraft);
+                    } else if (event.key === "Escape") {
+                      setComparePicker(null);
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  className="git-icon-button"
+                  aria-label={t("选择提交")}
+                  title={t("选择提交")}
+                  onClick={() => {
+                    setComparePicker(comparePicker === "base" ? null : "base");
+                    setPickerQuery(baseDraft);
+                  }}
+                >
+                  <Icon name="chevron-down" size={12} />
+                </button>
+                {comparePicker === "base" && commitPickerPanel("base")}
+              </div>
+            </div>
+            <div className="git-compare-field">
+              <div className="git-compare-label-row">
+                <span className="git-compare-label">{t("目标")}</span>
+              </div>
+              <div className="git-compare-input-row">
+                <input
+                  className="git-compare-input"
+                  aria-label={t("目标")}
+                  value={targetDraft}
+                  placeholder={t("工作区（留空）")}
+                  onFocus={() => {
+                    setComparePicker("target");
+                    setPickerQuery(targetDraft);
+                  }}
+                  onChange={(event) => {
+                    compareTouchedRef.current = true;
+                    setTargetDraft(event.target.value);
+                    setComparePicker("target");
+                    setPickerQuery(event.target.value);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      applyCompareRef("target", targetDraft);
+                    } else if (event.key === "Escape") {
+                      setComparePicker(null);
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  className="git-icon-button"
+                  aria-label={t("选择提交")}
+                  title={t("选择提交")}
+                  onClick={() => {
+                    setComparePicker(comparePicker === "target" ? null : "target");
+                    setPickerQuery(targetDraft);
+                  }}
+                >
+                  <Icon name="chevron-down" size={12} />
+                </button>
+                {comparePicker === "target" && commitPickerPanel("target")}
+              </div>
+            </div>
+          </div>
+
+          {compareStatus === "error" && (
+            <div className="banner banner-warning git-error" role="alert">
+              <span className="banner-text">{compareError ?? t("比较失败")}</span>
+            </div>
+          )}
+          {compareStatus === "loading" && (
+            <p className="placeholder git-compare-empty">{t("读取中…")}</p>
+          )}
+          {compareStatus === "ready" && compareResult && (
+            <>
+              <div className="git-compare-summary">
+                <span>{t("变更文件 {0}", compareResult.files.length)}</span>
+                <span className="git-compare-stats">
+                  <span className="git-diff-add">+{compareResult.additions}</span>{" "}
+                  <span className="git-diff-del">−{compareResult.deletions}</span>
+                </span>
+              </div>
+              {compareResult.files.length === 0 && (
+                <p className="placeholder git-compare-empty">{t("没有差异")}</p>
+              )}
+              <div className="git-compare-files">
+                {compareResult.files.map((file) => {
+                  const renamed = file.status === "R" || file.status === "C";
+                  const disabled = file.status === "D" || file.binary || renamed;
+                  return (
+                    <button
+                      key={`${file.origPath ?? ""}:${file.path}`}
+                      type="button"
+                      className={disabled ? "git-compare-file disabled" : "git-compare-file"}
+                      disabled={disabled}
+                      title={
+                        disabled
+                          ? file.binary
+                            ? t("二进制文件不支持差异预览")
+                            : renamed
+                              ? t("重命名/复制文件暂不支持预览")
+                              : t("已删除文件暂不支持预览")
+                          : file.path
+                      }
+                      onClick={() => openCompareFileRow(file)}
+                    >
+                      <span className={`git-change-status status-${compareKind(file.status)}`}>
+                        {file.status}
+                      </span>
+                      <span className="git-compare-path">
+                        {file.origPath ? `${file.origPath} → ${file.path}` : file.path}
+                      </span>
+                      <span className="git-compare-stats">
+                        {file.binary ? t("二进制") : `+${file.additions} −${file.deletions}`}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
+          {compareStatus === "idle" && !compareResult && (
+            <p className="placeholder git-compare-empty">
+              {t("选择两个版本后显示变更文件")}
+            </p>
+          )}
+        </div>
+      ) : tab === "changes" ? (
         <div className="git-panel-body">
           <div className="git-commit-box">
             <textarea

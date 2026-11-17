@@ -296,3 +296,79 @@ describe.skipIf(!hasGit)("Git 历史与提交详情", () => {
     }
   });
 });
+
+describe.skipIf(!hasGit)("Git 文件历史与仓库比较", () => {
+  it("fileLog 只返回改动该文件的提交并支持分页", async () => {
+    const repo = mkdtempSync(path.join(tmpdir(), "panda-git-filelog-"));
+    try {
+      initRepo(repo);
+      writeFileSync(path.join(repo, "other.txt"), "other\n", "utf8");
+      git(repo, "add", ".");
+      git(repo, "commit", "-m", "other");
+      const target = path.join(repo, "doc.md");
+      for (let index = 0; index < 3; index += 1) {
+        writeFileSync(target, `# v${index}\n`, "utf8");
+        git(repo, "add", ".");
+        git(repo, "commit", "-m", `doc ${index}`);
+        writeFileSync(path.join(repo, "unrelated.txt"), `${index}\n`, "utf8");
+        git(repo, "add", ".");
+        git(repo, "commit", "-m", `unrelated ${index}`);
+      }
+      const service = new GitService();
+      const first = await service.fileLog(target, 2);
+      expect(first.map((commit) => commit.subject)).toEqual(["doc 2", "doc 1"]);
+      const second = await service.fileLog(target, 2, 2);
+      expect(second.map((commit) => commit.subject)).toEqual(["doc 0"]);
+    } finally {
+      rmTempRepo(repo);
+    }
+  }, 30_000);
+
+  it("compare 返回状态、增删统计并区分工作区未跟踪文件", async () => {
+    const repo = mkdtempSync(path.join(tmpdir(), "panda-git-compare-"));
+    try {
+      initRepo(repo);
+      writeFileSync(path.join(repo, "a.txt"), "one\ntwo\n", "utf8");
+      writeFileSync(path.join(repo, "old.txt"), "old\n", "utf8");
+      git(repo, "add", ".");
+      git(repo, "commit", "-m", "c1");
+      writeFileSync(path.join(repo, "a.txt"), "one\nTWO\nthree\n", "utf8");
+      writeFileSync(path.join(repo, "added.txt"), "new\n", "utf8");
+      git(repo, "add", ".");
+      rmSync(path.join(repo, "old.txt"));
+      git(repo, "add", "-A");
+      git(repo, "commit", "-m", "c2");
+
+      const service = new GitService();
+      const committed = await service.compare(repo, "HEAD~1", "HEAD");
+      const modified = committed.files.find((file) => file.path === "a.txt");
+      expect(modified).toMatchObject({ status: "M", additions: 2, deletions: 1 });
+      expect(committed.files.find((file) => file.path === "added.txt")).toMatchObject({
+        status: "A",
+      });
+      expect(committed.files.find((file) => file.path === "old.txt")).toMatchObject({
+        status: "D",
+      });
+      expect(committed.additions).toBeGreaterThan(0);
+
+      writeFileSync(path.join(repo, "a.txt"), "one\nTWO\nthree\nfour\n", "utf8");
+      writeFileSync(path.join(repo, "untracked.txt"), "u\n", "utf8");
+      const worktree = await service.compare(repo, "HEAD");
+      expect(worktree.targetLabel).toBeNull();
+      expect(worktree.files.find((file) => file.path === "a.txt")).toMatchObject({
+        status: "M",
+        additions: 1,
+      });
+      expect(worktree.files.find((file) => file.path === "untracked.txt")).toMatchObject({
+        status: "A",
+        untracked: true,
+      });
+
+      await expect(service.compare(repo, "no-such-ref", "HEAD")).rejects.toMatchObject({
+        code: "E_GIT_OPERATION",
+      });
+    } finally {
+      rmTempRepo(repo);
+    }
+  }, 30_000);
+});
