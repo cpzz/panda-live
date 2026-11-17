@@ -264,6 +264,11 @@ const ICONS = {
       <path d="M13.7 21a2 2 0 0 1-3.4 0" />
     </>
   ),
+  activity: (
+    <>
+      <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+    </>
+  ),
   git: (
     <>
       <circle cx="6" cy="6" r="2.5" />

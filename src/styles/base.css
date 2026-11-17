@@ -1455,6 +1455,22 @@ button {
   color: var(--accent);
 }
 
+/* 纯图标状态栏按钮：12px 图标 + 左右 6px 内边距，与 24px 状态栏对齐。 */
+.statusbar-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px 6px;
+}
+
+/* 状态栏操作按钮之间的竖向分隔线。 */
+.statusbar-divider {
+  flex: 0 0 auto;
+  width: 1px;
+  height: 12px;
+  background: var(--border);
+}
+
 /* 通知历史入口：状态栏铃铛按钮与未读数。 */
 .notice-button {
   display: inline-flex;

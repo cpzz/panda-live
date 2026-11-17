@@ -2839,6 +2839,34 @@ export function App() {
               ? (workspace.roots[0]?.root.name ?? t("无工作区"))
               : t("{0} 个工作区", workspace.roots.length)}
         </span>
+        {state.mode !== "git" && (
+          <>
+            <DiffControls
+              enabled={diffEnabled && !activeIsBinary}
+              state={diffState}
+              items={diffItems}
+              currentIndex={diffIndex}
+              disabled={!active || activeIsBinary}
+              dirty={active?.dirty ?? false}
+              mode={diffMode}
+              baseLabel={diffBaselineLabel}
+              modeAvailable={state.mode !== "wysiwyg"}
+              onToggle={() => updateDiffOption(activeId, { enabled: !diffEnabled })}
+              onModeChange={(mode) => updateDiffOption(activeId, { mode })}
+              onRefresh={() => setDiffRefresh((value) => value + 1)}
+              onPrev={() => navigateDiff(-1)}
+              onNext={() => navigateDiff(1)}
+              onOpenFullDiff={enterGitView}
+              onJump={(index) => {
+                const line = diffAnchors[index];
+                if (line === undefined) return;
+                setDiffIndex(index);
+                revealDiffAt(line);
+              }}
+            />
+            <span className="statusbar-divider" aria-hidden="true" />
+          </>
+        )}
         <button
           type="button"
           className={
@@ -2856,51 +2884,32 @@ export function App() {
             </span>
           )}
         </button>
-        {state.mode !== "git" && (
-          <DiffControls
-            enabled={diffEnabled && !activeIsBinary}
-            state={diffState}
-            items={diffItems}
-            currentIndex={diffIndex}
-            disabled={!active || activeIsBinary}
-            dirty={active?.dirty ?? false}
-            mode={diffMode}
-            baseLabel={diffBaselineLabel}
-            modeAvailable={state.mode !== "wysiwyg"}
-            onToggle={() => updateDiffOption(activeId, { enabled: !diffEnabled })}
-            onModeChange={(mode) => updateDiffOption(activeId, { mode })}
-            onRefresh={() => setDiffRefresh((value) => value + 1)}
-            onPrev={() => navigateDiff(-1)}
-            onNext={() => navigateDiff(1)}
-            onOpenFullDiff={enterGitView}
-            onJump={(index) => {
-              const line = diffAnchors[index];
-              if (line === undefined) return;
-              setDiffIndex(index);
-              revealDiffAt(line);
-            }}
-          />
-        )}
+        <span className="statusbar-divider" aria-hidden="true" />
         <button
           type="button"
-          className={perfVisible ? "statusbar-button active" : "statusbar-button"}
+          className={
+            perfVisible ? "statusbar-button statusbar-icon active" : "statusbar-button statusbar-icon"
+          }
           aria-label={t("性能浮层")}
           aria-pressed={perfVisible}
           title={t("性能浮层")}
           onClick={() => setPerfVisible((value) => !value)}
         >
-          {t("性能")}
+          <Icon name="activity" size={12} />
         </button>
         {(problems.length > 0 || problemsOpen) && (
-          <button
-            type="button"
-            className={problemsOpen ? "statusbar-button active" : "statusbar-button"}
-            aria-label={t("问题面板")}
-            aria-expanded={problemsOpen}
-            onClick={() => setProblemsOpen((value) => !value)}
-          >
-            {t("错误 {0} · 警告 {1}", errorCount, warningCount)}
-          </button>
+          <>
+            <span className="statusbar-divider" aria-hidden="true" />
+            <button
+              type="button"
+              className={problemsOpen ? "statusbar-button active" : "statusbar-button"}
+              aria-label={t("问题面板")}
+              aria-expanded={problemsOpen}
+              onClick={() => setProblemsOpen((value) => !value)}
+            >
+              {t("错误 {0} · 警告 {1}", errorCount, warningCount)}
+            </button>
+          </>
         )}
       </footer>
 
