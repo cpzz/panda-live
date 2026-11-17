@@ -66,6 +66,7 @@ import {
   lineNumbers,
   rectangularSelection,
   crosshairCursor,
+  WidgetType,
   type DecorationSet,
 } from "@codemirror/view";
 import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap, acceptCompletion, completionStatus } from "@codemirror/autocomplete";
@@ -120,6 +121,15 @@ export type SourceLanguage =
 export interface DiffLineMarker {
   line: number;
   kind: "add" | "change" | "delete";
+}
+
+/** Git 对比的占位行：在行少的一侧插入空白，保持左右逐行对齐。 */
+export interface DiffSpacer {
+  /** 1 基行号；插入到该行之前。超过文档行数时追加到文档末尾。 */
+  line: number;
+  /** 占位行数。 */
+  count: number;
+  kind: "add" | "delete";
 }
 
 const setDiffMarkersEffect = StateEffect.define<readonly DiffLineMarker[]>();
@@ -240,10 +250,92 @@ const diffInlineField = StateField.define<readonly DiffInlineMark[]>({
     ),
 });
 
+/** 占位块按编辑器实际行高换算成像素，同时用于高度映射估算与 DOM 高度。 */
+interface DiffSpacerMark extends DiffSpacer {
+  height: number;
+}
+
+const setDiffSpacersEffect = StateEffect.define<readonly DiffSpacerMark[]>();
+
+class DiffSpacerWidget extends WidgetType {
+  constructor(private readonly mark: DiffSpacerMark) {
+    super();
+  }
+
+  override eq(other: WidgetType): boolean {
+    return (
+      other instanceof DiffSpacerWidget &&
+      other.mark.line === this.mark.line &&
+      other.mark.count === this.mark.count &&
+      other.mark.kind === this.mark.kind &&
+      other.mark.height === this.mark.height
+    );
+  }
+
+  /** 未渲染时 CodeMirror 用该值估算高度，长文档滚动时不会累积偏差。 */
+  override get estimatedHeight(): number {
+    return this.mark.height;
+  }
+
+  override toDOM(): HTMLElement {
+    const element = document.createElement("div");
+    element.className = `cm-diff-spacer ${this.mark.kind}`;
+    element.style.height = `${this.mark.height}px`;
+    element.title = t(
+      this.mark.kind === "add" ? "此处新增了 {0} 行" : "此处删除了 {0} 行",
+      this.mark.count,
+    );
+    const label = document.createElement("span");
+    label.textContent = `${this.mark.kind === "add" ? "+" : "−"}${this.mark.count} 行`;
+    element.appendChild(label);
+    element.setAttribute("aria-hidden", "true");
+    return element;
+  }
+
+  override ignoreEvent(): boolean {
+    return true;
+  }
+}
+
+const diffSpacerField = StateField.define<readonly DiffSpacerMark[]>({
+  create: () => [],
+  update(value, transaction) {
+    for (const effect of transaction.effects) {
+      if (effect.is(setDiffSpacersEffect)) return effect.value;
+    }
+    return transaction.docChanged ? [] : value;
+  },
+  provide: (field) =>
+    EditorView.decorations.compute([field, "doc"], (state) => {
+      const doc = state.doc;
+      const ranges: Array<{ from: number; value: Decoration }> = [];
+      for (const mark of state.field(field)) {
+        // 块级占位挂在上一行末尾，保证行号仍然对应自身内容；
+        // 同时 CodeMirror 会把块高度计入行高映射（含 estimatedHeight），长文档不会累积错位。
+        const from =
+          mark.line <= 1 ? 0 : doc.line(Math.min(mark.line - 1, doc.lines)).to;
+        ranges.push({
+          from,
+          value: Decoration.widget({
+            widget: new DiffSpacerWidget(mark),
+            block: true,
+            side: 1,
+          }),
+        });
+      }
+      ranges.sort((a, b) => a.from - b.from);
+      return Decoration.set(
+        ranges.map((range) => range.value.range(range.from)),
+        true,
+      );
+    }),
+});
+
 /** 源码 diff 装饰：左侧 gutter 标记 + 行底色 + 行内变化字符高亮。见 §21.6、§21.8。 */
 const diffExtension: Extension = [
   diffMarkerField,
   diffInlineField,
+  diffSpacerField,
   gutter({
     class: "cm-diff-gutter",
     markers: (view) => buildDiffGutterMarkers(view.state.field(diffMarkerField), view.state.doc),
@@ -503,6 +595,8 @@ export interface SourceEditorOptions {
   insertSpaces?: boolean;
   /** 是否显示行号，默认 true。 */
   showLineNumbers?: boolean;
+  /** 是否自动换行，默认 true；Git 对比关闭以保证两侧行高一致、占位行精确对齐。 */
+  lineWrapping?: boolean;
   onChange(content: string): void;
   onSelection(info: SelectionInfo): void;
   /** 折叠状态变化（展开/折叠）；用于会话持久化。见 doc/design.md §21.6。 */
@@ -753,6 +847,7 @@ function createState(
   tabSizeCompartment: Compartment,
   tabSize: number,
   insertSpaces: boolean,
+  lineWrapping: boolean,
 ): EditorState {
   return EditorState.create({
     doc,
@@ -762,7 +857,7 @@ function createState(
       languageExtension(language),
       // 源码模式的查找替换使用与 WYSIWYG 一致的自绘面板（§11.5）。
       search({ top: true, createPanel: createSourceSearchPanel }),
-      EditorView.lineWrapping,
+      ...(lineWrapping ? [EditorView.lineWrapping] : []),
       // 自动缩进与 Tab 输出使用一致的单位（空格或硬制表符）。
       tabSizeCompartment.of(buildIndentExtension(tabSize, insertSpaces)),
       syntaxHighlighting(pandaHighlight),
@@ -802,12 +897,14 @@ export class SourceEditor {
   private tabSize: number;
   private insertSpaces: boolean;
   private showLineNumbers: boolean;
+  private readonly lineWrapping: boolean;
   private suppressChange = false;
 
   constructor(private readonly options: SourceEditorOptions) {
     this.tabSize = options.tabSize ?? 2;
     this.insertSpaces = options.insertSpaces ?? true;
     this.showLineNumbers = options.showLineNumbers ?? true;
+    this.lineWrapping = options.lineWrapping ?? true;
     this.updateListener = EditorView.updateListener.of((update) => {
       // 折叠/展开随事务出现；逐事务检查是否包含折叠效果。
       for (const tr of update.transactions) {
@@ -835,6 +932,7 @@ export class SourceEditor {
         this.tabSizeCompartment,
         this.tabSize,
         this.insertSpaces,
+        this.lineWrapping,
       ),
       parent: options.parent,
     });
@@ -884,6 +982,23 @@ export class SourceEditor {
     this.view.dispatch({ effects: setDiffInlineMarksEffect.of(marks) });
   }
 
+  /** 更新左右对齐用的占位行；高度按编辑器实际行高换算。 */
+  setDiffSpacers(spacers: readonly DiffSpacer[]): void {
+    const computed = Number.parseFloat(getComputedStyle(this.view.contentDOM).lineHeight);
+    const lineHeight =
+      Number.isFinite(computed) && computed > 0 ? computed : this.view.defaultLineHeight;
+    this.view.dispatch({
+      effects: setDiffSpacersEffect.of(
+        spacers.map((spacer) => ({ ...spacer, height: spacer.count * lineHeight })),
+      ),
+    });
+  }
+
+  /** 滚动容器；Git 对比视图用于左右联动。 */
+  get scroller(): HTMLElement {
+    return this.view.scrollDOM;
+  }
+
   private applyShowLineNumbers(): void {
     this.view.dom.classList.toggle("hide-line-numbers", !this.showLineNumbers);
   }
@@ -914,6 +1029,7 @@ export class SourceEditor {
         this.tabSizeCompartment,
         this.tabSize,
         this.insertSpaces,
+        this.lineWrapping,
       ),
     );
     if (!this.insertSpaces) {

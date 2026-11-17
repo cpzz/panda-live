@@ -29,6 +29,8 @@
   "读取提交详情…": "Loading commit details…",
   "没有变更文件": "No changed files",
   "加载更多": "Load more",
+  "此处新增了 {0} 行": "{0} line(s) added here",
+  "此处删除了 {0} 行": "{0} line(s) deleted here",
   "显示改动（Ctrl+Shift+D）{0}": "Show changes (Ctrl+Shift+D) {0}",
   "读取并对比": "Read and compare",
   "提交 A（旧）": "Commit A (old)",

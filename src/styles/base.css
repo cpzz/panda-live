@@ -1332,9 +1332,55 @@ button {
   height: 100%;
 }
 
-/* 旧侧同一条 change 在「改动前」实际是删除，按删除色显示。 */
-.git-source-old .cm-line.cm-diff-line-change {
+/* 旧侧同一条 change 在「改动前」实际是删除，按删除色显示；删除行补整行底色。 */
+.git-source-old .cm-line.cm-diff-line-change,
+.git-source-old .cm-line.cm-diff-line-delete {
   background: var(--diff-del-bg);
+  box-shadow: inset 2px 0 var(--diff-del-border);
+}
+
+/* 新侧的修改行与新增行统一用新增色，与旧侧红底成对。 */
+.git-source-new .cm-line.cm-diff-line-add,
+.git-source-new .cm-line.cm-diff-line-change {
+  background: var(--diff-add-bg);
+  box-shadow: inset 2px 0 var(--diff-add-border);
+}
+
+/* 对比视图的占位行：行少的一侧补齐高度，显示增删数量提示。 */
+.cm-diff-spacer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  user-select: none;
+}
+
+/* 占位高度由 JS 按编辑器行高写入；标签文字略小，不改变块高度。 */
+.cm-diff-spacer span {
+  font-size: 10px;
+}
+
+.cm-diff-spacer.add {
+  background-color: color-mix(in srgb, var(--diff-add-bg) 40%, transparent);
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 4px,
+    color-mix(in srgb, var(--diff-add-border) 12%, transparent) 4px,
+    color-mix(in srgb, var(--diff-add-border) 12%, transparent) 8px
+  );
+  box-shadow: inset 2px 0 var(--diff-add-border);
+}
+
+.cm-diff-spacer.delete {
+  background-color: color-mix(in srgb, var(--diff-del-bg) 40%, transparent);
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 4px,
+    color-mix(in srgb, var(--diff-del-border) 12%, transparent) 4px,
+    color-mix(in srgb, var(--diff-del-border) 12%, transparent) 8px
+  );
   box-shadow: inset 2px 0 var(--diff-del-border);
 }
 

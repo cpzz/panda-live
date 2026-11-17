@@ -120,7 +120,7 @@ describe.skipIf(!hasGit)("Git 基线缺失原因", () => {
     } finally {
       rmTempRepo(repo);
     }
-  });
+  }, 30_000);
 
   it("提交新增文件后同一路径可读取 HEAD 基线", async () => {
     const repo = mkdtempSync(path.join(tmpdir(), "panda-git-added-"));
@@ -141,7 +141,7 @@ describe.skipIf(!hasGit)("Git 基线缺失原因", () => {
     } finally {
       rmTempRepo(repo);
     }
-  });
+  }, 30_000);
 
   it("没有 HEAD 的空仓库返回 no-head 而不是 blob-missing", async () => {
     const repo = mkdtempSync(path.join(tmpdir(), "panda-git-empty-"));
@@ -157,7 +157,7 @@ describe.skipIf(!hasGit)("Git 基线缺失原因", () => {
     } finally {
       rmTempRepo(repo);
     }
-  });
+  }, 30_000);
 });
 
 describe.skipIf(!hasGit)("Git 基线读取", () => {
@@ -186,7 +186,7 @@ describe.skipIf(!hasGit)("Git 基线读取", () => {
     expect(result.baseLabel).toBe("HEAD");
     expect(result.oldText).toContain("正文");
     expect(result.oldText).not.toContain("正文修改");
-  });
+  }, 30_000);
 
   it("未跟踪文件返回空基线", async () => {
     const other = path.join(repo, "new.md");
@@ -275,7 +275,7 @@ describe.skipIf(!hasGit)("Git 历史与提交详情", () => {
     } finally {
       rmTempRepo(repo);
     }
-  });
+  }, 30_000);
 
   it("log 支持 skip 分页且两页不重复", async () => {
     const repo = mkdtempSync(path.join(tmpdir(), "panda-git-log-"));

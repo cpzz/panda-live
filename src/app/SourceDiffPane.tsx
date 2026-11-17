@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import type { DiffHunk, LineDiff } from "../diff/compute";
 import { newInlineMarks, newLineMarkers, oldInlineMarks, oldLineMarkers } from "../diff/markers";
 import { t } from "../i18n";
-import { SourceEditor, type SourceLanguage } from "../source/codemirror";
+import { SourceEditor, type DiffSpacer, type SourceLanguage } from "../source/codemirror";
 
 /** 计算某一侧的未改动行区间（1 基、闭区间），至少 2 行才折叠。 */
 function unchangedRanges(
@@ -21,6 +21,33 @@ function unchangedRanges(
   // 末尾区间不预知总行数，交由 setLineFolds 按文档行数截断。
   ranges.push({ fromLine: cursor, toLine: Number.MAX_SAFE_INTEGER });
   return ranges.filter((range) => range.toLine > range.fromLine);
+}
+
+/** 计算某一侧的占位行：行少的一侧补齐，让左右逐行对齐。 */
+function diffSpacers(hunks: readonly DiffHunk[], side: "old" | "new"): DiffSpacer[] {
+  const spacers: DiffSpacer[] = [];
+  for (const hunk of hunks) {
+    if (side === "old") {
+      if (hunk.kind === "add") {
+        spacers.push({ line: hunk.oldStart, count: hunk.newCount, kind: "add" });
+      } else if (hunk.kind === "change" && hunk.newCount > hunk.oldCount) {
+        spacers.push({
+          line: hunk.oldStart + hunk.oldCount,
+          count: hunk.newCount - hunk.oldCount,
+          kind: "add",
+        });
+      }
+    } else if (hunk.kind === "delete") {
+      spacers.push({ line: hunk.newStart, count: hunk.oldCount, kind: "delete" });
+    } else if (hunk.kind === "change" && hunk.oldCount > hunk.newCount) {
+      spacers.push({
+        line: hunk.newStart + hunk.newCount,
+        count: hunk.oldCount - hunk.newCount,
+        kind: "delete",
+      });
+    }
+  }
+  return spacers;
 }
 
 /**
@@ -64,6 +91,8 @@ export function SourceDiffPane({
         language,
         tabSize: 2,
         showLineNumbers: true,
+        // 对比视图关闭自动换行：行高统一，占位行才能精确保持左右对齐。
+        lineWrapping: false,
         onChange: () => undefined,
         onSelection: () => undefined,
       });
@@ -75,6 +104,7 @@ export function SourceDiffPane({
     const newEditor = create(newHostRef.current, newText);
     oldEditorRef.current = oldEditor;
     newEditorRef.current = newEditor;
+    const hunks = diff?.hunks ?? [];
     if (diff) {
       oldEditor?.setDiffMarkers(oldLineMarkers(diff));
       newEditor?.setDiffMarkers(newLineMarkers(diff));
@@ -82,6 +112,9 @@ export function SourceDiffPane({
       oldEditor?.setDiffInlineMarks(oldInlineMarks(diff));
       newEditor?.setDiffInlineMarks(newInlineMarks(diff));
     }
+    // 行少的一侧插入占位行，使左右同一处改动从同一水平行开始。
+    oldEditor?.setDiffSpacers(diffSpacers(hunks, "old"));
+    newEditor?.setDiffSpacers(diffSpacers(hunks, "new"));
 
     return () => {
       for (const editor of editors) editor.destroy();
@@ -101,6 +134,30 @@ export function SourceDiffPane({
     applyGranularity(oldEditorRef.current, "old");
     applyGranularity(newEditorRef.current, "new");
   }, [diff, granularity]);
+
+  // 左右联动滚动：占位块保证两侧内容逐行等高，直接逐像素同步（含横向）。
+  useEffect(() => {
+    const oldScroller = oldEditorRef.current?.scroller;
+    const newScroller = newEditorRef.current?.scroller;
+    if (!oldScroller || !newScroller) return;
+    const apply = (from: HTMLElement, to: HTMLElement): void => {
+      const top = Math.max(
+        0,
+        Math.min(from.scrollTop, Math.max(0, to.scrollHeight - to.clientHeight)),
+      );
+      if (Math.abs(to.scrollTop - top) >= 1) to.scrollTop = top;
+      const left = Math.max(0, Math.min(from.scrollLeft, to.scrollWidth - to.clientWidth));
+      if (Math.abs(to.scrollLeft - left) >= 1) to.scrollLeft = left;
+    };
+    const onOld = (): void => apply(oldScroller, newScroller);
+    const onNew = (): void => apply(newScroller, oldScroller);
+    oldScroller.addEventListener("scroll", onOld, { passive: true });
+    newScroller.addEventListener("scroll", onNew, { passive: true });
+    return () => {
+      oldScroller.removeEventListener("scroll", onOld);
+      newScroller.removeEventListener("scroll", onNew);
+    };
+  }, [diff, language, newText, oldText]);
 
   useEffect(() => {
     if (!reveal) return;

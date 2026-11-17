@@ -561,3 +561,139 @@ test("M39：合并提交文件列表与历史分页", async () => {
     await fs.rm(userDataDir, { recursive: true, force: true });
   }
 });
+
+/** M39：对比视图改动标记、占位行对齐与左右滚动联动。 */
+test("M39：对比视图改动标记与滚动联动", async () => {
+  test.setTimeout(180_000);
+  const repo = await fs.mkdtemp(path.join(os.tmpdir(), "panda-scroll-"));
+  const userDataDir = await fs.mkdtemp(path.join(os.tmpdir(), "panda-scroll-ud-"));
+  const file = path.join(repo, "long.md");
+  const lines = Array.from({ length: 160 }, (_, index) => `第 ${index + 1} 行内容`);
+  await initRepo(repo);
+  await fs.writeFile(file, `# 标题\n\n${lines.join("\n")}\n`, "utf8");
+  await git(repo, ["add", "."]);
+  await git(repo, ["commit", "-m", "初始提交"]);
+  const next = [...lines];
+  next.splice(5, 1); // 删除第 6 行
+  next.splice(9, 0, "新增行 A", "新增行 B"); // 第 10 行后插入 2 行
+  next.splice(13, 1, "第 13 行改写 A", "第 13 行改写 B", "第 13 行改写 C"); // 1 行改 3 行
+  await fs.writeFile(file, `# 标题\n\n${next.join("\n")}\n`, "utf8");
+
+  const app = await electron.launch({
+    args: ["."],
+    cwd: CWD,
+    env: { ...process.env, PANDA_USER_DATA_DIR: userDataDir },
+  });
+  try {
+    const page = await app.firstWindow();
+    await openFolder(page, app, repo);
+    await page.getByRole("tab", { name: "Git", exact: true }).click();
+    await page
+      .locator(".git-change-row")
+      .filter({ hasText: "long.md" })
+      .locator(".git-change-path")
+      .click();
+    await page.getByRole("button", { name: "对比", exact: true }).click();
+    await expect(page.locator(".git-source-old .cm-scroller")).toBeVisible({ timeout: 20_000 });
+
+    // 删除行红底、新增行绿底、修改行左右成对；缺少内容的一侧用占位行补齐。
+    await expect(page.locator(".git-source-old .cm-line.cm-diff-line-delete")).toHaveCount(1);
+    await expect(page.locator(".git-source-new .cm-line.cm-diff-line-add")).toHaveCount(2);
+    await expect(page.locator(".git-source-new .cm-line.cm-diff-line-change")).toHaveCount(3);
+    const oldSpacers = page.locator(".git-source-old .cm-diff-spacer.add");
+    // 新增 hunk 与 1 行改 3 行的 change hunk 各需要一个 +2 占位。
+    await expect(oldSpacers).toHaveCount(2);
+    await expect(oldSpacers.first()).toHaveText("+2 行");
+    await expect(oldSpacers.nth(1)).toHaveText("+2 行");
+    await expect(page.locator(".git-source-new .cm-diff-spacer.delete")).toHaveText("−1 行");
+
+    // 两栏占位后，同一行文本在左右应处于同一水平位置。
+    const delta = await page.evaluate(() => {
+      const find = (selector: string, text: string): DOMRect | null => {
+        for (const line of document.querySelectorAll<HTMLElement>(`${selector} .cm-line`)) {
+          if (line.textContent?.trim() === text) return line.getBoundingClientRect();
+        }
+        return null;
+      };
+      const left = find(".git-source-old", "第 12 行内容");
+      const right = find(".git-source-new", "第 12 行内容");
+      return left && right ? Math.abs(left.top - right.top) : -1;
+    });
+    expect(delta).toBeGreaterThanOrEqual(0);
+    expect(delta).toBeLessThan(2);
+
+    /** 读取左右两栏的滚动比例。 */
+    const ratios = (): Promise<{ old: number; next: number }> =>
+      page.evaluate(() => {
+        const ratio = (selector: string): number => {
+          const element = document.querySelector<HTMLElement>(selector);
+          if (!element) return -1;
+          const max = element.scrollHeight - element.clientHeight;
+          return max > 0 ? element.scrollTop / max : 0;
+        };
+        return {
+          old: ratio(".git-source-old .cm-scroller"),
+          next: ratio(".git-source-new .cm-scroller"),
+        };
+      });
+
+    // 左侧滚动 → 右侧跟随。
+    await page.locator(".git-source-old .cm-scroller").evaluate((element: HTMLElement) => {
+      const max = element.scrollHeight - element.clientHeight;
+      element.scrollTop = max * 0.5;
+    });
+    await expect
+      .poll(async () => {
+        const value = await ratios();
+        return value.next < 0 ? 1 : Math.abs(value.next - value.old);
+      })
+      .toBeLessThan(0.02);
+    expect((await ratios()).next).toBeGreaterThan(0.4);
+
+    // 右侧滚动 → 左侧跟随。
+    await page.locator(".git-source-new .cm-scroller").evaluate((element: HTMLElement) => {
+      const max = element.scrollHeight - element.clientHeight;
+      element.scrollTop = max * 0.2;
+    });
+    await expect
+      .poll(async () => {
+        const value = await ratios();
+        return value.next < 0 ? 1 : Math.abs(value.next - value.old);
+      })
+      .toBeLessThan(0.02);
+    expect((await ratios()).old).toBeLessThan(0.3);
+
+    // 滚动到文档中部后，可见的共同内容仍保持逐行对齐（长文档占位高度必须准确）。
+    await page.locator(".git-source-old .cm-scroller").evaluate((element: HTMLElement) => {
+      const max = element.scrollHeight - element.clientHeight;
+      element.scrollTop = max * 0.5;
+    });
+    await expect
+      .poll(async () =>
+        page.evaluate(() => {
+          const tops = new Map<string, number>();
+          for (const line of document.querySelectorAll<HTMLElement>(".git-source-old .cm-line")) {
+            const text = line.textContent?.trim() ?? "";
+            if (text) tops.set(text, line.getBoundingClientRect().top);
+          }
+          let delta = Number.POSITIVE_INFINITY;
+          for (const line of document.querySelectorAll<HTMLElement>(".git-source-new .cm-line")) {
+            const oldTop = tops.get(line.textContent?.trim() ?? "");
+            if (oldTop === undefined) continue;
+            delta = Math.min(delta, Math.abs(oldTop - line.getBoundingClientRect().top));
+          }
+          return delta;
+        }),
+      )
+      .toBeLessThan(2);
+
+    // 折叠未改动后占位行仍然存在（此时内容变短，不再验证滚动）。
+    await page.locator(".git-diff-view").selectOption("collapse");
+    await expect(oldSpacers).toHaveCount(2);
+    await expect(page.locator(".git-source-new .cm-diff-spacer.delete")).toHaveCount(1);
+  } finally {
+    await app.close();
+    await fs.rm(repo, { recursive: true, force: true });
+    await fs.rm(userDataDir, { recursive: true, force: true });
+  }
+});
