@@ -216,6 +216,8 @@
   "获取": "Fetch",
   "获取（fetch）": "Fetch",
   "获取（Git fetch）": "Fetch (Git fetch)",
+  "领先上游 {0} 个提交（待推送）": "{0} commits ahead of upstream (to push)",
+  "落后上游 {0} 个提交（待拉取）": "{0} commits behind upstream (to pull)",
   "拉取": "Pull",
   "拉取（git pull）": "Pull (git pull)",
   "拉取（Git pull）": "Pull (Git pull)",

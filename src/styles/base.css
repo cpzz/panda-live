@@ -4535,6 +4535,15 @@ body.resizing * {
   gap: 2px;
 }
 
+/* 同步区段分隔线：领先/落后计数与同步操作、同步操作与刷新之间。 */
+.git-sync-divider {
+  flex: 0 0 auto;
+  width: 1px;
+  height: 14px;
+  margin: 0 4px;
+  background: var(--border-strong);
+}
+
 .git-ahead {
   color: var(--accent);
   font-size: 11px;

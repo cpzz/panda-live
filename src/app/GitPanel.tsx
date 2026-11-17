@@ -744,18 +744,25 @@ export function GitPanel({
           )}
         </div>
         <div className="git-sync-actions">
-          {snapshot.ahead > 0 && <span className="git-ahead">↑{snapshot.ahead}</span>}
-          {snapshot.behind > 0 && <span className="git-behind">↓{snapshot.behind}</span>}
-          <button
-            type="button"
-            className="git-icon-button"
-            title={t("刷新")}
-            aria-label={t("刷新")}
-            disabled={busy}
-            onClick={() => void store.refresh()}
-          >
-            <Icon name="refresh" size={13} />
-          </button>
+          {snapshot.ahead > 0 && (
+            <span
+              className="git-ahead"
+              title={t("领先上游 {0} 个提交（待推送）", snapshot.ahead)}
+            >
+              ↑{snapshot.ahead}
+            </span>
+          )}
+          {snapshot.behind > 0 && (
+            <span
+              className="git-behind"
+              title={t("落后上游 {0} 个提交（待拉取）", snapshot.behind)}
+            >
+              ↓{snapshot.behind}
+            </span>
+          )}
+          {(snapshot.ahead > 0 || snapshot.behind > 0) && (
+            <span className="git-sync-divider" aria-hidden="true" />
+          )}
           <button
             type="button"
             className="git-icon-button"
@@ -764,7 +771,7 @@ export function GitPanel({
             disabled={busy}
             onClick={() => sync("fetch")}
           >
-            <Icon name="reset" size={13} />
+            <Icon name="arrow-down" size={13} />
           </button>
           <button
             type="button"
@@ -774,7 +781,7 @@ export function GitPanel({
             disabled={busy}
             onClick={() => sync("pull")}
           >
-            <Icon name="arrow-down" size={13} />
+            <Icon name="cloud-download" size={13} />
           </button>
           <button
             type="button"
@@ -784,7 +791,18 @@ export function GitPanel({
             disabled={busy}
             onClick={() => sync("push")}
           >
-            <Icon name="arrow-up" size={13} />
+            <Icon name="cloud-upload" size={13} />
+          </button>
+          <span className="git-sync-divider" aria-hidden="true" />
+          <button
+            type="button"
+            className="git-icon-button"
+            title={t("刷新")}
+            aria-label={t("刷新")}
+            disabled={busy}
+            onClick={() => void store.refresh()}
+          >
+            <Icon name="refresh" size={13} />
           </button>
         </div>
       </div>
