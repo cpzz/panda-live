@@ -141,6 +141,7 @@
   "返回全文": "Back to full text",
   "本次改动覆盖全文 40% 以上，仅显示块级标注。": "This change covers more than 40% of the document; only block-level markers are shown.",
   "Git": "Git",
+  "修订上次提交": "Amend last commit",
   "通知历史": "Notification History",
   "通知": "Notifications",
   "全部清除": "Clear All",

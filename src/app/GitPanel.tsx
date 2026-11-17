@@ -81,7 +81,13 @@ function ChangeRow({
   const label = statusLabel(change);
   return (
     <div
-      className={staticRow ? "git-change-row git-change-row-static" : "git-change-row"}
+      className={[
+        "git-change-row",
+        staticRow ? "git-change-row-static" : "",
+        change.conflicted ? "git-change-row-conflict" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
       title={display}
       tabIndex={staticRow ? undefined : 0}
       onClick={() => {
@@ -161,6 +167,8 @@ export function GitPanel({
   const [tab, setTab] = useState<"changes" | "history">("changes");
   const [message, setMessage] = useState("");
   const [amend, setAmend] = useState(false);
+  /** 取消勾选或切换仓库时作废在途的 HEAD 提交信息读取。 */
+  const amendTokenRef = useRef(0);
   /** 提交前的保存阶段尚未进入 store.busy，用本地状态防止重复提交。 */
   const [committing, setCommitting] = useState(false);
   const [branchOpen, setBranchOpen] = useState(false);
@@ -202,6 +210,7 @@ export function GitPanel({
   useEffect(() => {
     if (previousRepoRef.current === selectedRepo) return;
     previousRepoRef.current = selectedRepo;
+    amendTokenRef.current += 1;
     setMessage("");
     setAmend(false);
     setDetailHash(null);
@@ -358,6 +367,30 @@ export function GitPanel({
     void store.checkout(branch).catch(() => undefined);
   };
 
+  /** 勾选 Amend 时载入 HEAD 的提交信息；取消勾选清空草稿。 */
+  const toggleAmend = (checked: boolean): void => {
+    const token = ++amendTokenRef.current;
+    setAmend(checked);
+    if (!checked) {
+      setMessage("");
+      return;
+    }
+    const head = state.commits[0];
+    if (!root || !head) {
+      setMessage("");
+      return;
+    }
+    void window.panda.git
+      .commitDetail({ root, hash: head.hash })
+      .then((detail) => {
+        if (token !== amendTokenRef.current) return;
+        setMessage([detail.subject, detail.body.trim()].filter(Boolean).join("\n\n"));
+      })
+      .catch(() => {
+        if (token === amendTokenRef.current) setMessage("");
+      });
+  };
+
   const runCommit = (): void => {
     const text = message.trim();
     if (!text || stagedCount === 0 || busy || committing) return;
@@ -374,6 +407,7 @@ export function GitPanel({
         // 提交期间用户可能继续输入；只清空本次提交使用的文本。
         setMessage((current) => (current.trim() === text ? "" : current));
         setAmend(false);
+        amendTokenRef.current += 1;
       } finally {
         setCommitting(false);
       }
@@ -632,9 +666,10 @@ export function GitPanel({
                 <input
                   type="checkbox"
                   checked={amend}
-                  onChange={(event) => setAmend(event.target.checked)}
+                  disabled={state.commits.length === 0}
+                  onChange={(event) => toggleAmend(event.target.checked)}
                 />
-                <span>Amend</span>
+                <span>{t("修订上次提交")}</span>
               </label>
               <button
                 type="button"

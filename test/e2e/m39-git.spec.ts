@@ -416,3 +416,59 @@ test("M39：暂存新增文件的基线提示", async () => {
     await fs.rm(userDataDir, { recursive: true, force: true });
   }
 });
+
+/** M39：Amend 带入 HEAD 提交信息，取消勾选清空并支持中英文标签。 */
+test("M39：修订上次提交", async () => {
+  test.setTimeout(180_000);
+  const repo = await fs.mkdtemp(path.join(os.tmpdir(), "panda-amend-"));
+  const userDataDir = await fs.mkdtemp(path.join(os.tmpdir(), "panda-amend-ud-"));
+  const note = path.join(repo, "note.md");
+  await initRepo(repo);
+  await fs.writeFile(note, "# 初始\n", "utf8");
+  await git(repo, ["add", "."]);
+  await git(repo, ["commit", "-m", "初始提交"]);
+  await fs.writeFile(note, "# 初始\n\n补充内容\n", "utf8");
+
+  const app = await electron.launch({
+    args: ["."],
+    cwd: CWD,
+    env: { ...process.env, PANDA_USER_DATA_DIR: userDataDir },
+  });
+  try {
+    const page = await app.firstWindow();
+    await openFolder(page, app, repo);
+    await page.getByRole("tab", { name: "Git", exact: true }).click();
+
+    const row = page.locator(".git-change-row").filter({ hasText: "note.md" });
+    await expect(row).toHaveCount(1, { timeout: 20_000 });
+    await expect(row.locator(".git-change-status.status-modified")).toHaveCount(1);
+    await row.getByRole("button", { name: "暂存", exact: true }).click();
+    await expect(page.locator(".git-change-group").filter({ hasText: "已暂存" })).toHaveCount(1);
+
+    const amendBox = page.getByRole("checkbox", { name: "修订上次提交" });
+    await expect(amendBox).toBeVisible();
+    await expect(amendBox).toBeEnabled();
+    const messageBox = page.getByRole("textbox", { name: "提交信息", exact: true });
+
+    // 勾选带入 HEAD 提交信息；取消勾选清空。
+    await amendBox.check();
+    await expect(messageBox).toHaveValue("初始提交");
+    await amendBox.uncheck();
+    await expect(messageBox).toHaveValue("");
+    await amendBox.check();
+    await expect(messageBox).toHaveValue("初始提交");
+
+    // 修订提交：仍只有一个提交，标题更新。
+    await messageBox.fill("修订初始提交");
+    await page.getByRole("button", { name: "提交", exact: true }).click();
+    await expect(page.locator(".git-clean")).toHaveText("工作区没有变更", { timeout: 20_000 });
+    await page.getByRole("tab", { name: "历史", exact: true }).click();
+    await expect(page.locator(".git-commit-row")).toHaveCount(1);
+    await expect(page.locator(".git-commit-row").first()).toContainText("修订初始提交");
+    expect(await git(repo, ["log", "--format=%s"])).toBe("修订初始提交");
+  } finally {
+    await app.close();
+    await fs.rm(repo, { recursive: true, force: true });
+    await fs.rm(userDataDir, { recursive: true, force: true });
+  }
+});

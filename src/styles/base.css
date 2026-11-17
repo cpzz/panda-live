@@ -4438,6 +4438,15 @@ body.resizing * {
   background: var(--surface-hover);
 }
 
+/* 冲突行需要比普通状态更醒目，使用极淡的错误底色。 */
+.git-change-row-conflict {
+  background: color-mix(in srgb, var(--error-bg) 55%, transparent);
+}
+
+.git-change-row-conflict:hover {
+  background: color-mix(in srgb, var(--error-bg) 85%, transparent);
+}
+
 /* 键盘聚焦时给出与悬停一致的可见反馈。 */
 .git-change-row:focus-visible {
   outline: 1px solid var(--accent);
@@ -4450,10 +4459,13 @@ body.resizing * {
 }
 
 .git-change-status {
-  flex: 0 0 16px;
-  width: 16px;
+  flex: 0 0 18px;
+  width: 18px;
+  padding: 1px 0;
+  border-radius: 2px;
   font-family: var(--font-mono);
   font-size: 10.5px;
+  line-height: 14px;
   text-align: center;
   white-space: pre;
   color: var(--muted);
@@ -4462,11 +4474,24 @@ body.resizing * {
 .git-change-status.status-added,
 .git-change-status.status-untracked {
   color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .git-change-status.status-deleted,
 .git-change-status.status-conflicted {
   color: var(--danger);
+  background: var(--error-bg);
+}
+
+.git-change-status.status-modified {
+  color: var(--fg);
+  background: var(--warning-bg);
+}
+
+.git-change-status.status-renamed,
+.git-change-status.status-copied {
+  color: var(--cm-link);
+  background: var(--info-bg);
 }
 
 .git-change-path {
