@@ -488,3 +488,98 @@ test("M4：切换标签保持查找面板", async () => {
     await fs.rm(userDataDir, { recursive: true, force: true });
   }
 });
+
+/** M4：切换标签时文件树自动展开父目录，并把活动文件滚动到文件栏中部。 */
+test("M4：切换标签自动定位文件树", async () => {
+  test.setTimeout(180_000);
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "panda-m4-tree-"));
+  const userDataDir = await prepareUserData(false);
+  const nested = path.join(tempDir, "nested", "deep");
+  await fs.mkdir(nested, { recursive: true });
+  const fileA = path.join(tempDir, "a.md");
+  const fileMid = path.join(tempDir, "f20.md");
+  const fileB = path.join(nested, "b.md");
+  await fs.writeFile(fileA, "# A\n", "utf8");
+  await fs.writeFile(fileB, "# B\n", "utf8");
+  // 填充文件让文件树产生滚动，验证活动项会滚动到文件栏中部。
+  await Promise.all(
+    Array.from({ length: 40 }, (_, index) =>
+      fs.writeFile(
+        path.join(tempDir, `f${String(index).padStart(2, "0")}.md`),
+        "# F\n",
+        "utf8",
+      ),
+    ),
+  );
+
+  const app = await launch(userDataDir);
+  try {
+    const page = await app.firstWindow();
+    await app.evaluate(({ dialog }, target) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
+    }, tempDir);
+    await page.getByRole("button", { name: "打开文件夹", exact: true }).click();
+    await expect(page.locator(".workspace-root")).toHaveCount(1);
+
+    const openFile = async (target: string): Promise<void> => {
+      await app.evaluate(({ dialog }, file) => {
+        dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] });
+      }, target);
+      await page.keyboard.press("Control+O");
+    };
+
+    /** 读取文件栏滚动位置与活动行到可视区中线的距离。 */
+    const measure = async (): Promise<{ scrollTop: number; delta: number } | null> =>
+      page.evaluate(() => {
+        const scroller = document.querySelector<HTMLElement>(".workspace-roots");
+        const row = scroller?.querySelector<HTMLElement>(".tree-row.active");
+        if (!scroller || !row) return null;
+        const rowBox = row.getBoundingClientRect();
+        const box = scroller.getBoundingClientRect();
+        return {
+          scrollTop: scroller.scrollTop,
+          delta: Math.abs(rowBox.top + rowBox.height / 2 - (box.top + box.height / 2)),
+        };
+      });
+
+    await openFile(fileA);
+    await expect(page.locator(".tree-row.active .tree-name")).toHaveText("a.md");
+    await openFile(fileMid);
+    await expect(page.locator(".tree-row.active .tree-name")).toHaveText("f20.md");
+
+    // 切换标签后活动文件位于文件栏垂直中部。
+    await expect.poll(async () => (await measure())?.delta ?? Number.POSITIVE_INFINITY).toBeLessThan(24);
+    expect((await measure())?.scrollTop ?? 0).toBeGreaterThan(0);
+
+    // 从文件树点开文件只切换标签，不重新滚动（列表不跳动）。
+    await page.locator(".workspace-roots").evaluate((element: HTMLElement) => {
+      element.scrollTop = 0;
+    });
+    await page.locator(".tree-name", { hasText: "f00.md" }).click();
+    await expect(page.locator(".tab-item.active .tab-name")).toHaveText("f00.md");
+    await page.waitForTimeout(100);
+    expect(
+      await page.locator(".workspace-roots").evaluate((element: HTMLElement) => element.scrollTop),
+    ).toBe(0);
+
+    await openFile(fileB);
+    await expect(page.locator(".tree-row.active .tree-name")).toHaveText("b.md");
+
+    // 父目录自动展开，当前文件在树中可见。
+    await expect(page.locator(".tree-row.dir").filter({ hasText: "nested" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    await expect(page.locator(".tree-row.dir").filter({ hasText: "deep" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+
+    await page.locator(".tab-item").filter({ hasText: "a.md" }).click();
+    await expect(page.locator(".tree-row.active .tree-name")).toHaveText("a.md");
+  } finally {
+    await app.close();
+    await fs.rm(tempDir, { recursive: true, force: true });
+    await fs.rm(userDataDir, { recursive: true, force: true });
+  }
+});

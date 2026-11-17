@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { computeLineDiff, normalizeFormatText } from "../diff/compute";
+import { computeLineDiff, normalizeDiffText, normalizeFormatText } from "../diff/compute";
 import type { PreviewDiffModel } from "../diff/preview";
 import { renderMarkdownToHtml } from "../formats/markdown/preview";
 import type { DocumentState } from "../services/document-manager";
@@ -9,8 +9,10 @@ import { describeError } from "../shared/errors";
 import { getLocale, t } from "../i18n";
 import { sourceLanguageForFormat } from "../source/language";
 import { Icon, type IconName } from "./icons";
+import { DiffMinimap } from "./DiffMinimap";
 import { RenderedMarkdown } from "./RenderedMarkdown";
 import { SourceDiffPane } from "./SourceDiffPane";
+import { describeHunk } from "./useDocumentDiff";
 
 type Status = "idle" | "loading" | "ready" | "error";
 
@@ -64,7 +66,9 @@ export function GitPane({
   const [result, setResult] = useState<{ oldText: string; newText: string } | null>(null);
   const [html, setHtml] = useState("");
   const [navIndex, setNavIndex] = useState(-1);
+  const [listOpen, setListOpen] = useState(false);
   const [reveal, setReveal] = useState<{ line: number; token: number } | null>(null);
+  const [minimapScroller, setMinimapScroller] = useState<HTMLElement | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const isMarkdown = document.format === "markdown";
   // 预览对比只对支持渲染的格式有意义；其他格式回退为分栏。
@@ -90,6 +94,14 @@ export function GitPane({
       (hunk) => normalizeFormatText(hunk.oldText) === normalizeFormatText(hunk.newText),
     ).length;
   }, [baseDiff, isMarkdown]);
+
+  // 概览条按新文档行号比例映射改动位置。
+  const totalNewLines = useMemo(() => {
+    if (!result) return 1;
+    const text = normalizeDiffText(result.newText, { ignoreCrAtEol: diff.flags.crAtEol });
+    if (text.length === 0) return 1;
+    return Math.max(1, text.split("\n").length - 1);
+  }, [result, diff.flags.crAtEol]);
 
   // 外部改变基线（如点击历史提交的文件行）后同步输入草稿。
   useEffect(() => {
@@ -332,11 +344,11 @@ export function GitPane({
     refreshKey,
   ]);
 
-  /** 逐处跳转：预览对比滚动到改动块，分栏移动右侧编辑器光标。 */
-  const navTo = (direction: 1 | -1): void => {
+  /** 跳到指定改动块；索引越界时循环。 */
+  const jumpTo = (index: number): void => {
     const hunks = baseDiff?.hunks ?? [];
     if (hunks.length === 0) return;
-    const next = (navIndex + direction + hunks.length) % hunks.length;
+    const next = ((index % hunks.length) + hunks.length) % hunks.length;
     setNavIndex(next);
     const hunk = hunks[next];
     if (!hunk) return;
@@ -357,6 +369,46 @@ export function GitPane({
       behavior: "smooth",
     });
   };
+
+  /** 逐处跳转：预览对比滚动到改动块，分栏移动右侧编辑器光标。 */
+  const navTo = (direction: 1 | -1): void => {
+    jumpTo(navIndex + direction);
+  };
+
+  // 概览条跟随内容区实际滚动容器：分栏是右侧编辑器，预览对比是外层滚动区。
+  useEffect(() => {
+    if (status !== "ready") {
+      setMinimapScroller(null);
+      return;
+    }
+    if (paneView === "render") {
+      setMinimapScroller(bodyRef.current);
+      return;
+    }
+    setMinimapScroller(
+      bodyRef.current?.querySelector<HTMLElement>(".git-source-new .cm-scroller") ?? null,
+    );
+  }, [status, paneView, result, baseDiff]);
+
+  /** 点击概览条空白处：按比例滚动。 */
+  const scrollToRatio = (ratio: number): void => {
+    const scroller = paneView === "render" ? bodyRef.current : minimapScroller;
+    if (!scroller) return;
+    const max = scroller.scrollHeight - scroller.clientHeight;
+    scroller.scrollTop = Math.max(0, Math.min(1, ratio)) * max;
+  };
+
+  // 改动列表弹层：Esc 关闭。
+  useEffect(() => {
+    if (!listOpen) return;
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setListOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [listOpen]);
 
   const noDiff = Boolean(baseDiff && baseDiff.hunks.length === 0);
   const hunkTotal = baseDiff?.hunks.length ?? 0;
@@ -545,11 +597,22 @@ export function GitPane({
           </div>
         <span className="git-diff-bar-sep" aria-hidden="true" />
         {status === "ready" && hunkTotal > 0 && baseDiff && (
-          <span className="git-diff-nav">
-            <span className="git-diff-count">
+          <div className="git-diff-nav git-diff-nav-wrap">
+            <button
+              type="button"
+              className={
+                listOpen
+                  ? "git-diff-count git-diff-count-button active"
+                  : "git-diff-count git-diff-count-button"
+              }
+              aria-expanded={listOpen}
+              aria-label={t("改动列表")}
+              title={t("改动列表")}
+              onClick={() => setListOpen((open) => !open)}
+            >
               <span className="git-diff-add">+{baseDiff.stats.added}</span>
               <span className="git-diff-del">−{baseDiff.stats.removed}</span>
-            </span>
+            </button>
             <button
               type="button"
               className="git-icon-button"
@@ -568,7 +631,50 @@ export function GitPane({
             >
               <Icon name="chevron-down" size={12} />
             </button>
-          </span>
+            {listOpen && (
+              <>
+                <div className="diff-list-backdrop" onClick={() => setListOpen(false)} />
+                <div className="diff-list git-diff-list" role="dialog" aria-label={t("改动列表")}>
+                  <div className="diff-list-header">
+                    <span>
+                      {navIndex >= 0
+                        ? t("第 {0} 处 / 共 {1} 处", navIndex + 1, hunkTotal)
+                        : t("共 {0} 处", hunkTotal)}
+                    </span>
+                  </div>
+                  <ul role="list">
+                    {baseDiff.hunks.map((hunk, index) => {
+                      const line = Math.max(1, hunk.newStart);
+                      return (
+                        <li key={`${hunk.kind}-${hunk.newStart}-${index}`}>
+                          <button
+                            type="button"
+                            className={
+                              index === navIndex
+                                ? `diff-list-item ${hunk.kind} current`
+                                : `diff-list-item ${hunk.kind}`
+                            }
+                            onClick={() => {
+                              jumpTo(index);
+                              setListOpen(false);
+                            }}
+                          >
+                            <span className={`diff-list-kind ${hunk.kind}`} aria-hidden="true">
+                              {hunk.kind === "add" ? "+" : hunk.kind === "delete" ? "−" : "±"}
+                            </span>
+                            <span className="diff-list-line" title={t("第 {0} 行", line)}>
+                              {t("第 {0} 行", line)}
+                            </span>
+                            <span className="diff-list-label">{describeHunk(hunk)}</span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              </>
+            )}
+          </div>
         )}
         {viewButtons.length > 0 && (
           <>
@@ -613,49 +719,61 @@ export function GitPane({
         </div>
       )}
 
-      <div
-        className={
-          paneView === "split" || !isMarkdown
-            ? "git-diff-scroll git-diff-source"
-            : "git-diff-scroll"
-        }
-        ref={bodyRef}
-      >
-        {status === "ready" && paneView === "split" ? (
-          noDiff ? (
-            <p className="placeholder">{t("「{0}」与「{1}」没有差异。", labels.old, labels.next)}</p>
-          ) : (
-            <SourceDiffPane
-              oldText={result?.oldText ?? ""}
-              newText={result?.newText ?? ""}
-              diff={baseDiff}
-              language={sourceLanguageForFormat(document.format)}
-              granularity={diff.mode === "full" ? "full" : "collapse"}
-              oldLabel={labels.old}
-              newLabel={labels.next}
-              reveal={reveal}
+      <div className="git-diff-body-row">
+        <div
+          className={
+            paneView === "split" || !isMarkdown
+              ? "git-diff-scroll git-diff-source"
+              : "git-diff-scroll"
+          }
+          ref={bodyRef}
+        >
+          {status === "ready" && paneView === "split" ? (
+            noDiff ? (
+              <p className="placeholder">{t("「{0}」与「{1}」没有差异。", labels.old, labels.next)}</p>
+            ) : (
+              <SourceDiffPane
+                oldText={result?.oldText ?? ""}
+                newText={result?.newText ?? ""}
+                diff={baseDiff}
+                language={sourceLanguageForFormat(document.format)}
+                granularity={diff.mode === "full" ? "full" : "collapse"}
+                oldLabel={labels.old}
+                newLabel={labels.next}
+                reveal={reveal}
+              />
+            )
+          ) : status === "ready" && paneView === "render" && model && !noDiff ? (
+            <RenderedMarkdown
+              html={html}
+              filePath={document.path}
+              sourceKey={`git-diff:${document.id}:diff`}
+              diff={model}
+              onDiffModeChange={(mode) => onDiffChange({ mode })}
+              className="git-diff-body"
+              plainFences
             />
-          )
-        ) : status === "ready" && paneView === "render" && model && !noDiff ? (
-          <RenderedMarkdown
-            html={html}
-            filePath={document.path}
-            sourceKey={`git-diff:${document.id}:diff`}
-            diff={model}
-            onDiffModeChange={(mode) => onDiffChange({ mode })}
-            className="git-diff-body"
-            plainFences
+          ) : (
+            <p className="placeholder">
+              {status === "loading"
+                ? t("正在读取提交…")
+                : status === "error"
+                  ? t("请调整提交引用或 Git 配置后重试。")
+                  : status === "ready"
+                    ? t("「{0}」与「{1}」没有差异。", labels.old, labels.next)
+                    : t("选择提交后显示 Git 差异。")}
+            </p>
+          )}
+        </div>
+        {status === "ready" && !noDiff && baseDiff && hunkTotal > 0 && (
+          <DiffMinimap
+            hunks={baseDiff.hunks}
+            totalLines={totalNewLines}
+            activeIndex={navIndex}
+            scroller={minimapScroller}
+            onJump={jumpTo}
+            onScrollRatio={scrollToRatio}
           />
-        ) : (
-          <p className="placeholder">
-            {status === "loading"
-              ? t("正在读取提交…")
-              : status === "error"
-                ? t("请调整提交引用或 Git 配置后重试。")
-                : status === "ready"
-                  ? t("「{0}」与「{1}」没有差异。", labels.old, labels.next)
-                  : t("选择提交后显示 Git 差异。")}
-          </p>
         )}
       </div>
       </div>

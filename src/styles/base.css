@@ -1053,6 +1053,32 @@ button {
   gap: 4px;
 }
 
+/* 改动计数可点击展开位置列表；弹层挂在模式条下方。 */
+.git-diff-nav-wrap {
+  position: relative;
+}
+
+.git-diff-count-button {
+  height: 22px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.git-diff-count-button:hover,
+.git-diff-count-button.active {
+  background: var(--surface-hover);
+}
+
+/* 覆盖 .diff-list 默认向上弹出，改为在模式条下方展示。 */
+.diff-list.git-diff-list {
+  top: calc(100% + 6px);
+  bottom: auto;
+}
+
 .git-diff-count {
   font-family: var(--font-mono);
   font-size: 11px;
@@ -1188,6 +1214,74 @@ button {
 .git-diff-body {
   max-width: none;
   margin: 0 auto;
+}
+
+/* 差异内容区：滚动区域与右侧改动概览条并排。 */
+.git-diff-body-row {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.git-diff-body-row > .git-diff-scroll {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 改动概览（Minimap）：按新文档行号比例绘制改动色块与当前视口，点击定位。 */
+.git-minimap {
+  flex: none;
+  width: 14px;
+  margin: 8px 4px 8px 0;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
+}
+
+.git-minimap-track {
+  position: relative;
+  height: 100%;
+  cursor: pointer;
+}
+
+.git-minimap-viewport {
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  min-height: 6px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--fg) 12%, transparent);
+  pointer-events: none;
+}
+
+.git-minimap-marker {
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  min-height: 3px;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.git-minimap-marker:hover {
+  filter: brightness(1.25);
+}
+
+.git-minimap-marker.add {
+  background: var(--diff-add-border);
+}
+
+.git-minimap-marker.delete {
+  background: var(--diff-del-border);
+}
+
+.git-minimap-marker.change {
+  background: var(--diff-change-border);
+}
+
+.git-minimap-marker.active {
+  box-shadow: 0 0 0 1px var(--surface), 0 0 0 2px var(--fg);
 }
 
 /* 非 Markdown：并排只读源码差异，复用源码编辑器与行标记。 */

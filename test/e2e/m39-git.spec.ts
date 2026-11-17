@@ -68,6 +68,39 @@ test("M39：源代码管理变更、提交与分支", async () => {
     await changeRow.locator(".git-change-path").click();
     await expect(page.locator(".git-diff-pane")).toBeVisible({ timeout: 20_000 });
 
+    // 改动计数可展开位置列表，点击条目直接跳转。
+    const countButton = page.locator(".git-diff-count-button");
+    await expect(countButton).toBeVisible();
+    await countButton.click();
+    const changeList = page.locator(".git-diff-list");
+    await expect(changeList).toBeVisible();
+    await expect(changeList.locator(".diff-list-item")).toHaveCount(1);
+    await changeList.locator(".diff-list-item").first().click();
+    await expect(changeList).toHaveCount(0);
+    await countButton.click();
+    await expect(changeList.locator(".diff-list-header")).toContainText("第 1 处 / 共 1 处");
+    await page.keyboard.press("Escape");
+    await expect(changeList).toHaveCount(0);
+
+    // 右侧改动概览（Minimap）常显：色块 + 视口，点击色块直接定位。
+    const minimap = page.locator(".git-minimap");
+    const minimapMarkers = minimap.locator(".git-minimap-marker");
+    await expect(minimap).toBeVisible();
+    await expect(minimapMarkers).toHaveCount(1);
+
+    // 对比视图（源码分栏）与预览对比视图都保留概览条。
+    await page.getByRole("button", { name: "对比", exact: true }).click();
+    await expect(minimap).toBeVisible();
+    await expect(minimap.locator(".git-minimap-viewport")).toHaveCount(1);
+    await minimapMarkers.first().click();
+    await expect(minimap.locator(".git-minimap-marker.active")).toHaveCount(1);
+
+    await page.getByRole("button", { name: "预览对比", exact: true }).click();
+    await expect(minimap).toBeVisible();
+    await expect(minimapMarkers).toHaveCount(1);
+    await minimapMarkers.first().click();
+    await expect(minimap.locator(".git-minimap-marker.active")).toHaveCount(1);
+
     // 单文件暂存 → 提交框可提交。
     await changeRow.getByRole("button", { name: "暂存", exact: true }).click();
     await expect(page.locator(".git-change-group").filter({ hasText: "已暂存" })).toHaveCount(1);

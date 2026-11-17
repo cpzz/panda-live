@@ -199,6 +199,9 @@ export function WorkspacePanel({
     store.getState().roots.length > 0 ? "files" : "outline",
   );
   const previousRoot = useRef(state.roots[0]?.root.path ?? null);
+  const filesRef = useRef<HTMLDivElement>(null);
+  // 从文件树点开的路径：这类切换不发生滚动，避免点击时列表跳动。
+  const treeOpenRef = useRef<string | null>(null);
 
   // 外部请求（例如点击状态栏分支）切换到指定标签。
   useEffect(() => {
@@ -211,6 +214,47 @@ export function WorkspacePanel({
     if (root && root !== previousRoot.current) setTab("files");
     previousRoot.current = root;
   }, [state.roots]);
+
+  // 当前标签切换后自动展开文件树的父目录，并展开被折叠的工作区根。
+  useEffect(() => {
+    if (!activePath) return;
+    void store.revealPath(activePath);
+    const key = (value: string): string => {
+      const normalized = value.replace(/\\/g, "/").replace(/\/+$/u, "");
+      return /^[a-zA-Z]:/.test(normalized) ? normalized.toLowerCase() : normalized;
+    };
+    const target = key(activePath);
+    const owner = store.getState().roots.find((entry) =>
+      target.startsWith(`${key(entry.root.path)}/`),
+    );
+    if (!owner) return;
+    setCollapsedRoots((current) => {
+      if (!current.has(owner.root.path)) return current;
+      const next = new Set(current);
+      next.delete(owner.root.path);
+      return next;
+    });
+  }, [activePath, store]);
+
+  // 切换标签后把活动文件滚动到文件栏中部；从文件树点开的切换不滚动。
+  useEffect(() => {
+    if (!activePath) return;
+    if (treeOpenRef.current === activePath) {
+      treeOpenRef.current = null;
+      return;
+    }
+    if (tab !== "files") return;
+    const frame = requestAnimationFrame(() => {
+      const scroller = filesRef.current?.querySelector<HTMLElement>(".workspace-roots");
+      const row = scroller?.querySelector<HTMLElement>(".tree-row.active");
+      if (!scroller || !row) return;
+      const rowTop =
+        row.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
+      const centered = rowTop - (scroller.clientHeight - row.offsetHeight) / 2;
+      scroller.scrollTo({ top: Math.max(0, centered) });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [activePath, tab, state.roots, collapsedRoots]);
 
   const askName = (title: string, initial: string, submit: (value: string) => void): void => {
     setPromptValue(initial);
@@ -311,6 +355,11 @@ export function WorkspacePanel({
     }
   };
 
+  const openFromTree = (node: WorkspaceNode, rootId: string): void => {
+    if (node.path !== activePath) treeOpenRef.current = node.path;
+    onOpenFile(node, rootId);
+  };
+
   return (
     <>
       <aside
@@ -393,7 +442,7 @@ export function WorkspacePanel({
         </div>
 
         {tab === "files" ? (
-          <div className="sidebar-panel">
+          <div className="sidebar-panel" ref={filesRef}>
             {state.error && <div className="sidebar-error">{state.error}</div>}
 
             {state.roots.length > 0 ? (
@@ -468,7 +517,7 @@ export function WorkspacePanel({
                               rootId={entry.root.rootId}
                               store={store}
                               activePath={activePath}
-                              onOpenFile={onOpenFile}
+                              onOpenFile={openFromTree}
                               onRenamed={onRenamed}
                               onDeleted={onDeleted}
                               askName={askName}

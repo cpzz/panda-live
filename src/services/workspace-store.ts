@@ -26,6 +26,16 @@ function joinPath(parent: string, name: string): string {
   return `${parent.replace(/[\\/]+$/, "")}/${name}`;
 }
 
+function normalizePath(value: string): string {
+  return value.replace(/\\/g, "/").replace(/\/+$/, "");
+}
+
+/** Windows 盘符路径大小写不敏感；其余平台保留原始大小写。 */
+function pathKey(value: string): string {
+  const normalized = normalizePath(value);
+  return /^[a-zA-Z]:/.test(normalized) ? normalized.toLowerCase() : normalized;
+}
+
 function toNodes(entries: DirEntry[]): WorkspaceNode[] {
   return entries.map((entry) => ({
     name: entry.name,
@@ -134,6 +144,42 @@ export class WorkspaceStore {
       }
     }
     this.commit({ roots: [...this.state.roots] });
+  }
+
+  /** 展开指定文件的全部父目录，供侧栏自动跟随当前标签。 */
+  async revealPath(filePath: string): Promise<void> {
+    const target = pathKey(filePath);
+    for (const entry of this.state.roots) {
+      const root = pathKey(entry.root.path);
+      if (!target.startsWith(`${root}/`)) continue;
+      const parts = target.slice(root.length + 1).split("/");
+      let nodes = entry.nodes;
+      let current = root;
+      let changed = false;
+      for (let index = 0; index < parts.length - 1; index += 1) {
+        current = `${current}/${parts[index]}`;
+        const dir = nodes.find(
+          (node) => node.kind === "dir" && pathKey(node.path) === current,
+        );
+        if (!dir) return;
+        if (!dir.expanded) {
+          dir.expanded = true;
+          changed = true;
+        }
+        if (!dir.children) {
+          try {
+            dir.children = await this.loadChildren(dir.path);
+            changed = true;
+          } catch {
+            dir.expanded = false;
+            return;
+          }
+        }
+        nodes = dir.children;
+      }
+      if (changed) this.commit({ roots: [...this.state.roots] });
+      return;
+    }
   }
 
   /** 刷新指定根目录；省略参数时刷新全部。 */
