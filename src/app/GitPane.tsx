@@ -685,7 +685,7 @@ export function GitPane({
               className={diff.flags.whitespace ? "git-icon-button active" : "git-icon-button"}
               aria-pressed={diff.flags.whitespace}
               aria-label={t("忽略空白")}
-              title={t("忽略空白变化（git diff -w）")}
+              title={t("忽略空白变化")}
               onClick={() =>
                 onDiffChange({ flags: { ...diff.flags, whitespace: !diff.flags.whitespace } })
               }
@@ -697,7 +697,7 @@ export function GitPane({
               className={diff.flags.blankLines ? "git-icon-button active" : "git-icon-button"}
               aria-pressed={diff.flags.blankLines}
               aria-label={t("忽略空行")}
-              title={t("忽略只涉及空行的变化（git diff --ignore-blank-lines）")}
+              title={t("忽略只涉及空行的变化")}
               onClick={() =>
                 onDiffChange({ flags: { ...diff.flags, blankLines: !diff.flags.blankLines } })
               }
@@ -709,7 +709,7 @@ export function GitPane({
               className={diff.flags.crAtEol ? "git-icon-button active" : "git-icon-button"}
               aria-pressed={diff.flags.crAtEol}
               aria-label={t("忽略行尾 CR")}
-              title={t("忽略行尾 CR（git diff --ignore-cr-at-eol）")}
+              title={t("忽略行尾 CR")}
               onClick={() =>
                 onDiffChange({ flags: { ...diff.flags, crAtEol: !diff.flags.crAtEol } })
               }

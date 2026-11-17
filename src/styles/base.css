@@ -858,6 +858,56 @@ button {
   margin-left: auto;
 }
 
+/* 导出入口：显示模式按钮组之后，以分隔线隔开；Markdown 点击展开下拉。 */
+.mode-bar-export {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+/* 菜单打开时隐藏自定义气泡，避免与下拉菜单重叠。 */
+.mode-bar-export.open [data-tip]::after {
+  display: none;
+}
+
+.export-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  min-width: 172px;
+  padding: 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  animation: overlay-in 140ms ease;
+}
+
+.export-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg);
+  font-size: 12.5px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.export-menu-item:hover {
+  background: var(--surface-hover);
+}
+
+.export-menu-icon {
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+
 .workspace {
   flex: 1;
   display: flex;

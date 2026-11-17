@@ -80,7 +80,13 @@ test("M6：导出 HTML 内联数学与图表且不含脚本", async () => {
     const page = await app.firstWindow();
     await openFile(app, page, mdPath);
     await mockSavePath(app, htmlPath);
-    await clickMenuItem(app, "export-html");
+    // 导出入口在模式条显示模式按钮组右侧：Markdown 点击后展开 HTML / PDF 下拉。
+    const exportButton = page.locator(".mode-bar-export-button");
+    await expect(exportButton).toBeVisible();
+    await exportButton.click();
+    await expect(page.locator(".export-menu-item")).toHaveCount(2);
+    await page.getByRole("menuitem", { name: "导出 HTML…" }).click();
+    await expect(page.locator(".export-menu")).toHaveCount(0);
     await waitForFile(htmlPath);
 
     const html = await fs.readFile(htmlPath, "utf8");
@@ -138,7 +144,9 @@ test("M6：导出图表 SVG", async () => {
     const page = await app.firstWindow();
     await openFile(app, page, pumlPath);
     await mockSavePath(app, svgPath);
-    await clickMenuItem(app, "export-svg");
+    // 图表格式：单击导出按钮直接导出 SVG，不弹下拉。
+    await page.locator(".mode-bar-export-button").click();
+    await expect(page.locator(".export-menu")).toHaveCount(0);
     await waitForFile(svgPath);
 
     const svg = await fs.readFile(svgPath, "utf8");
@@ -163,6 +171,8 @@ test("M6：.tex 打开后给出引擎状态", async () => {
   try {
     const page = await app.firstWindow();
     await openFile(app, page, texPath);
+    // 导出入口只对 Markdown / PlantUML / Mermaid 显示。
+    await expect(page.locator(".mode-bar-export")).toHaveCount(0);
     const status = (await page.evaluate(() => window.panda.latex.detect())) as {
       available: boolean;
     };

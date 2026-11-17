@@ -1213,6 +1213,8 @@ export function App() {
   const [perfVisible, setPerfVisible] = useState(false);
   const [problemsOpen, setProblemsOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  /** 模式条导出下拉（仅 Markdown：HTML / PDF）。 */
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
   /** 状态栏通知历史浮层。 */
   const [noticesOpen, setNoticesOpen] = useState(false);
   const [extensionCommands, setExtensionCommands] = useState<CommandItem[]>([]);
@@ -1240,6 +1242,7 @@ export function App() {
   const tabScrollRef = useRef<HTMLDivElement>(null);
   const tabItemsRef = useRef<HTMLDivElement>(null);
   const tabMenuButtonRef = useRef<HTMLButtonElement>(null);
+  const exportWrapRef = useRef<HTMLDivElement>(null);
   const problemsState = useSyncExternalStore(problemStore.subscribe, problemStore.getState);
   const [outline, setOutline] = useState<OutlineItem[]>([]);
   const [sourceJump, setSourceJump] = useState<{ line: number; column: number; token: number } | null>(
@@ -1296,6 +1299,11 @@ export function App() {
         : ["source"];
   const showModeBarDivider =
     modeBarVisible && state.mode === "wysiwyg" && active?.format === "markdown" && !active.readOnly;
+  // 模式条导出入口：Markdown 为 HTML / PDF 下拉，PlantUML / Mermaid 直接导出 SVG。
+  const exportAsMarkdown = active?.format === "markdown";
+  const exportAsDiagram = active?.format === "plantuml" || active?.format === "mermaid";
+  const showExportButton =
+    modeBarVisible && state.mode !== "git" && (exportAsMarkdown || exportAsDiagram);
 
   // 源代码管理：默认跟随当前文件所在仓库，也可在多根工作区中手动切换。
   const [gitRepoChoice, setGitRepoChoice] = useState<string | null>(null);
@@ -1899,6 +1907,29 @@ export function App() {
     };
   }, [paletteOpen, manager]);
 
+  // 导出下拉：点击外部或按 Esc 关闭；切换文档 / 显示模式时自动收起。
+  useEffect(() => {
+    if (!exportMenuOpen) return;
+    const onPointerDown = (event: PointerEvent): void => {
+      if (event.target instanceof Node && !exportWrapRef.current?.contains(event.target)) {
+        setExportMenuOpen(false);
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") setExportMenuOpen(false);
+    };
+    window.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("keydown", onKeyDown, true);
+    };
+  }, [exportMenuOpen]);
+
+  useEffect(() => {
+    setExportMenuOpen(false);
+  }, [state.activeId, state.mode]);
+
   // 标签超出滚动区宽度时显示「全部标签」与左右滚动按钮。见 doc/design.md §15.1。
   useEffect(() => {
     const host = tabScrollRef.current;
@@ -2100,9 +2131,6 @@ export function App() {
         if (active) void manager.closeDocument(active.id);
       },
     },
-    { id: "file.exportHtml", title: t("导出 HTML…"), run: () => void exportHtmlActive() },
-    { id: "file.exportPdf", title: t("导出 PDF…"), run: () => void exportPdfActive() },
-    { id: "file.exportSvg", title: t("导出图表 SVG…"), run: () => void exportSvgActive() },
     {
       id: "view.find",
       title: t("查找"),
@@ -2300,15 +2328,6 @@ export function App() {
         </div>
         <div className="toolbar-spacer" />
         {/* Git 显示模式入口已移到编辑区模式条最右侧的 git 按钮。见 §21.15。 */}
-        <button
-          type="button"
-          className="icon-button toolbar-icon"
-          aria-label={t("命令面板")}
-          data-tip={t("命令面板（Ctrl+Shift+P）")}
-          onClick={() => setPaletteOpen(true)}
-        >
-          <Icon name="terminal" />
-        </button>
         <button
           type="button"
           className="icon-button toolbar-icon tip-left"
@@ -2811,6 +2830,62 @@ export function App() {
                     </button>
                   )}
                 </div>
+                {showExportButton && (
+                  <>
+                    <span className="mode-bar-divider" aria-hidden="true" />
+                    <div
+                      className={exportMenuOpen ? "mode-bar-export open" : "mode-bar-export"}
+                      ref={exportWrapRef}
+                    >
+                      <button
+                        type="button"
+                        className={
+                          exportMenuOpen
+                            ? "mode-button mode-bar-export-button active"
+                            : "mode-button mode-bar-export-button"
+                        }
+                        aria-label={exportAsMarkdown ? t("导出") : t("导出 SVG")}
+                        data-tip={exportAsMarkdown ? t("导出") : t("导出 SVG")}
+                        aria-haspopup={exportAsMarkdown ? "menu" : undefined}
+                        aria-expanded={exportAsMarkdown ? exportMenuOpen : undefined}
+                        onClick={() => {
+                          if (exportAsMarkdown) setExportMenuOpen((open) => !open);
+                          else void exportSvgActive();
+                        }}
+                      >
+                        <Icon name="download" />
+                      </button>
+                      {exportAsMarkdown && exportMenuOpen && (
+                        <div className="export-menu" role="menu" aria-label={t("导出")}>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className="export-menu-item"
+                            onClick={() => {
+                              setExportMenuOpen(false);
+                              void exportHtmlActive();
+                            }}
+                          >
+                            <Icon name="file-html" size={14} className="export-menu-icon" />
+                            <span>{t("导出 HTML…")}</span>
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className="export-menu-item"
+                            onClick={() => {
+                              setExportMenuOpen(false);
+                              void exportPdfActive();
+                            }}
+                          >
+                            <Icon name="file-pdf" size={14} className="export-menu-icon" />
+                            <span>{t("导出 PDF…")}</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
             )}
           <main ref={workspacePaneRef} className={`workspace mode-${state.mode}`}>
