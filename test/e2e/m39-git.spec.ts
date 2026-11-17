@@ -378,3 +378,41 @@ test("M39：非仓库降级提示", async () => {
     await fs.rm(userDataDir, { recursive: true, force: true });
   }
 });
+
+/** M39：暂存的新增文件在 HEAD 中没有基线时，提示应明确为新增文件而不是路径异常。 */
+test("M39：暂存新增文件的基线提示", async () => {
+  test.setTimeout(180_000);
+  const repo = await fs.mkdtemp(path.join(os.tmpdir(), "panda-added-"));
+  const userDataDir = await fs.mkdtemp(path.join(os.tmpdir(), "panda-added-ud-"));
+  await initRepo(repo);
+  await fs.writeFile(path.join(repo, "base.md"), "# 基线\n", "utf8");
+  await git(repo, ["add", "."]);
+  await git(repo, ["commit", "-m", "初始提交"]);
+  // 新增文件只进入暂存区，尚未提交，因此 HEAD 中没有该路径。
+  await fs.writeFile(path.join(repo, "c.txt"), "this is a test 4\n", "utf8");
+  await git(repo, ["add", "c.txt"]);
+
+  const app = await electron.launch({
+    args: ["."],
+    cwd: CWD,
+    env: { ...process.env, PANDA_USER_DATA_DIR: userDataDir },
+  });
+  try {
+    const page = await app.firstWindow();
+    await openFolder(page, app, repo);
+    await page.getByRole("tab", { name: "Git", exact: true }).click();
+
+    const row = page.locator(".git-change-row").filter({ hasText: "c.txt" });
+    await expect(row).toHaveCount(1, { timeout: 20_000 });
+    await row.locator(".git-change-path").click();
+
+    await expect(page.locator(".git-diff-chip")).toContainText("暂存区", { timeout: 20_000 });
+    const notice = page.locator(".diff-notice");
+    await expect(notice).toContainText("新增文件");
+    await expect(notice).not.toContainText("不存在该文件的当前路径");
+  } finally {
+    await app.close();
+    await fs.rm(repo, { recursive: true, force: true });
+    await fs.rm(userDataDir, { recursive: true, force: true });
+  }
+});

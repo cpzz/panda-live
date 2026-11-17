@@ -486,7 +486,11 @@ export class GitService {
         throw new PandaError("E_GIT_TOO_LARGE", t("Git 基线文本超过大小上限"));
       }
       let reason: GitBaselineReason;
-      if (text.includes("not a valid object name")) {
+      if (
+        base === "head" &&
+        (text.includes("invalid object name") || text.includes("not a valid object name"))
+      ) {
+        // 空仓库还没有 HEAD；Git 新版输出 invalid object name，旧版为 not a valid object name。
         reason = "no-head";
       } else {
         // 区分「文件根本没被 Git 跟踪」与「该提交/路径下没有文件」。

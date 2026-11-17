@@ -91,6 +91,75 @@ describe("自定义 Git 命令", () => {
   });
 });
 
+/** 初始化临时仓库并写入可复用的提交身份，避免依赖全局 Git 配置。 */
+function initRepo(dir: string): void {
+  git(dir, "init");
+  git(dir, "config", "user.email", "test@panda.local");
+  git(dir, "config", "user.name", "Panda Test");
+}
+
+describe.skipIf(!hasGit)("Git 基线缺失原因", () => {
+  it("已暂存的新增文件在 HEAD 中没有基线（blob-missing）", async () => {
+    const repo = mkdtempSync(path.join(tmpdir(), "panda-git-added-"));
+    try {
+      initRepo(repo);
+      writeFileSync(path.join(repo, "base.txt"), "base\n", "utf8");
+      git(repo, "add", "base.txt");
+      git(repo, "commit", "-m", "init");
+
+      const added = path.join(repo, "c.txt");
+      writeFileSync(added, "this is a test 4\n", "utf8");
+      git(repo, "add", "c.txt");
+
+      const result = await new GitService().readBaseline(added, "head");
+      expect(result.inRepo).toBe(true);
+      expect(result.oldText).toBeNull();
+      // 文件已进入索引，Git 只能判定「该提交中没有这个路径」，
+      // 因此 reason 是 blob-missing，而不是 untracked。
+      expect(result.reason).toBe("blob-missing");
+    } finally {
+      rmTempRepo(repo);
+    }
+  });
+
+  it("提交新增文件后同一路径可读取 HEAD 基线", async () => {
+    const repo = mkdtempSync(path.join(tmpdir(), "panda-git-added-"));
+    try {
+      initRepo(repo);
+      writeFileSync(path.join(repo, "base.txt"), "base\n", "utf8");
+      git(repo, "add", "base.txt");
+      git(repo, "commit", "-m", "init");
+
+      const added = path.join(repo, "c.txt");
+      writeFileSync(added, "this is a test 4\n", "utf8");
+      git(repo, "add", "c.txt");
+      git(repo, "commit", "-m", "add c");
+
+      const result = await new GitService().readBaseline(added, "head");
+      expect(result.oldText).toContain("this is a test 4");
+      expect(result.reason).toBeUndefined();
+    } finally {
+      rmTempRepo(repo);
+    }
+  });
+
+  it("没有 HEAD 的空仓库返回 no-head 而不是 blob-missing", async () => {
+    const repo = mkdtempSync(path.join(tmpdir(), "panda-git-empty-"));
+    try {
+      initRepo(repo);
+      const target = path.join(repo, "a.txt");
+      writeFileSync(target, "x\n", "utf8");
+      git(repo, "add", "a.txt");
+
+      const result = await new GitService().readBaseline(target, "head");
+      expect(result.oldText).toBeNull();
+      expect(result.reason).toBe("no-head");
+    } finally {
+      rmTempRepo(repo);
+    }
+  });
+});
+
 describe.skipIf(!hasGit)("Git 基线读取", () => {
   let repo: string;
   let file: string;
