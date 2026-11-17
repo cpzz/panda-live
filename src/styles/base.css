@@ -2586,12 +2586,38 @@ body.resizing * {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  width: min(440px, calc(100% - 32px));
+  width: fit-content;
+  max-width: min(440px, calc(100% - 32px));
   padding: 6px 8px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   background: var(--surface);
   box-shadow: var(--shadow);
+}
+
+/* 预览查找面板与渲染区解耦：面板固定，正文单独滚动。 */
+.preview-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  position: relative;
+}
+
+/* 查找与替换的输入框等宽、左对齐；spacer 对应展开箭头列。 */
+.search-spacer {
+  flex: 0 0 22px;
+  width: 22px;
+}
+
+::highlight(panda-preview-search) {
+  background-color: var(--search-match);
+  color: inherit;
+}
+
+::highlight(panda-preview-search-active) {
+  background-color: var(--search-match-active);
+  color: inherit;
 }
 
 .search-row {
@@ -2620,7 +2646,8 @@ body.resizing * {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  width: min(440px, calc(100% - 32px));
+  width: fit-content;
+  max-width: min(440px, calc(100% - 32px));
   padding: 6px 8px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
@@ -2633,26 +2660,10 @@ body.resizing * {
   display: none;
 }
 
-.search-text-button {
-  flex: 0 0 auto;
-  height: 22px;
-  padding: 0 6px;
-  border: 1px solid transparent;
-  border-radius: 2px;
-  background: transparent;
-  color: var(--fg);
-  font-size: 11.5px;
-  cursor: pointer;
-}
-
-.search-text-button:hover {
-  background: var(--surface-hover);
-}
-
 .search-input {
-  flex: 1;
+  flex: 0 1 190px;
   min-width: 0;
-  width: auto;
+  width: 190px;
   height: 24px;
   padding: 0 8px;
   border: 1px solid var(--border-strong);
@@ -2745,11 +2756,11 @@ body.resizing * {
   right: 16px;
   left: auto;
   z-index: 12;
-  width: min(560px, calc(100% - 32px));
+  width: auto;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   background: var(--surface);
-  box-shadow: var(--shadow);
+  box-shadow: none;
 }
 
 .editor-host .cm-panels-top .cm-search {

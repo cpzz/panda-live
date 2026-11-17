@@ -1,3 +1,5 @@
+import type { EditorMode } from "../shared/ipc";
+
 /**
  * 查找替换的纯逻辑：构词、匹配与文本替换。
  * 编辑器侧（ProseMirror / CodeMirror）只负责把结果映射到文档位置。见 doc/design.md §11.5。
@@ -16,6 +18,16 @@ export type SearchMode = "find" | "replace";
 export interface SearchRequest {
   mode: SearchMode;
   token: number;
+  /** 发起请求时的编辑模式；只在该模式对应的面板中生效。 */
+  editorMode?: EditorMode;
+  /** 分栏模式下请求作用于哪个面板；由发起时的焦点决定。 */
+  surface?: "source" | "preview" | "wysiwyg";
+  /** 当前选中的单行文本；用于 Ctrl+F/H 时带入查找框。 */
+  seed?: string;
+  /** 切换模式后沿用上一次的替换文本。 */
+  replacement?: string;
+  /** 切换模式后沿用上一次的查找选项。 */
+  options?: SearchOptions;
 }
 
 export interface MatchRange {

@@ -75,7 +75,7 @@ import { lintKeymap } from "@codemirror/lint";
 import { tags } from "@lezer/highlight";
 import type { SyntaxNode } from "@lezer/common";
 import { t } from "../i18n";
-import type { SearchMode } from "../services/search";
+import type { SearchMode, SearchOptions } from "../services/search";
 import { iniStreamParser } from "./ini-mode";
 import { createSourceSearchPanel, openSourceSearch } from "./search-panel";
 
@@ -926,8 +926,13 @@ export class SourceEditor {
     this.view.focus();
   }
 
-  openSearch(mode: SearchMode = "find"): void {
-    openSourceSearch(this.view, mode);
+  openSearch(
+    mode: SearchMode = "find",
+    seed?: string,
+    replacement?: string,
+    options?: SearchOptions,
+  ): void {
+    openSourceSearch(this.view, mode, seed, replacement, options);
   }
 
   closeSearch(): void {

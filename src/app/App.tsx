@@ -15,7 +15,7 @@ import {
 } from "../services/document-manager";
 import { settingsStore } from "../services/settings-store";
 import { GitStore } from "../services/git-store";
-import type { SearchMode, SearchRequest } from "../services/search";
+import type { SearchMode, SearchOptions, SearchRequest } from "../services/search";
 import { WorkspaceStore } from "../services/workspace-store";
 import { SourceEditor, type DiffLineMarker, type SelectionInfo, type SourceLanguage } from "../source/codemirror";
 import { sourceLanguageForFormat } from "../source/language";
@@ -57,6 +57,7 @@ import { WorkspacePanel } from "./WorkspacePanel";
 import { GitPanel } from "./GitPanel";
 import { WysiwygPane } from "./WysiwygPane";
 import { GitPane } from "./GitPane";
+import { PreviewSearchPanel } from "./PreviewSearchPanel";
 
 const MODE_LABELS: Record<EditorMode, string> = {
   wysiwyg: "所见即所得",
@@ -169,6 +170,10 @@ function SourcePane({
   const foldsRef = useRef(document.folds);
   foldsRef.current = document.folds;
   const appliedFoldsRef = useRef<string | null>(null);
+  /** 已消费的查找请求 token；模式切换不应重放旧请求。 */
+  const handledSearchRef = useRef(0);
+  /** 上一次编辑模式；切换模式时关闭源码查找面板。 */
+  const previousModeRef = useRef(mode);
 
   /** 把已保存的折叠行应用到编辑器（创建或切换标签重建时）。 */
   const applySavedFolds = (): void => {
@@ -318,11 +323,41 @@ function SourcePane({
     // 只响应标签切换、模式切换、外部重载与只读变化；普通输入由编辑器自身维护。
   }, [document.id, document.revision, document.readOnly, mode, language, document.content]);
 
+  // 切换编辑模式时关闭源码查找面板；若新请求随后到达会重新打开。
+  useEffect(() => {
+    if (previousModeRef.current === mode) return;
+    previousModeRef.current = mode;
+    editorRef.current?.closeSearch();
+  }, [mode]);
+
   // 查找请求在编辑器创建之后处理，避免首次挂载时 editorRef 尚未赋值。
   useEffect(() => {
-    if (!searchRequest) return;
+    if (!searchRequest) {
+      editorRef.current?.closeSearch();
+      return;
+    }
+    if (searchRequest.token === handledSearchRef.current) return;
+    handledSearchRef.current = searchRequest.token;
+    // 请求只在发起它的编辑模式生效，避免切换模式后重放。
+    if (
+      searchRequest.editorMode &&
+      searchRequest.editorMode !== "source" &&
+      searchRequest.editorMode !== "split"
+    ) {
+      return;
+    }
+    // 分栏模式下请求可能指向右侧预览，源码面板关闭自身并交给预览。
+    if (searchRequest.surface === "preview") {
+      editorRef.current?.closeSearch();
+      return;
+    }
     if (mode === "wysiwyg" || mode === "preview" || mode === "git") return;
-    editorRef.current?.openSearch(searchRequest.mode);
+    editorRef.current?.openSearch(
+      searchRequest.mode,
+      searchRequest.seed,
+      searchRequest.replacement,
+      searchRequest.options,
+    );
   }, [searchRequest, mode]);
 
   return (
@@ -857,6 +892,7 @@ function PreviewPane({
   compileSignal,
   diff,
   mathKey,
+  searchRequest,
   onDiffModeChange,
   onDiffJump,
 }: {
@@ -866,11 +902,14 @@ function PreviewPane({
   diff: PreviewDiffModel | null;
   /** 数学设置签名（宏 + 单美元）；变化时用新设置重渲染预览。 */
   mathKey: string;
+  /** 仅预览模式传入；查找只读渲染结果。 */
+  searchRequest: SearchRequest | null;
   onDiffModeChange(mode: DiffViewMode): void;
   onDiffJump(line: number): void;
 }) {
   const [html, setHtml] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const searchHostRef = useRef<HTMLDivElement>(null);
   const supported = document.format === "markdown";
   const annotate = diff !== null;
 
@@ -920,19 +959,26 @@ function PreviewPane({
   }
 
   return (
-    <div className="preview-pane">
-      {error ? (
-        <p className="placeholder">{t("预览渲染失败：{0}", error)}</p>
-      ) : (
-        <RenderedMarkdown
-          html={html}
-          filePath={document.path}
-          sourceKey={`md-preview:${document.id}`}
-          diff={diff}
-          onDiffModeChange={onDiffModeChange}
-          onDiffJump={onDiffJump}
-        />
-      )}
+    <div className="preview-wrap">
+      <PreviewSearchPanel
+        containerRef={searchHostRef}
+        request={searchRequest}
+        contentKey={html}
+      />
+      <div className="preview-pane" ref={searchHostRef}>
+        {error ? (
+          <p className="placeholder">{t("预览渲染失败：{0}", error)}</p>
+        ) : (
+          <RenderedMarkdown
+            html={html}
+            filePath={document.path}
+            sourceKey={`md-preview:${document.id}`}
+            diff={diff}
+            onDiffModeChange={onDiffModeChange}
+            onDiffJump={onDiffJump}
+          />
+        )}
+      </div>
     </div>
   );
 }
@@ -969,9 +1015,182 @@ export function App() {
 
   const [cursor, setCursor] = useState<SelectionInfo>({ line: 1, column: 1 });
   const [searchRequest, setSearchRequest] = useState<SearchRequest | null>(null);
-  const requestSearch = useCallback((mode: SearchMode): void => {
-    setSearchRequest((current) => ({ mode, token: (current?.token ?? 0) + 1 }));
+  /** 查找面板最近一次的用户输入，用于切换模式后沿用。 */
+  const searchActiveRef = useRef(false);
+  const searchTermRef = useRef("");
+  const searchReplacementRef = useRef("");
+  const searchKindRef = useRef<SearchMode>("find");
+  const searchOptionsRef = useRef<SearchOptions>({
+    caseSensitive: false,
+    regex: false,
+    wholeWord: false,
+  });
+  /** 分栏模式下最近一次点击的编辑面板。 */
+  const searchSurfaceRef = useRef<"source" | "preview">("source");
+  const requestSearch = useCallback(
+    (mode: SearchMode): void => {
+      const editorMode = manager.getState().mode;
+      const focused = window.document.activeElement;
+      const insidePanel =
+        focused instanceof Element &&
+        focused.closest(".search-panel, .source-search-panel, .preview-search-panel") !== null;
+      // 选中文本优先；没有选区时沿用已打开面板里的查找词。
+      const selected = insidePanel ? "" : (window.getSelection()?.toString() ?? "").trim();
+      const seed =
+        selected.length > 0 && selected.length <= 100 && !/[\r\n]/.test(selected)
+          ? selected
+          : undefined;
+      const activeDoc = manager
+        .getState()
+        .documents.find((doc) => doc.id === manager.getState().activeId);
+      const previewAvailable = activeDoc?.format === "markdown";
+      const surface =
+        editorMode === "wysiwyg"
+          ? "wysiwyg"
+          : editorMode === "preview"
+            ? "preview"
+            : editorMode === "split"
+              ? previewAvailable
+                ? searchSurfaceRef.current
+                : "source"
+              : "source";
+      const panel = window.document.querySelector(
+        surface === "preview"
+          ? ".preview-search-panel"
+          : surface === "wysiwyg"
+            ? ".search-panel"
+            : ".source-search-panel",
+      );
+      const openFind = panel?.querySelector<HTMLInputElement>(
+        'input[aria-label="查找内容"], input[name="search"]',
+      );
+      const openReplace = panel?.querySelector<HTMLInputElement>(
+        'input[aria-label="替换内容"], input[name="replace"]',
+      );
+      const term = seed ?? openFind?.value ?? searchTermRef.current;
+      // 收起替换行时输入框不在 DOM 中，沿用上一次的替换文本。
+      const replacement = openReplace ? openReplace.value : searchReplacementRef.current;
+      const options: SearchOptions = { ...searchOptionsRef.current };
+      panel?.querySelectorAll<HTMLButtonElement>("button.find-toggle[aria-pressed]").forEach((button) => {
+        const text = button.textContent?.trim();
+        const pressed = button.getAttribute("aria-pressed") === "true";
+        if (text === "Aa") options.caseSensitive = pressed;
+        else if (text === ".*") options.regex = pressed;
+        else if (text === "ab") options.wholeWord = pressed;
+      });
+      searchOptionsRef.current = options;
+      searchActiveRef.current = true;
+      searchKindRef.current = mode;
+      searchTermRef.current = term;
+      searchReplacementRef.current = replacement;
+      setSearchRequest((current) => ({
+        mode,
+        token: (current?.token ?? 0) + 1,
+        editorMode,
+        surface,
+        seed: term || undefined,
+        replacement,
+        options,
+      }));
+    },
+    [manager],
+  );
+  // 记录面板内的输入，切换模式时沿用；Esc 表示用户主动关闭，不再自动重开。
+  useEffect(() => {
+    const onInput = (event: Event): void => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement)) return;
+      if (target.name === "search" || target.getAttribute("aria-label") === "查找内容") {
+        searchTermRef.current = target.value;
+      } else if (target.name === "replace" || target.getAttribute("aria-label") === "替换内容") {
+        searchReplacementRef.current = target.value;
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") searchActiveRef.current = false;
+    };
+    const onClick = (event: MouseEvent): void => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      // 点击展开/收起或选项时同步持久状态；capture 阶段读取点击前的 aria 值。
+      const expand = target.closest("button.find-toggle[aria-expanded]");
+      if (expand) {
+        searchKindRef.current =
+          expand.getAttribute("aria-expanded") === "true" ? "find" : "replace";
+      }
+      const option = target.closest("button.find-toggle[aria-pressed]");
+      if (option) {
+        const glyph = option.textContent?.trim();
+        const next = option.getAttribute("aria-pressed") !== "true";
+        if (glyph === "Aa") {
+          searchOptionsRef.current = { ...searchOptionsRef.current, caseSensitive: next };
+        } else if (glyph === ".*") {
+          searchOptionsRef.current = { ...searchOptionsRef.current, regex: next };
+        } else if (glyph === "ab") {
+          searchOptionsRef.current = { ...searchOptionsRef.current, wholeWord: next };
+        }
+      }
+    };
+    const onPointerDown = (event: PointerEvent): void => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (target.closest(".preview-wrap, .preview-pane")) searchSurfaceRef.current = "preview";
+      else if (target.closest(".source-pane, .wysiwyg-pane")) searchSurfaceRef.current = "source";
+    };
+    window.addEventListener("input", onInput, true);
+    window.addEventListener("keydown", onKeyDown, true);
+    window.addEventListener("click", onClick, true);
+    window.addEventListener("pointerdown", onPointerDown, true);
+    return () => {
+      window.removeEventListener("input", onInput, true);
+      window.removeEventListener("keydown", onKeyDown, true);
+      window.removeEventListener("click", onClick, true);
+      window.removeEventListener("pointerdown", onPointerDown, true);
+    };
   }, []);
+  // 切换编辑模式或标签时保持查找面板：在新目标中按上一次的查找词/替换词重开。
+  const previousSearchTargetRef = useRef({ mode: state.mode, id: state.activeId });
+  useEffect(() => {
+    const previous = previousSearchTargetRef.current;
+    const changed = previous.mode !== state.mode || previous.id !== state.activeId;
+    previousSearchTargetRef.current = { mode: state.mode, id: state.activeId };
+    if (!changed || !searchActiveRef.current) return;
+    const activeDoc = manager.getState().documents.find((doc) => doc.id === state.activeId);
+    if (
+      !activeDoc ||
+      activeDoc.format === "pdf" ||
+      activeDoc.format === "image" ||
+      ((state.mode === "wysiwyg" || state.mode === "preview") && activeDoc.format !== "markdown")
+    ) {
+      searchActiveRef.current = false;
+      setSearchRequest(null);
+      return;
+    }
+    if (state.mode === "git") {
+      searchActiveRef.current = false;
+      setSearchRequest(null);
+      return;
+    }
+    const surface =
+      state.mode === "wysiwyg"
+        ? "wysiwyg"
+        : state.mode === "preview"
+          ? "preview"
+          : state.mode === "split"
+            ? activeDoc.format === "markdown"
+              ? searchSurfaceRef.current
+              : "source"
+            : "source";
+    setSearchRequest((current) => ({
+      mode: searchKindRef.current,
+      token: (current?.token ?? 0) + 1,
+      editorMode: state.mode,
+      surface,
+      seed: searchTermRef.current.trim() || undefined,
+      replacement: searchReplacementRef.current,
+      options: searchOptionsRef.current,
+    }));
+  }, [state.mode, state.activeId, manager]);
   const openSourceControl = useCallback((): void => {
     workspaces.setVisible(true);
     setSidebarTabRequest((current) => ({
@@ -2612,7 +2831,9 @@ export function App() {
               <SourcePane
                 document={active}
                 mode={state.mode}
-                searchRequest={searchRequest}
+                searchRequest={
+                  state.mode === "source" || state.mode === "split" ? searchRequest : null
+                }
                 jump={sourceJump}
                 tabSize={settings.editor.tabSize}
                 insertSpaces={settings.editor.insertSpaces}
@@ -2651,6 +2872,9 @@ export function App() {
                 compileSignal={compileSignal}
                 diff={previewDiff}
                 mathKey={mathOptionsSignature()}
+                searchRequest={
+                  state.mode === "preview" || state.mode === "split" ? searchRequest : null
+                }
                 onDiffModeChange={(mode) => updateDiffOption(active.id, { mode })}
                 onDiffJump={(line) => {
                   if (state.mode === "preview") manager.setMode("source");

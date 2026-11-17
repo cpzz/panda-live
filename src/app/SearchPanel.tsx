@@ -22,11 +22,22 @@ export function SearchPanel({ editor, request, onClose }: SearchPanelProps) {
   const [info, setInfo] = useState({ active: 0, total: 0 });
   const inputRef = useRef<HTMLInputElement>(null);
   const replaceInputRef = useRef<HTMLInputElement>(null);
+  /** 已消费的请求 token；模式切换导致 request 变为 null 再恢复时不重放。 */
+  const handledTokenRef = useRef(0);
 
   useEffect(() => {
     if (!request) return;
+    if (request.token === handledTokenRef.current) return;
+    handledTokenRef.current = request.token;
+    // 请求只在发起它的编辑模式生效，避免切换模式后重放。
+    if (request.editorMode && request.editorMode !== "wysiwyg") return;
+    if (request.surface && request.surface !== "wysiwyg") return;
     setOpen(true);
     setMode(request.mode);
+    // 选中的文本作为查找源；没有选区时保留上一次的查找词。
+    if (request.seed) setTerm(request.seed);
+    if (request.replacement !== undefined) setReplacement(request.replacement);
+    if (request.options) setOptions(request.options);
     // 替换模式聚焦替换框；状态更新后再取 ref。
     const frame = requestAnimationFrame(() => {
       const target = request.mode === "replace" ? replaceInputRef.current : inputRef.current;
@@ -34,6 +45,26 @@ export function SearchPanel({ editor, request, onClose }: SearchPanelProps) {
     });
     return () => cancelAnimationFrame(frame);
   }, [request]);
+
+  // 模式切换时 request 变为 null：关闭面板，避免切回该模式时重新出现。
+  useEffect(() => {
+    if (request || !open) return;
+    editor?.clearSearch();
+    setOpen(false);
+  }, [request, open, editor]);
+
+  // Esc 不依赖输入框焦点：窗口任意位置都能关闭查找面板。
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      editor?.clearSearch();
+      setOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [open, editor]);
 
   useEffect(() => {
     if (!open || !editor) return;
@@ -162,6 +193,7 @@ export function SearchPanel({ editor, request, onClose }: SearchPanelProps) {
       </div>
       {mode === "replace" && (
         <div className="search-row search-replace-row">
+          <span className="search-spacer" aria-hidden="true" />
           <input
             ref={replaceInputRef}
             className="search-input"

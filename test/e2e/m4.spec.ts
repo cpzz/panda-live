@@ -187,7 +187,7 @@ test("M4：查找与替换模式、快捷键与按钮提示", async () => {
     await openSample(app, page, filePath);
     await expect(page.locator(".prose-editor")).toBeVisible();
 
-    // Ctrl+F 只打开查找：没有替换行，也没有关闭按钮。
+    // Ctrl+F 只打开查找：没有替换行，也不提供关闭按钮。
     await page.keyboard.press("Control+f");
     const panel = page.locator(".search-panel");
     await expect(panel).toBeVisible();
@@ -253,10 +253,235 @@ test("M4：查找与替换模式、快捷键与按钮提示", async () => {
     await expect(sourceReplace).toHaveValue("Omega");
     // 源码面板的替换按钮同样生效。
     await sourcePanel.locator('input[name="search"]').fill("Alpha");
+    await expect(sourcePanel.locator(".search-count")).toContainText("1 / 1");
     await sourcePanel.locator('button[name="replace"]').click();
     await expect(page.locator(".cm-content")).toContainText("Omega");
     await page.keyboard.press("Escape");
     await expect(sourcePanel).toHaveCount(0);
+  } finally {
+    await app.close();
+    await fs.rm(tempDir, { recursive: true, force: true });
+    await fs.rm(userDataDir, { recursive: true, force: true });
+  }
+});
+
+/** M4：查找替换窗口的右对齐、输入框对齐、选中带入、模式切换与预览查找。 */
+test("M4：查找替换窗口布局与预览查找", async () => {
+  test.setTimeout(180_000);
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "panda-m4-search-"));
+  const userDataDir = await prepareUserData(false);
+  const filePath = path.join(tempDir, "layout.md");
+  await fs.writeFile(filePath, "# 查找\n\nAlpha Beta Alpha\n\nGamma Alpha\n", "utf8");
+
+  const app = await launch(userDataDir);
+  try {
+    const page = await app.firstWindow();
+    await openSample(app, page, filePath);
+    await expect(page.locator(".prose-editor")).toBeVisible();
+    const panel = page.locator(".search-panel");
+
+    // 所见即所得面板右对齐，查找与替换输入框左对齐且等宽。
+    await page.keyboard.press("Control+f");
+    await expect(panel).toBeVisible();
+    const panelBox = await panel.boundingBox();
+    const wrapBox = await page.locator(".wysiwyg-wrap").boundingBox();
+    expect(panelBox).not.toBeNull();
+    expect(wrapBox).not.toBeNull();
+    expect(
+      Math.abs(wrapBox!.x + wrapBox!.width - (panelBox!.x + panelBox!.width) - 16),
+    ).toBeLessThan(2);
+
+    await page.keyboard.press("Control+h");
+    const replaceInput = panel.getByLabel("替换内容");
+    await expect(replaceInput).toBeVisible();
+    const findBox = await panel.getByLabel("查找内容").boundingBox();
+    const replaceBox = await replaceInput.boundingBox();
+    expect(findBox).not.toBeNull();
+    expect(replaceBox).not.toBeNull();
+    expect(Math.abs(findBox!.x - replaceBox!.x)).toBeLessThan(1);
+    expect(Math.abs(findBox!.width - replaceBox!.width)).toBeLessThan(1);
+
+    // 面板打开时选中正文再按 Ctrl+F，查找框带入选中内容。
+    const paragraph = page.locator(".prose-editor p").first();
+    await paragraph.click();
+    await page.keyboard.press("Home");
+    await page.keyboard.press("Shift+End");
+    await page.keyboard.press("Control+f");
+    await expect(panel.getByLabel("查找内容")).toHaveValue("Alpha Beta Alpha");
+
+    // Esc 关闭后切换模式，不重新弹出。
+    await page.keyboard.press("Escape");
+    await expect(panel).toHaveCount(0);
+    await page.getByRole("button", { name: "源码", exact: true }).click();
+    await page.waitForTimeout(300);
+    await expect(page.locator(".cm-panels-top .source-search-panel")).toHaveCount(0);
+    await page.getByRole("button", { name: "所见即所得", exact: true }).click();
+    await page.waitForTimeout(300);
+    await expect(panel).toHaveCount(0);
+
+    // 源码面板右对齐、图标按钮，查找/替换输入框对齐。
+    await page.getByRole("button", { name: "源码", exact: true }).click();
+    await page.keyboard.press("Control+f");
+    const sourcePanel = page.locator(".cm-panels-top .source-search-panel");
+    await expect(sourcePanel).toBeVisible();
+    const sourcePanelBox = await sourcePanel.boundingBox();
+    const editorBox = await page.locator(".cm-editor").boundingBox();
+    expect(sourcePanelBox).not.toBeNull();
+    expect(editorBox).not.toBeNull();
+    expect(
+      Math.abs(
+        editorBox!.x + editorBox!.width - (sourcePanelBox!.x + sourcePanelBox!.width) - 16,
+      ),
+    ).toBeLessThan(3);
+    await expect(sourcePanel.getByRole("button", { name: "关闭查找" })).toHaveCount(0);
+    await expect(sourcePanel.locator('button[name="replace"] svg')).toHaveCount(1);
+
+    // 源码面板打开时选中行再按 Ctrl+F，也带入查找框。
+    await page.locator(".cm-content").click();
+    await page.keyboard.press("Control+Home");
+    await page.keyboard.press("Shift+End");
+    await page.keyboard.press("Control+f");
+    await expect(sourcePanel.locator('input[name="search"]')).toHaveValue("# 查找");
+    // 源码面板同样显示匹配总数与当前位置。
+    await expect(sourcePanel.locator(".search-count")).toContainText("1 / 1");
+
+    await sourcePanel.locator('button[name="toggleReplace"]').click();
+    const sourceFindBox = await sourcePanel.locator('input[name="search"]').boundingBox();
+    const sourceReplaceBox = await sourcePanel.locator('input[name="replace"]').boundingBox();
+    expect(sourceFindBox).not.toBeNull();
+    expect(sourceReplaceBox).not.toBeNull();
+    expect(Math.abs(sourceFindBox!.x - sourceReplaceBox!.x)).toBeLessThan(1);
+    expect(Math.abs(sourceFindBox!.width - sourceReplaceBox!.width)).toBeLessThan(1);
+    await page.keyboard.press("Escape");
+    await expect(sourcePanel).toHaveCount(0);
+
+    // 预览模式支持查找：计数、导航与高亮。
+    await page.getByRole("button", { name: "预览", exact: true }).click();
+    await expect(page.locator(".preview-pane .markdown-body")).toBeVisible();
+    await page.keyboard.press("Control+f");
+    const previewPanel = page.locator(".preview-search-panel");
+    await expect(previewPanel).toBeVisible();
+    await expect(previewPanel.getByLabel("替换内容")).toHaveCount(0);
+    await previewPanel.getByLabel("查找内容").fill("Alpha");
+    await expect(previewPanel.locator(".search-count")).toContainText("1 / 3");
+    const highlighted = await page.evaluate(
+      "typeof CSS !== 'undefined' && 'highlights' in CSS && CSS.highlights.has('panda-preview-search')",
+    );
+    expect(highlighted).toBe(true);
+    await page.keyboard.press("Enter");
+    await expect(previewPanel.locator(".search-count")).toContainText("2 / 3");
+    await page.keyboard.press("Escape");
+    await expect(previewPanel).toHaveCount(0);
+  } finally {
+    await app.close();
+    await fs.rm(tempDir, { recursive: true, force: true });
+    await fs.rm(userDataDir, { recursive: true, force: true });
+  }
+});
+
+/** M4：查找面板跨模式保持、分栏预览查找与 Esc 全局关闭。 */
+test("M4：查找面板跨模式保持与分栏预览查找", async () => {
+  test.setTimeout(180_000);
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "panda-m4-keep-"));
+  const userDataDir = await prepareUserData(false);
+  const filePath = path.join(tempDir, "keep.md");
+  await fs.writeFile(filePath, "# 查找\n\nAlpha Beta Alpha\n\nGamma Alpha\n", "utf8");
+
+  const app = await launch(userDataDir);
+  try {
+    const page = await app.firstWindow();
+    await openSample(app, page, filePath);
+    await expect(page.locator(".prose-editor")).toBeVisible();
+    const panel = page.locator(".search-panel");
+
+    await page.keyboard.press("Control+f");
+    await panel.getByLabel("查找内容").fill("Alpha");
+    await expect(panel.locator(".search-count")).toContainText("1 / 3");
+
+    // 切换模式保持面板打开，并沿用查找词。
+    await page.getByRole("button", { name: "源码", exact: true }).click();
+    const sourcePanel = page.locator(".cm-panels-top .source-search-panel");
+    await expect(sourcePanel).toBeVisible();
+    await expect(sourcePanel.locator('input[name="search"]')).toHaveValue("Alpha");
+    await expect(sourcePanel.locator(".search-count")).toContainText("1 / 3");
+    // 全选按钮位于计数标签之前。
+    const selectBox = await sourcePanel.locator('button[name="select"]').boundingBox();
+    const countBox = await sourcePanel.locator(".search-count").boundingBox();
+    expect(selectBox).not.toBeNull();
+    expect(countBox).not.toBeNull();
+    expect(selectBox!.x).toBeLessThan(countBox!.x);
+
+    await page.getByRole("button", { name: "所见即所得", exact: true }).click();
+    await expect(panel).toBeVisible();
+    await expect(panel.getByLabel("查找内容")).toHaveValue("Alpha");
+
+    // 切到分栏：源码面板保持打开。
+    await page.getByRole("button", { name: "分栏", exact: true }).click();
+    await expect(sourcePanel).toBeVisible();
+    await expect(sourcePanel.locator('input[name="search"]')).toHaveValue("Alpha");
+
+    // 焦点在右侧预览时，Ctrl+F 打开预览查找。
+    await page.locator(".preview-pane .markdown-body p").first().click();
+    await page.keyboard.press("Control+f");
+    const previewPanel = page.locator(".preview-search-panel");
+    await expect(previewPanel).toBeVisible();
+    await expect(previewPanel.getByLabel("查找内容")).toHaveValue("Alpha");
+    await expect(previewPanel.locator(".search-count")).toContainText("1 / 3");
+
+    // 焦点移到预览正文后，Esc 仍能关闭预览面板。
+    await page.locator(".preview-pane .markdown-body p").first().click();
+    await page.keyboard.press("Escape");
+    await expect(previewPanel).toHaveCount(0);
+
+    // Esc 关闭后切换模式不再自动打开。
+    await page.getByRole("button", { name: "源码", exact: true }).click();
+    await page.waitForTimeout(300);
+    await expect(page.locator(".cm-panels-top .source-search-panel")).toHaveCount(0);
+  } finally {
+    await app.close();
+    await fs.rm(tempDir, { recursive: true, force: true });
+    await fs.rm(userDataDir, { recursive: true, force: true });
+  }
+});
+
+/** M4：切换标签时查找面板保持打开并沿用查找词。 */
+test("M4：切换标签保持查找面板", async () => {
+  test.setTimeout(180_000);
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "panda-m4-tab-"));
+  const userDataDir = await prepareUserData(false);
+  const fileA = path.join(tempDir, "a.md");
+  const fileB = path.join(tempDir, "b.md");
+  await fs.writeFile(fileA, "# A\n\nAlpha A\n", "utf8");
+  await fs.writeFile(fileB, "# B\n\nAlpha B\n", "utf8");
+
+  const app = await launch(userDataDir);
+  try {
+    const page = await app.firstWindow();
+    await openSample(app, page, fileA);
+    await page.getByRole("button", { name: "源码", exact: true }).click();
+    await page.locator(".cm-content").waitFor();
+    await page.keyboard.press("Control+f");
+    const sourcePanel = page.locator(".cm-panels-top .source-search-panel");
+    await sourcePanel.locator('input[name="search"]').fill("Alpha");
+    await expect(sourcePanel.locator(".search-count")).toContainText("1 / 1");
+
+    // 打开第二个标签：查找面板跟随新标签的当前模式重新打开，查找词保留。
+    await app.evaluate(({ dialog }, target) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
+    }, fileB);
+    await page.keyboard.press("Control+O");
+    const tabB = page.locator(".tab-item").filter({ hasText: "b.md" });
+    await expect(tabB).toHaveCount(1);
+    const anyPanel = page.locator(".search-panel, .cm-panels-top .source-search-panel");
+    await expect(anyPanel).toBeVisible();
+    await expect(
+      anyPanel.locator('input[aria-label="查找内容"], input[name="search"]').first(),
+    ).toHaveValue("Alpha");
+
+    // 切回原标签（源码模式）：源码面板仍然保持。
+    await page.locator(".tab-item").filter({ hasText: "a.md" }).click();
+    await expect(sourcePanel).toBeVisible();
+    await expect(sourcePanel.locator('input[name="search"]')).toHaveValue("Alpha");
   } finally {
     await app.close();
     await fs.rm(tempDir, { recursive: true, force: true });
