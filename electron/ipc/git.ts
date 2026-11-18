@@ -59,6 +59,9 @@ export function registerGitHandlers({
   settings: SettingsService;
 }): void {
   const command = (): string => settings.get().git.command;
+  const gitSettings = () => settings.get().git;
+  /** 网络命令超时（秒 → 毫秒）；由设置控制，默认 120 秒。 */
+  const networkTimeout = (): number => gitSettings().networkTimeoutSeconds * 1000;
 
   const assertRoot = async (root: string): Promise<string> => files.assertAllowed(root);
 
@@ -121,17 +124,29 @@ export function registerGitHandlers({
 
   handle("git:fetch", async (request): Promise<GitSnapshot> => {
     const root = await assertRoot(request.root);
-    return operation(() => git.fetch(root, command()));
+    return operation(() =>
+      git.fetch(root, command(), {
+        prune: gitSettings().fetchPrune,
+        timeoutMs: networkTimeout(),
+      }),
+    );
   });
 
   handle("git:pull", async (request): Promise<GitSnapshot> => {
     const root = await assertRoot(request.root);
-    return operation(() => git.pull(root, command()));
+    return operation(() =>
+      git.pull(root, command(), {
+        strategy: gitSettings().pullStrategy,
+        timeoutMs: networkTimeout(),
+      }),
+    );
   });
 
   handle("git:push", async (request): Promise<GitSnapshot> => {
     const root = await assertRoot(request.root);
-    return operation(() => git.push(root, request.setUpstream, command()));
+    return operation(() =>
+      git.push(root, request.setUpstream, command(), { timeoutMs: networkTimeout() }),
+    );
   });
 
   handle("git:log", async (request): Promise<GitCommit[]> => {

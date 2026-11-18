@@ -8,6 +8,12 @@ export type SaveEol = "preserve" | "lf" | "crlf";
 /** 界面语言：中文、英文，或跟随系统。 */
 export type LanguagePreference = "system" | "zh" | "en";
 
+/** 拉取策略：遵循 Git 配置，或由应用覆盖为 merge / rebase / ff-only。 */
+export type GitPullStrategy = "config" | "merge" | "rebase" | "ff-only";
+
+/** 仓库状态自动刷新时机；`60s` / `300s` 仍在窗口聚焦时刷新。 */
+export type GitAutoRefresh = "off" | "focus" | "60s" | "300s";
+
 export interface Settings {
   schemaVersion: number;
   appearance: {
@@ -53,6 +59,8 @@ export interface Settings {
   diff: {
     /** 新打开的文档默认显示与 Git 基线的差异。见 doc/design.md §21.11。 */
     defaultOn: boolean;
+    /** 新打开文档的默认对比基线。 */
+    defaultBase: "head" | "index" | "lastSave";
   };
   git: {
     /**
@@ -60,6 +68,18 @@ export interface Settings {
      * 见 doc/design.md §21.3。
      */
     command: string;
+    /** 拉取策略；`config` 表示遵循用户 Git 配置。 */
+    pullStrategy: GitPullStrategy;
+    /** 获取时是否清理远程已删除的分支（`fetch --prune`）。 */
+    fetchPrune: boolean;
+    /** fetch / pull / push 的超时（秒）。 */
+    networkTimeoutSeconds: number;
+    /** 仓库状态自动刷新时机。 */
+    autoRefresh: GitAutoRefresh;
+    /** 提交历史每页条数。 */
+    historyPageSize: number;
+    /** 分支没有上游时，推送自动设置上游而不询问。 */
+    autoSetUpstream: boolean;
   };
   privacy: {
     logLevel: "error" | "warn" | "info" | "debug";
@@ -87,8 +107,16 @@ export const DEFAULT_SETTINGS: Settings = {
   },
   diagram: { memoryCacheLimit: 100 },
   latex: { engineCommand: "", timeoutSeconds: 60 },
-  diff: { defaultOn: false },
-  git: { command: "git" },
+  diff: { defaultOn: false, defaultBase: "head" },
+  git: {
+    command: "git",
+    pullStrategy: "config",
+    fetchPrune: true,
+    networkTimeoutSeconds: 120,
+    autoRefresh: "focus",
+    historyPageSize: 50,
+    autoSetUpstream: false,
+  },
   privacy: { logLevel: "info" },
 };
 
@@ -201,6 +229,11 @@ export function mergeSettings(raw: unknown): Settings {
       ...diff,
       defaultOn:
         typeof diff.defaultOn === "boolean" ? diff.defaultOn : DEFAULT_SETTINGS.diff.defaultOn,
+      defaultBase: pickEnum(
+        diff.defaultBase,
+        ["head", "index", "lastSave"] as const,
+        DEFAULT_SETTINGS.diff.defaultBase,
+      ),
     },
     git: {
       ...git,
@@ -208,6 +241,33 @@ export function mergeSettings(raw: unknown): Settings {
         typeof git.command === "string" && git.command.trim().length > 0
           ? git.command.trim().slice(0, 260)
           : DEFAULT_SETTINGS.git.command,
+      pullStrategy: pickEnum(
+        git.pullStrategy,
+        ["config", "merge", "rebase", "ff-only"] as const,
+        DEFAULT_SETTINGS.git.pullStrategy,
+      ),
+      fetchPrune:
+        typeof git.fetchPrune === "boolean" ? git.fetchPrune : DEFAULT_SETTINGS.git.fetchPrune,
+      networkTimeoutSeconds: pickNumber(
+        git.networkTimeoutSeconds,
+        DEFAULT_SETTINGS.git.networkTimeoutSeconds,
+        30,
+        600,
+      ),
+      autoRefresh: pickEnum(
+        git.autoRefresh,
+        ["off", "focus", "60s", "300s"] as const,
+        DEFAULT_SETTINGS.git.autoRefresh,
+      ),
+      // 只允许预设档位，避免历史分页出现异常页大小。
+      historyPageSize:
+        git.historyPageSize === 100 || git.historyPageSize === 200
+          ? git.historyPageSize
+          : DEFAULT_SETTINGS.git.historyPageSize,
+      autoSetUpstream:
+        typeof git.autoSetUpstream === "boolean"
+          ? git.autoSetUpstream
+          : DEFAULT_SETTINGS.git.autoSetUpstream,
     },
     privacy: {
       ...privacy,

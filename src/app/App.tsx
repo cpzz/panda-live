@@ -1406,13 +1406,31 @@ export function App() {
         : target,
     );
   };
+  // 仓库状态自动刷新：设置决定是否在窗口聚焦时刷新，以及是否定时刷新。见 §22.3。
   useEffect(() => {
+    const mode = settings.git.autoRefresh;
+    if (mode === "off") return;
     const onFocus = (): void => {
       void git.refresh();
     };
     window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
-  }, [git]);
+    const intervalMs = mode === "60s" ? 60_000 : mode === "300s" ? 300_000 : 0;
+    const timer =
+      intervalMs > 0
+        ? window.setInterval(() => {
+            if (!document.hidden) void git.refresh();
+          }, intervalMs)
+        : null;
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      if (timer !== null) window.clearInterval(timer);
+    };
+  }, [git, settings.git.autoRefresh]);
+
+  // 历史分页大小随设置生效；变更后按新页大小重新加载第一页。
+  useEffect(() => {
+    git.setHistoryPageSize(settings.git.historyPageSize);
+  }, [git, settings.git.historyPageSize]);
   // 通知历史浮层：Esc 关闭。
   useEffect(() => {
     if (!noticesOpen) return;
@@ -1458,9 +1476,11 @@ export function App() {
     ? ""
     : activeDiff.base === "head"
       ? "⇄ HEAD"
-      : activeDiff.base === "commit"
-        ? `⇄ ${(activeDiff.ref.trim() || "HEAD").slice(0, 8)}`
-        : `⇄ ${t("上次保存")}`;
+      : activeDiff.base === "index"
+        ? `⇄ ${t("暂存区")}`
+        : activeDiff.base === "commit"
+          ? `⇄ ${(activeDiff.ref.trim() || "HEAD").slice(0, 8)}`
+          : `⇄ ${t("上次保存")}`;
 
   useEffect(() => {
     if (!activeId) return;
@@ -1472,6 +1492,7 @@ export function App() {
             [activeId]: {
               ...DEFAULT_DOC_DIFF,
               enabled: settingsRef.current.diff.defaultOn,
+              base: settingsRef.current.diff.defaultBase,
             },
           },
     );
@@ -2182,7 +2203,14 @@ export function App() {
     {
       id: "git.push",
       title: t("推送（Git push）"),
-      run: () => void git.push().catch(() => undefined),
+      run: () => {
+        const snapshot = git.getState().snapshot;
+        // 无上游且设置为自动时直接 `push -u`；否则保持原行为（Git 报错或面板询问）。
+        const setUpstream = Boolean(
+          snapshot && !snapshot.upstream && settingsRef.current.git.autoSetUpstream,
+        );
+        void git.push(setUpstream).catch(() => undefined);
+      },
     },
     {
       id: "diff.toggle",
@@ -2391,6 +2419,7 @@ export function App() {
                   store={git}
                   state={gitState}
                   dirtyCount={gitDirtyCount}
+                  autoSetUpstream={settings.git.autoSetUpstream}
                   repos={gitRepoOptions}
                   selectedRepo={gitRepoSelected}
                   onSelectRepo={setGitRepoChoice}

@@ -22,8 +22,8 @@ function joinPath(root: string, relative: string): string {
   return `${root.replace(/[\\/]+$/u, "")}/${relative}`;
 }
 
-/** 历史列表每页条数；「加载更多」按该页大小追加。 */
-const COMMIT_PAGE_SIZE = 50;
+/** 历史列表默认每页条数；可在设置中改为 100 / 200。 */
+const DEFAULT_COMMIT_PAGE_SIZE = 50;
 
 /**
  * 渲染进程侧 Git 状态：按探测路径加载快照、分支与最近提交。
@@ -47,7 +47,9 @@ export class GitStore {
   private refreshToken = 0;
   private detailToken = 0;
   /** 当前已加载到的时间线深度；刷新时保持，切换仓库时重置。 */
-  private commitLimit = COMMIT_PAGE_SIZE;
+  private commitLimit = DEFAULT_COMMIT_PAGE_SIZE;
+  /** 每页提交条数；由设置同步。 */
+  private pageSize = DEFAULT_COMMIT_PAGE_SIZE;
 
   readonly getState = (): GitStoreState => this.state;
 
@@ -68,7 +70,7 @@ export class GitStore {
     // 作废在途的刷新与提交详情，避免旧仓库结果覆盖新状态。
     this.refreshToken += 1;
     this.detailToken += 1;
-    this.commitLimit = COMMIT_PAGE_SIZE;
+    this.commitLimit = this.pageSize;
     this.patch({
       path,
       snapshot: null,
@@ -81,6 +83,14 @@ export class GitStore {
       error: null,
     });
     if (path) await this.refresh();
+  }
+
+  /** 同步设置中的历史页大小；变更后按新页大小重新加载第一页。 */
+  setHistoryPageSize(size: number): void {
+    if (!Number.isFinite(size) || size <= 0 || size === this.pageSize) return;
+    this.pageSize = size;
+    this.commitLimit = size;
+    void this.refresh();
   }
 
   async refresh(): Promise<void> {
@@ -122,7 +132,7 @@ export class GitStore {
     const token = this.refreshToken;
     const skip = this.state.commits.length;
     try {
-      const page = await window.panda.git.log({ root, limit: COMMIT_PAGE_SIZE, skip });
+      const page = await window.panda.git.log({ root, limit: this.pageSize, skip });
       if (token !== this.refreshToken || this.root !== root) return;
       // 历史在分页期间可能被改写；按 hash 去重，避免重复条目。
       const seen = new Set(this.state.commits.map((commit) => commit.hash));
@@ -130,7 +140,7 @@ export class GitStore {
       this.commitLimit = skip + page.length;
       this.patch({
         commits: [...this.state.commits, ...appended],
-        commitsHasMore: page.length === COMMIT_PAGE_SIZE,
+        commitsHasMore: page.length === this.pageSize,
         error: null,
       });
     } catch (error) {

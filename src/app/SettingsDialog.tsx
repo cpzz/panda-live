@@ -324,6 +324,20 @@ export function SettingsDialog({
                   />
                 </label>
                 <label className="settings-row">
+                  <span>{t("默认对比基线")}</span>
+                  <select
+                    value={draft.diff.defaultBase}
+                    onChange={(event) => patch("diff", { defaultBase: event.target.value })}
+                  >
+                    <option value="head">HEAD</option>
+                    <option value="index">{t("暂存区")}</option>
+                    <option value="lastSave">{t("上次保存")}</option>
+                  </select>
+                </label>
+                <p className="settings-note">
+                  {t("仅影响新打开的文档；已打开文档保留各自的对比选择。")}
+                </p>
+                <label className="settings-row">
                   <span>{t("Git 命令")}</span>
                   <input
                     type="text"
@@ -341,6 +355,78 @@ export function SettingsDialog({
                   <code>wsl -d Ubuntu git</code>
                   {t("。保存后会自动重试当前文档的 Git 基线。")}
                 </p>
+                <label className="settings-row">
+                  <span>{t("拉取方式")}</span>
+                  <select
+                    value={draft.git.pullStrategy}
+                    onChange={(event) => patch("git", { pullStrategy: event.target.value })}
+                  >
+                    <option value="config">{t("遵循 Git 配置")}</option>
+                    <option value="merge">{t("合并（merge）")}</option>
+                    <option value="rebase">{t("变基（rebase）")}</option>
+                    <option value="ff-only">{t("仅快进（ff-only）")}</option>
+                  </select>
+                </label>
+                <p className="settings-note">
+                  {t("「合并 / 变基 / 仅快进」会覆盖 Git 配置中的 pull 策略。")}
+                </p>
+                <label className="settings-row">
+                  <span>{t("获取时清理已删除的远程分支")}</span>
+                  <input
+                    type="checkbox"
+                    checked={draft.git.fetchPrune}
+                    onChange={(event) => patch("git", { fetchPrune: event.target.checked })}
+                  />
+                </label>
+                <label className="settings-row">
+                  <span>{t("网络操作超时（秒）")}</span>
+                  <input
+                    type="number"
+                    min={30}
+                    max={600}
+                    step={10}
+                    value={draft.git.networkTimeoutSeconds}
+                    onChange={(event) =>
+                      patch("git", { networkTimeoutSeconds: Number(event.target.value) })
+                    }
+                  />
+                </label>
+                <p className="settings-note">
+                  {t("用于 fetch / pull / push；大仓库或慢网络可调大。")}
+                </p>
+                <label className="settings-row">
+                  <span>{t("自动刷新仓库状态")}</span>
+                  <select
+                    value={draft.git.autoRefresh}
+                    onChange={(event) => patch("git", { autoRefresh: event.target.value })}
+                  >
+                    <option value="off">{t("不自动刷新")}</option>
+                    <option value="focus">{t("窗口聚焦时")}</option>
+                    <option value="60s">{t("每 60 秒")}</option>
+                    <option value="300s">{t("每 5 分钟")}</option>
+                  </select>
+                </label>
+                <label className="settings-row">
+                  <span>{t("提交历史每页条数")}</span>
+                  <select
+                    value={String(draft.git.historyPageSize)}
+                    onChange={(event) =>
+                      patch("git", { historyPageSize: Number(event.target.value) })
+                    }
+                  >
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                    <option value="200">200</option>
+                  </select>
+                </label>
+                <label className="settings-row">
+                  <span>{t("无上游分支时自动推送并设置上游")}</span>
+                  <input
+                    type="checkbox"
+                    checked={draft.git.autoSetUpstream}
+                    onChange={(event) => patch("git", { autoSetUpstream: event.target.checked })}
+                  />
+                </label>
                 <p className="settings-note">{t("可在状态栏随时开关；非 Git 仓库自动改用「上次保存」对比。")}</p>
               </>
             )}

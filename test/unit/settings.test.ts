@@ -63,6 +63,50 @@ describe("设置合并", () => {
     expect(mergeSettings({ git: { command: 42 } }).git.command).toBe("git");
   });
 
+  it("Git 同步设置：枚举、布尔与超时范围校正", () => {
+    expect(mergeSettings(undefined).git).toEqual(DEFAULT_SETTINGS.git);
+    const merged = mergeSettings({
+      git: {
+        pullStrategy: "rebase",
+        fetchPrune: false,
+        networkTimeoutSeconds: 5,
+        autoRefresh: "60s",
+        historyPageSize: 100,
+        autoSetUpstream: true,
+      },
+    });
+    expect(merged.git.pullStrategy).toBe("rebase");
+    expect(merged.git.fetchPrune).toBe(false);
+    expect(merged.git.networkTimeoutSeconds).toBe(30);
+    expect(merged.git.autoRefresh).toBe("60s");
+    expect(merged.git.historyPageSize).toBe(100);
+    expect(merged.git.autoSetUpstream).toBe(true);
+
+    const invalid = mergeSettings({
+      git: {
+        pullStrategy: "squash",
+        fetchPrune: "yes",
+        networkTimeoutSeconds: 99_999,
+        autoRefresh: "always",
+        historyPageSize: 75,
+        autoSetUpstream: 1,
+      },
+    });
+    expect(invalid.git.pullStrategy).toBe("config");
+    expect(invalid.git.fetchPrune).toBe(true);
+    expect(invalid.git.networkTimeoutSeconds).toBe(600);
+    expect(invalid.git.autoRefresh).toBe("focus");
+    expect(invalid.git.historyPageSize).toBe(50);
+    expect(invalid.git.autoSetUpstream).toBe(false);
+  });
+
+  it("默认对比基线仅接受 head / index / lastSave", () => {
+    expect(mergeSettings(undefined).diff.defaultBase).toBe("head");
+    expect(mergeSettings({ diff: { defaultBase: "index" } }).diff.defaultBase).toBe("index");
+    expect(mergeSettings({ diff: { defaultBase: "lastSave" } }).diff.defaultBase).toBe("lastSave");
+    expect(mergeSettings({ diff: { defaultBase: "worktree" } }).diff.defaultBase).toBe("head");
+  });
+
   it("补丁按分组深度合并", () => {
     const base = mergeSettings({ appearance: { fontSize: 18, theme: "dark" } });
     const patched = patchSettings(base, { appearance: { fontSize: 20 }, editor: { autoSave: false } });

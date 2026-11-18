@@ -26,6 +26,8 @@ interface GitPanelProps {
   onSelectRepo(path: string): void;
   /** 保存仓库内全部文档；返回 false 表示仍有文档未保存成功。 */
   onSaveAll(): Promise<boolean>;
+  /** 分支没有上游时，推送自动设置上游而不询问。 */
+  autoSetUpstream: boolean;
 }
 
 /** 单个变更涉及的全部路径；重命名/复制需要同时处理旧路径与新路径。 */
@@ -185,6 +187,7 @@ export function GitPanel({
   selectedRepo,
   onSelectRepo,
   onSaveAll,
+  autoSetUpstream,
 }: GitPanelProps) {
   const [tab, setTab] = useState<"changes" | "history" | "compare">("changes");
   const [message, setMessage] = useState("");
@@ -471,10 +474,10 @@ export function GitPanel({
         void store.push().catch(() => undefined);
         return;
       }
-      if (!window.confirm(t("分支「{0}」没有上游分支，是否推送并设置上游？", snapshot.branch))) {
-        return;
-      }
-      void store.push(true).catch(() => undefined);
+      const confirmed =
+        autoSetUpstream ||
+        window.confirm(t("分支「{0}」没有上游分支，是否推送并设置上游？", snapshot.branch));
+      if (confirmed) void store.push(true).catch(() => undefined);
       return;
     }
     void store.push().catch(() => undefined);

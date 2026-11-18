@@ -4,6 +4,7 @@ import path from "node:path";
 import { PandaError } from "../../src/shared/errors";
 import { t } from "../../src/i18n";
 import type { GitBaselineReason, GitDiffBase, GitDiffResult } from "../../src/shared/diff";
+import type { GitPullStrategy } from "../../src/shared/settings";
 import type {
   GitBranch,
   GitCommit,
@@ -339,21 +340,50 @@ export class GitService {
     return this.snapshot(root, commandLine);
   }
 
-  async fetch(root: string, commandLine?: string): Promise<GitSnapshot> {
+  /** 网络操作选项：获取是否 prune、超时毫秒数，均由设置传入。 */
+  async fetch(
+    root: string,
+    commandLine?: string,
+    options: { prune?: boolean; timeoutMs?: number } = {},
+  ): Promise<GitSnapshot> {
     const command = parseGitCommand(commandLine);
-    await runGit(["fetch", "--prune"], root, command, { timeout: GIT_NETWORK_TIMEOUT_MS });
+    // 显式传 --no-prune，保证应用设置优先于用户 Git 配置中的 fetch.prune。
+    const args = options.prune === false ? ["fetch", "--no-prune"] : ["fetch", "--prune"];
+    await runGit(args, root, command, {
+      timeout: options.timeoutMs ?? GIT_NETWORK_TIMEOUT_MS,
+    });
     return this.snapshot(root, commandLine);
   }
 
-  /** 按用户 Git 配置执行 pull，不追加 merge/rebase 策略参数。 */
-  async pull(root: string, commandLine?: string): Promise<GitSnapshot> {
+  /** `config` 遵循用户 Git 配置；其余策略追加明确参数覆盖。 */
+  async pull(
+    root: string,
+    commandLine?: string,
+    options: { strategy?: GitPullStrategy; timeoutMs?: number } = {},
+  ): Promise<GitSnapshot> {
     const command = parseGitCommand(commandLine);
-    await runGit(["pull"], root, command, { timeout: GIT_NETWORK_TIMEOUT_MS });
+    const strategyArgs =
+      options.strategy === "merge"
+        ? ["--no-rebase"]
+        : options.strategy === "rebase"
+          ? ["--rebase"]
+          : options.strategy === "ff-only"
+            ? ["--ff-only"]
+            : [];
+    await runGit(["pull", ...strategyArgs], root, command, {
+      timeout: options.timeoutMs ?? GIT_NETWORK_TIMEOUT_MS,
+    });
     return this.snapshot(root, commandLine);
   }
 
-  async push(root: string, setUpstream: boolean, commandLine?: string): Promise<GitSnapshot> {
+  async push(
+    root: string,
+    setUpstream: boolean,
+    commandLine?: string,
+    options: { timeoutMs?: number } = {},
+  ): Promise<GitSnapshot> {
     const command = parseGitCommand(commandLine);
+    const timeout = options.timeoutMs ?? GIT_NETWORK_TIMEOUT_MS;
     if (setUpstream) {
       const current = await this.snapshot(root, commandLine);
       if (current.detached || !current.branch) {
@@ -366,10 +396,10 @@ export class GitService {
       const remote = remotes.includes("origin") ? "origin" : remotes[0];
       if (!remote) throw new PandaError("E_GIT_OPERATION", t("仓库没有配置远程地址"));
       await runGit(["push", "-u", remote, current.branch], root, command, {
-        timeout: GIT_NETWORK_TIMEOUT_MS,
+        timeout,
       });
     } else {
-      await runGit(["push"], root, command, { timeout: GIT_NETWORK_TIMEOUT_MS });
+      await runGit(["push"], root, command, { timeout });
     }
     return this.snapshot(root, commandLine);
   }
