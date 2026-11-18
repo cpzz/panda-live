@@ -64,7 +64,7 @@ npm run package    # 构建并生成当前平台的安装包
 
 `npm run package` 在 Windows 上生成：
 
-- `release/Panda Live Setup <version>.exe` —— NSIS 安装包，单个文件即可分发；
+- `release/Panda Live Setup <version>.exe` —— NSIS 安装包，单个文件即可分发；向导式安装，可选择安装目录，桌面与开始菜单快捷方式自动创建；
 - `release/win-unpacked/Panda Live.exe` —— 免安装版，必须保留整个 `win-unpacked` 目录（含 DLL、locales 与 resources）。
 
 打包版自带 Electron 运行时、应用代码与当前平台的 Tectonic 可执行文件，**目标机器无需安装 Node.js / npm**。仍需注意：

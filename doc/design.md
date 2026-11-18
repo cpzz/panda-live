@@ -1629,7 +1629,8 @@ AST(parse(s1)) 语义等价于 AST(parse(s2))
 - 主进程/预加载：`vite-plugin-electron` 分别构建到 `dist-electron/`。
 - 代码分割：`mathlive`、`pdfjs-dist`、`mermaid`、`@plantuml/core`、Shiki 语法包独立 chunk，按需加载。
 - 内置扩展单独构建为 CommonJS，清单与入口随 `extensions/builtin/` 进入安装包；本地扩展不参与构建。
-- `asar: true`；不打包 TeX 引擎（按需检测/下载），避免安装包膨胀。
+- `asar: true`；TeX 引擎随 extraResources 携带当前平台的 Tectonic（`scripts/prepare-tectonic.cjs`）。
+- NSIS 安装包为向导式安装（`oneClick: false`）：可选安装目录、桌面与开始菜单快捷方式默认创建；按用户安装（`perMachine: false`）。
 - 资源：`render-sandbox.html`、KaTeX 字体、图标、i18n 字典进入 `dist/`。
 
 ```json
@@ -1639,6 +1640,13 @@ AST(parse(s1)) 语义等价于 AST(parse(s2))
   "directories": { "output": "release" },
   "files": ["dist/**/*", "dist-electron/**/*", "extensions/**/*"],
   "win": { "target": ["nsis"] },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": "always",
+    "createStartMenuShortcut": true
+  },
   "mac": { "target": ["dmg"], "category": "public.app-category.productivity" },
   "linux": { "target": ["AppImage"] }
 }

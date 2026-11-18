@@ -22,6 +22,14 @@
     "target": ["nsis"],
     "icon": "build/icon.ico"
   },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": "always",
+    "createStartMenuShortcut": true,
+    "shortcutName": "Panda Live"
+  },
   "mac": {
     "target": ["dmg"],
     "category": "public.app-category.productivity",

@@ -64,7 +64,7 @@ npm run package    # build an installer for the current platform
 
 On Windows, `npm run package` produces:
 
-- `release/Panda Live Setup <version>.exe` — an NSIS installer that can be distributed as a single file;
+- `release/Panda Live Setup <version>.exe` — an NSIS installer that can be distributed as a single file; assisted install with a directory picker, desktop and Start-menu shortcuts created automatically;
 - `release/win-unpacked/Panda Live.exe` — a no-install build; keep the whole `win-unpacked` folder (DLLs, locales, resources).
 
 The packaged app bundles the Electron runtime, application code and the Tectonic executable for the current platform, so **the target machine does not need Node.js or npm**. Notes:
