@@ -1,5 +1,6 @@
 import { describeError, getErrorCode, PandaError } from "../shared/errors";
 import { t } from "../i18n";
+import { pathKey } from "../utils/paths";
 import type {
   EditorMode,
   Eol,
@@ -765,7 +766,12 @@ export class DocumentManager {
     ref: FileRef,
     options: { silentRecent?: boolean; silentErrors?: boolean; mode?: EditorMode } = {},
   ): Promise<void> {
-    const existing = this.state.documents.find((doc) => doc.path === ref.path);
+    // 同一文件的不同入口可能拼出字符串不同的路径（Git 根来自 rev-parse，分隔符/盘符
+    // 大小写可能与工作区不同），去重按归一化身份比较，保证只开一个标签。
+    const target = ref.path ? pathKey(ref.path) : "";
+    const existing = this.state.documents.find((doc) =>
+      doc.path && target ? pathKey(doc.path) === target : doc.path === ref.path,
+    );
     if (existing) {
       this.setActive(existing.id);
       return;

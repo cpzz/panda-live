@@ -557,7 +557,7 @@ Markdown、LaTeX、MathML、图表以内置扩展实现，确保公开 API 覆�
   "id": "acme.asciidoc",
   "version": "1.0.0",
   "engines": { "panda": "^1.0.0" },
-  "main": "dist/extension.js",
+  "main": "extension.js",
   "activationEvents": ["onFormat:asciidoc"],
   "permissions": ["workspace:read"],
   "contributes": {
@@ -1213,6 +1213,7 @@ IME：组合输入期间禁用 input rules 与自定义 keymap；`compositionend
 - 格式判定：注册表按扩展名匹配；`.md`/无扩展名或扩展名不唯一时读取前 1 KB，交由各 provider 的 `detect` 排序（§7.4、§7.6.4）。
 - 编码：默认 UTF-8；识别 BOM；不支持的编码只读打开并提示。
 - 大小：> 10 MB 弹确认；> 20 MB 强制源码模式；> 50 MB 拒绝打开并提示。
+- 去重：按归一化路径（统一分隔符、Windows 盘符小写）判断同一文件——工作区树与 Git 面板对同一文件拼出的路径字符串可能不同，去重保证只开一个标签，再次打开只激活已有标签。
 - 新建文档默认 `untitled.md`，未保存前无路径；保存时走另存为。
 - `readOnly=true` 时允许滚动与选择，禁止编辑与原位保存；另存为以 UTF-8 写出可写副本。
 

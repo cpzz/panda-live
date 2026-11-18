@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "displayName": "激活超时扩展（契约测试）",
   "engines": { "panda": "^0.1.0" },
-  "main": "dist/extension.js",
+  "main": "extension.js",
   "activationEvents": ["onCommand:slow.run"],
   "permissions": [],
   "contributes": {

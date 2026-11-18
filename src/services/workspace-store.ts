@@ -1,5 +1,6 @@
 import { describeError } from "../shared/errors";
 import type { DirEntry, FileRef, FsChangedEvent } from "../shared/ipc";
+import { pathKey } from "../utils/paths";
 
 export interface WorkspaceNode {
   name: string;
@@ -24,16 +25,6 @@ export interface WorkspaceState {
 
 function joinPath(parent: string, name: string): string {
   return `${parent.replace(/[\\/]+$/, "")}/${name}`;
-}
-
-function normalizePath(value: string): string {
-  return value.replace(/\\/g, "/").replace(/\/+$/, "");
-}
-
-/** Windows 盘符路径大小写不敏感；其余平台保留原始大小写。 */
-function pathKey(value: string): string {
-  const normalized = normalizePath(value);
-  return /^[a-zA-Z]:/.test(normalized) ? normalized.toLowerCase() : normalized;
 }
 
 function toNodes(entries: DirEntry[]): WorkspaceNode[] {

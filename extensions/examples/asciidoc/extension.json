@@ -4,7 +4,7 @@
   "displayName": "AsciiDoc 示例扩展",
   "description": "为 .adoc 文件提供源码编辑与内联预览示例。",
   "engines": { "panda": "^0.1.0" },
-  "main": "dist/extension.js",
+  "main": "extension.js",
   "activationEvents": ["onFormat:asciidoc", "onCommand:asciidoc.exportHtml"],
   "permissions": ["workspace:read"],
   "contributes": {

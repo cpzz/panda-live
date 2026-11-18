@@ -18,3 +18,13 @@ export function resolveRelativePath(baseFilePath: string, src: string): string |
   }
   return stack.join(separator);
 }
+
+/**
+ * 路径身份归一化：统一分隔符、去尾分隔符，Windows 盘符小写。
+ * 用于判断两个路径字符串是否指向同一文件——工作区树与 Git 面板对同一文件
+ * 可能拼出字符串不同的路径（Git 根来自 rev-parse，分隔符/盘符大小写与对话框不同）。
+ */
+export function pathKey(filePath: string): string {
+  const normalized = filePath.replace(/\\/g, "/").replace(/\/+$/u, "");
+  return /^[a-zA-Z]:/.test(normalized) ? normalized.toLowerCase() : normalized;
+}
