@@ -590,7 +590,10 @@ export class DocumentManager {
   handleFsChanged(event: FsChangedEvent): void {
     for (const doc of this.state.documents) {
       if (doc.watchId !== event.watchId || !doc.path) continue;
-      const change = event.changes.find((item) => item.path === doc.path);
+      // chokidar 回传的路径总是反斜杠形式；从 Git 面板打开的 doc.path 是正斜杠，
+      // 必须按归一化身份比较，否则外部改动通知永远匹配不上，标签停留在旧内容。
+      const target = pathKey(doc.path);
+      const change = event.changes.find((item) => pathKey(item.path) === target);
       if (!change) continue;
       void this.handleExternalChange(doc, change.type);
     }
@@ -603,7 +606,8 @@ export class DocumentManager {
 
   /** 工作区重命名后同步打开的文档路径。 */
   async repathDocument(oldPath: string, ref: FileRef): Promise<void> {
-    const doc = this.state.documents.find((item) => item.path === oldPath);
+    // 文档可能从 Git 面板打开（路径为正斜杠），与树的路径形式不同，按归一化身份匹配。
+    const doc = this.state.documents.find((item) => item.path && pathKey(item.path) === pathKey(oldPath));
     if (!doc) return;
     await this.releaseWatcher(doc);
     const watchId = await this.watchFile(ref.path);
@@ -624,7 +628,7 @@ export class DocumentManager {
 
   /** 工作区删除文件后关闭对应标签；本地仍有未保存修改时保留标签以免丢数据。 */
   async removeDocumentByPath(filePath: string): Promise<void> {
-    const doc = this.state.documents.find((item) => item.path === filePath);
+    const doc = this.state.documents.find((item) => item.path && pathKey(item.path) === pathKey(filePath));
     if (!doc) return;
     if (doc.dirty) {
       this.notify("error", t("文件已在磁盘删除，标签保留未保存内容；请另存为"));

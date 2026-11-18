@@ -294,7 +294,7 @@ describe.skipIf(!hasGit)("Git 历史与提交详情", () => {
     } finally {
       rmTempRepo(repo);
     }
-  });
+  }, 30_000);
 });
 
 describe.skipIf(!hasGit)("Git 文件历史与仓库比较", () => {

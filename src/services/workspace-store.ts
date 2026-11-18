@@ -264,7 +264,7 @@ export class WorkspaceStore {
   handleFsChanged(event: FsChangedEvent): void {
     const entry = this.state.roots.find((item) => item.watchId === event.watchId);
     if (!entry) return;
-    if (!event.changes.some((change) => change.path.startsWith(entry.root.path))) return;
+    if (!event.changes.some((change) => pathKey(change.path).startsWith(pathKey(entry.root.path)))) return;
     if (this.refreshTimer) clearTimeout(this.refreshTimer);
     this.refreshTimer = setTimeout(() => {
       void this.refresh();
