@@ -10,7 +10,7 @@ import {
 import type { FileRef } from "../shared/ipc";
 import { t } from "../i18n";
 import type { WorkspaceNode, WorkspaceStore } from "../services/workspace-store";
-import { Icon, fileIconForPath } from "./icons";
+import { Icon, fileIconForPath, type IconName } from "./icons";
 
 interface WorkspacePanelProps {
   store: WorkspaceStore;
@@ -29,8 +29,6 @@ interface WorkspacePanelProps {
   sourceControlCount?: number;
   /** 外部请求切换侧栏标签（如点击状态栏分支）。 */
   tabRequest?: { tab: SidebarTab; token: number } | null;
-  /** 标题栏右侧的文档操作（新建/打开/保存），由外部提供以复用文档管理器。 */
-  actions?: ReactNode;
 }
 
 type SidebarTab = "files" | "outline" | "source-control";
@@ -41,12 +39,74 @@ interface PromptState {
   submit(value: string): void;
 }
 
+/** 行级扩展菜单条目；separator 渲染为分隔线。 */
+type TreeMenuEntry =
+  | { type: "separator" }
+  | { type: "item"; label: string; icon: IconName; action(): void };
+
+/** 目录/文件行的「扩展」下拉菜单（图标按钮 + 菜单项列表）。 */
+function TreeMenu({
+  open,
+  label,
+  onToggle,
+  onClose,
+  entries,
+}: {
+  open: boolean;
+  label: string;
+  onToggle(): void;
+  onClose(): void;
+  entries: TreeMenuEntry[];
+}) {
+  return (
+    <div className="tree-menu-wrap">
+      <button
+        type="button"
+        className={open ? "tree-action active" : "tree-action"}
+        aria-label={label}
+        title={label}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={onToggle}
+      >
+        <Icon name="more-vertical" size={13} />
+      </button>
+      {open && (
+        <div className="tree-menu" role="menu" aria-label={label}>
+          {entries.map((entry, index) =>
+            entry.type === "separator" ? (
+              <div key={index} className="tree-menu-separator" role="separator" />
+            ) : (
+              <button
+                key={entry.label}
+                type="button"
+                role="menuitem"
+                className="tree-menu-item"
+                onClick={() => {
+                  onClose();
+                  entry.action();
+                }}
+              >
+                <Icon name={entry.icon} size={13} className="tree-menu-icon" />
+                <span>{entry.label}</span>
+              </button>
+            ),
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function NodeRow({
   node,
   depth,
+  parentPath,
   rootId,
   store,
   activePath,
+  menuPath,
+  setMenuPath,
   onOpenFile,
   onRenamed,
   onDeleted,
@@ -54,9 +114,14 @@ function NodeRow({
 }: {
   node: WorkspaceNode;
   depth: number;
+  /** 该节点所在目录（根目录时为根路径），文件行刷新的目标。 */
+  parentPath: string;
   rootId: string;
   store: WorkspaceStore;
   activePath: string | null;
+  /** 当前展开扩展菜单的行路径；同一时间只开一个菜单。 */
+  menuPath: string | null;
+  setMenuPath(path: string | null): void;
   onOpenFile(node: WorkspaceNode, rootId: string): void;
   onRenamed(oldPath: string, ref: FileRef): void;
   onDeleted(filePath: string, isDir: boolean): void;
@@ -81,6 +146,43 @@ function NodeRow({
       if (ok) onDeleted(node.path, node.kind === "dir");
     });
   };
+
+  /** 在该目录下新建；完成后确保目录展开以展示新条目。 */
+  const createIn = (kind: "file" | "dir"): void => {
+    askName(kind === "dir" ? t("新文件夹名称") : t("新文件名"), "", (name) => {
+      if (!name) return;
+      void store.createNode(node.path, kind, name).then(() => void store.expand(node.path));
+    });
+  };
+
+  const menuOpen = menuPath === node.path;
+  const menuEntries: TreeMenuEntry[] =
+    node.kind === "dir"
+      ? [
+          { type: "item", label: t("新建文件"), icon: "file-plus", action: () => createIn("file") },
+          { type: "item", label: t("新建目录"), icon: "folder-plus", action: () => createIn("dir") },
+          { type: "separator" },
+          { type: "item", label: t("重命名"), icon: "pencil", action: rename },
+          {
+            type: "item",
+            label: t("在文件管理器中显示"),
+            icon: "reveal",
+            action: () => void store.reveal(node.path),
+          },
+          { type: "separator" },
+          { type: "item", label: t("删除"), icon: "trash", action: remove },
+        ]
+      : [
+          { type: "item", label: t("重命名"), icon: "pencil", action: rename },
+          {
+            type: "item",
+            label: t("在文件管理器中显示"),
+            icon: "reveal",
+            action: () => void store.reveal(node.path),
+          },
+          { type: "separator" },
+          { type: "item", label: t("删除"), icon: "trash", action: remove },
+        ];
 
   const active = node.kind === "file" && activePath !== null && node.path === activePath;
 
@@ -127,30 +229,19 @@ function NodeRow({
           <button
             type="button"
             className="tree-action"
-            title={t("重命名")}
-            aria-label={t("重命名 {0}", node.name)}
-            onClick={rename}
+            title={t("刷新")}
+            aria-label={t("刷新 {0}", node.name)}
+            onClick={() => void store.refreshNode(node.kind === "dir" ? node.path : parentPath)}
           >
-            <Icon name="pencil" size={13} />
+            <Icon name="refresh" size={13} />
           </button>
-          <button
-            type="button"
-            className="tree-action"
-            title={t("删除")}
-            aria-label={t("删除 {0}", node.name)}
-            onClick={remove}
-          >
-            <Icon name="trash" size={13} />
-          </button>
-          <button
-            type="button"
-            className="tree-action"
-            title={t("在文件管理器中显示")}
-            aria-label={t("显示 {0}", node.name)}
-            onClick={() => void store.reveal(node.path)}
-          >
-            <Icon name="reveal" size={13} />
-          </button>
+          <TreeMenu
+            open={menuOpen}
+            label={t("更多操作")}
+            onToggle={() => setMenuPath(menuOpen ? null : node.path)}
+            onClose={() => setMenuPath(null)}
+            entries={menuEntries}
+          />
         </span>
       </div>
       {node.kind === "dir" && node.expanded && node.children && (
@@ -160,9 +251,12 @@ function NodeRow({
               key={child.path}
               node={child}
               depth={depth + 1}
+              parentPath={node.path}
               rootId={rootId}
               store={store}
               activePath={activePath}
+              menuPath={menuPath}
+              setMenuPath={setMenuPath}
               onOpenFile={onOpenFile}
               onRenamed={onRenamed}
               onDeleted={onDeleted}
@@ -187,7 +281,6 @@ export function WorkspacePanel({
   sourceControl,
   sourceControlCount,
   tabRequest,
-  actions,
 }: WorkspacePanelProps) {
   const state = useSyncExternalStore(store.subscribe, store.getState);
   const [prompt, setPrompt] = useState<PromptState | null>(null);
@@ -198,10 +291,29 @@ export function WorkspacePanel({
   const [tab, setTab] = useState<SidebarTab>(() =>
     store.getState().roots.length > 0 ? "files" : "outline",
   );
+  const [menuPath, setMenuPath] = useState<string | null>(null);
   const previousRoot = useRef(state.roots[0]?.root.path ?? null);
   const filesRef = useRef<HTMLDivElement>(null);
   // 从文件树点开的路径：这类切换不发生滚动，避免点击时列表跳动。
   const treeOpenRef = useRef<string | null>(null);
+
+  // 扩展菜单打开时，点击菜单外或按 Esc 关闭。
+  useEffect(() => {
+    if (!menuPath) return;
+    const onPointerDown = (event: MouseEvent): void => {
+      if (event.target instanceof HTMLElement && event.target.closest(".tree-menu-wrap")) return;
+      setMenuPath(null);
+    };
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") setMenuPath(null);
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [menuPath]);
 
   // 外部请求（例如点击状态栏分支）切换到指定标签。
   useEffect(() => {
@@ -377,32 +489,6 @@ export function WorkspacePanel({
             <span>{t("松开以打开文件或文件夹")}</span>
           </div>
         )}
-        <div className="sidebar-header">
-          <span className="sidebar-title" title={state.roots.map((entry) => entry.root.path).join("\n")}>
-            {state.roots.length === 0
-              ? t("工作区")
-              : state.roots.length === 1
-                ? (state.roots[0]?.root.name ?? t("工作区"))
-                : t("{0} 个文件夹", state.roots.length)}
-          </span>
-          {actions && (
-            <>
-              <span className="sidebar-actions">{actions}</span>
-              <span className="sidebar-divider" aria-hidden="true" />
-            </>
-          )}
-          <button
-            type="button"
-            className="icon-button"
-            title={t("刷新全部")}
-            aria-label={t("刷新全部")}
-            disabled={state.roots.length === 0}
-            onClick={() => void store.refresh()}
-          >
-            <Icon name="refresh" />
-          </button>
-        </div>
-
         <div className="sidebar-tabs" role="tablist" aria-label={t("侧栏视图")}>
           <button
             type="button"
@@ -412,7 +498,7 @@ export function WorkspacePanel({
             onClick={() => setTab("files")}
           >
             <Icon name="folder-open" size={14} />
-            {t("文件")}
+            {t("工作区")}
           </button>
           <button
             type="button"
@@ -443,6 +529,36 @@ export function WorkspacePanel({
 
         {tab === "files" ? (
           <div className="sidebar-panel" ref={filesRef}>
+            <div className="files-toolbar">
+              <span
+                className="files-toolbar-label"
+                title={state.roots.map((entry) => entry.root.path).join("\n")}
+              >
+                {state.roots.length === 0
+                  ? t("工作区")
+                  : t("{0} 个文件夹", state.roots.length)}
+              </span>
+              <button
+                type="button"
+                className="icon-button"
+                title={t("打开文件夹")}
+                aria-label={t("打开文件夹")}
+                onClick={() => void store.openPicker()}
+              >
+                <Icon name="folder-open" />
+              </button>
+              <span className="toolbar-divider" aria-hidden="true" />
+              <button
+                type="button"
+                className="icon-button"
+                title={t("刷新全部")}
+                aria-label={t("刷新全部")}
+                disabled={state.roots.length === 0}
+                onClick={() => void store.refresh()}
+              >
+                <Icon name="refresh" />
+              </button>
+            </div>
             {state.error && <div className="sidebar-error">{state.error}</div>}
 
             {state.roots.length > 0 ? (
@@ -472,39 +588,46 @@ export function WorkspacePanel({
                           <button
                             type="button"
                             className="tree-action"
-                            title={t("新建文件")}
-                            aria-label={t("在 {0} 新建文件", entry.root.name)}
-                            onClick={() => create(entry.root.path, "file")}
-                          >
-                            <Icon name="file-plus" size={13} />
-                          </button>
-                          <button
-                            type="button"
-                            className="tree-action"
-                            title={t("新建文件夹")}
-                            aria-label={t("在 {0} 新建文件夹", entry.root.name)}
-                            onClick={() => create(entry.root.path, "dir")}
-                          >
-                            <Icon name="folder-plus" size={13} />
-                          </button>
-                          <button
-                            type="button"
-                            className="tree-action"
                             title={t("刷新")}
                             aria-label={t("刷新 {0}", entry.root.name)}
                             onClick={() => void store.refresh(entry.root.path)}
                           >
                             <Icon name="refresh" size={13} />
                           </button>
-                          <button
-                            type="button"
-                            className="tree-action"
-                            title={t("移除文件夹")}
-                            aria-label={t("移除文件夹 {0}", entry.root.name)}
-                            onClick={() => void store.closeRoot(entry.root.path)}
-                          >
-                            <Icon name="close" size={13} />
-                          </button>
+                          <TreeMenu
+                            open={menuPath === entry.root.path}
+                            label={t("更多操作")}
+                            onToggle={() => setMenuPath(menuPath === entry.root.path ? null : entry.root.path)}
+                            onClose={() => setMenuPath(null)}
+                            entries={[
+                              {
+                                type: "item",
+                                label: t("新建文件"),
+                                icon: "file-plus",
+                                action: () => create(entry.root.path, "file"),
+                              },
+                              {
+                                type: "item",
+                                label: t("新建目录"),
+                                icon: "folder-plus",
+                                action: () => create(entry.root.path, "dir"),
+                              },
+                              { type: "separator" },
+                              {
+                                type: "item",
+                                label: t("在文件管理器中显示"),
+                                icon: "reveal",
+                                action: () => void store.reveal(entry.root.path),
+                              },
+                              { type: "separator" },
+                              {
+                                type: "item",
+                                label: t("从工作区移除"),
+                                icon: "close",
+                                action: () => void store.closeRoot(entry.root.path),
+                              },
+                            ]}
+                          />
                         </span>
                       </div>
                       {!collapsed && (
@@ -514,9 +637,12 @@ export function WorkspacePanel({
                               key={node.path}
                               node={node}
                               depth={0}
+                              parentPath={entry.root.path}
                               rootId={entry.root.rootId}
                               store={store}
                               activePath={activePath}
+                              menuPath={menuPath}
+                              setMenuPath={setMenuPath}
                               onOpenFile={openFromTree}
                               onRenamed={onRenamed}
                               onDeleted={onDeleted}

@@ -35,23 +35,26 @@ test("M29：侧栏键盘导航与空工作区", async () => {
     const page = await app.firstWindow();
 
     // 未打开工作区：文件页只保留提示，不再显示内部「打开文件夹」按钮。
-    await page.getByRole("tab", { name: "文件", exact: true }).click();
+    await page.getByRole("tab", { name: "工作区", exact: true }).click();
     await expect(page.locator(".sidebar-empty")).toContainText("未打开文件夹");
     await expect(page.locator(".sidebar-empty").getByRole("button")).toHaveCount(0);
     await expect(
-      page.locator(".sidebar-header").getByRole("button", { name: "打开文件夹" }),
+      page.locator(".toolbar").getByRole("button", { name: "打开文件夹" }),
     ).toBeVisible();
 
     await app.evaluate(({ dialog }, target) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
     }, workspaceDir);
-    const openButton = page.locator(".sidebar-header").getByRole("button", { name: "打开文件夹" });
+    const openButton = page.locator(".toolbar").getByRole("button", { name: "打开文件夹" });
     await openButton.click();
     const tree = page.locator(".tree");
     await expect(tree.locator(".tree-name", { hasText: "alpha.md" })).toBeVisible();
 
-    // 焦点在侧栏标题栏按钮时，方向键直接进入文件列表并切换文档。
-    await openButton.focus();
+    // 焦点在工作区 tab 专属工具栏（刷新全部）按钮时，方向键直接进入文件列表并切换文档。
+    const refreshButton = page
+      .locator(".files-toolbar")
+      .getByRole("button", { name: "刷新全部" });
+    await refreshButton.focus();
     await page.keyboard.press("ArrowDown");
     await expect(page.locator(".tab-item.active .tab-name")).toHaveText("alpha.md");
     await page.keyboard.press("ArrowDown");

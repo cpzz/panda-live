@@ -82,7 +82,7 @@ test("M4：工作区树、查找面板与设置持久化", async () => {
     }, tempDir);
 
     await page
-      .locator(".sidebar-header")
+      .locator(".toolbar")
       .getByRole("button", { name: "打开文件夹" })
       .click();
     const tree = page.locator(".tree");
@@ -518,7 +518,10 @@ test("M4：切换标签自动定位文件树", async () => {
     await app.evaluate(({ dialog }, target) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
     }, tempDir);
-    await page.getByRole("button", { name: "打开文件夹", exact: true }).click();
+    await page
+      .locator(".files-toolbar")
+      .getByRole("button", { name: "打开文件夹", exact: true })
+      .click();
     await expect(page.locator(".workspace-root")).toHaveCount(1);
 
     const openFile = async (target: string): Promise<void> => {

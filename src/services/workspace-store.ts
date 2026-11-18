@@ -182,7 +182,9 @@ export class WorkspaceStore {
     }
   }
 
-  /** 刷新指定根目录；省略参数时刷新全部。 */
+  /**
+   * 刷新指定根目录；省略参数时刷新全部。见 doc/design.md §12.5。
+   */
   async refresh(rootPath?: string): Promise<void> {
     this.refreshTimer = null;
     const targets = rootPath
@@ -204,6 +206,30 @@ export class WorkspaceStore {
     } catch (error) {
       this.commit({ error: describeError(error) });
     }
+  }
+
+  /** 刷新任意目录的内容（行级刷新）；路径是根目录时回退到 refresh，文件行由调用方传父目录。 */
+  async refreshNode(dirPath: string): Promise<void> {
+    const node = this.findNode(dirPath);
+    if (node) {
+      if (node.kind !== "dir") return;
+      try {
+        node.children = await this.loadChildren(node.path);
+        this.commit({ roots: [...this.state.roots] });
+      } catch (error) {
+        this.commit({ error: describeError(error) });
+      }
+      return;
+    }
+    const entry = this.state.roots.find((item) => pathKey(item.root.path) === pathKey(dirPath));
+    if (entry) await this.refresh(entry.root.path);
+  }
+
+  /** 确保目录展开（已展开时不动），供新建文件/目录后展示结果。 */
+  async expand(dirPath: string): Promise<void> {
+    const node = this.findNode(dirPath);
+    if (!node || node.kind !== "dir" || node.expanded) return;
+    await this.toggle(dirPath);
   }
 
   async createNode(parentPath: string, kind: "file" | "dir", name: string): Promise<FileRef | null> {

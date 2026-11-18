@@ -2356,6 +2356,45 @@ export function App() {
         </div>
         <div className="toolbar-spacer" />
         {/* Git 显示模式入口已移到编辑区模式条最右侧的 git 按钮。见 §21.15。 */}
+        {/* 文档操作常驻顶层：新建/打开文件/打开文件夹/保存。 */}
+        <button
+          type="button"
+          className="icon-button toolbar-icon tip-left"
+          aria-label={t("新建文件")}
+          data-tip={t("新建文件")}
+          onClick={() => manager.newDocument()}
+        >
+          <Icon name="file-plus" />
+        </button>
+        <button
+          type="button"
+          className="icon-button toolbar-icon tip-left"
+          aria-label={t("打开文件")}
+          data-tip={t("打开文件（Ctrl+O）")}
+          onClick={() => void manager.openFiles()}
+        >
+          <Icon name="file" />
+        </button>
+        <button
+          type="button"
+          className="icon-button toolbar-icon tip-left"
+          aria-label={t("打开文件夹")}
+          data-tip={t("打开文件夹")}
+          onClick={() => void workspaces.openPicker()}
+        >
+          <Icon name="folder-open" />
+        </button>
+        <button
+          type="button"
+          className="icon-button toolbar-icon tip-left"
+          aria-label={t("保存文件")}
+          data-tip={t("保存文件（Ctrl+S）")}
+          onClick={() => void manager.saveDocument(state.activeId ?? "")}
+          disabled={!active}
+        >
+          <Icon name="save" />
+        </button>
+        <span className="toolbar-divider" aria-hidden="true" />
         <button
           type="button"
           className="icon-button toolbar-icon tip-left"
@@ -2365,6 +2404,8 @@ export function App() {
         >
           <Icon name="settings" />
         </button>
+        {/* 与 Windows titleBarOverlay 的系统按钮（最小化/最大化/关闭）视觉分隔。 */}
+        <span className="toolbar-divider" aria-hidden="true" />
       </header>
 
       <div className="main-row">
@@ -2372,38 +2413,6 @@ export function App() {
           <>
             <WorkspacePanel
               store={workspaces}
-              actions={
-                <>
-                  <button
-                    type="button"
-                    className="icon-button"
-                    aria-label={t("新建文件")}
-                    title={t("新建文件")}
-                    onClick={() => manager.newDocument()}
-                  >
-                    <Icon name="file-plus" />
-                  </button>
-                  <button
-                    type="button"
-                    className="icon-button"
-                    aria-label={t("打开文件夹")}
-                    title={t("打开文件夹")}
-                    onClick={() => void workspaces.openPicker()}
-                  >
-                    <Icon name="folder-open" />
-                  </button>
-                  <button
-                    type="button"
-                    className="icon-button"
-                    aria-label={t("保存文件")}
-                    title={t("保存文件")}
-                    onClick={() => void manager.saveDocument(state.activeId ?? "")}
-                    disabled={!active}
-                  >
-                    <Icon name="save" />
-                  </button>
-                </>
-              }
               activePath={
                 state.documents.find((doc) => doc.id === state.activeId)?.path ?? null
               }

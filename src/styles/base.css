@@ -869,7 +869,9 @@ button {
   display: none;
 }
 
-.export-menu {
+/* 下拉菜单：模式条导出菜单与文件树扩展菜单共用。 */
+.export-menu,
+.tree-menu {
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
@@ -883,7 +885,14 @@ button {
   animation: overlay-in 140ms ease;
 }
 
-.export-menu-item {
+/* 文件树扩展菜单的锚点按钮，与树行操作按钮一致。 */
+.tree-menu-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.export-menu-item,
+.tree-menu-item {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -899,13 +908,22 @@ button {
   cursor: pointer;
 }
 
-.export-menu-item:hover {
+.export-menu-item:hover,
+.tree-menu-item:hover {
   background: var(--surface-hover);
 }
 
-.export-menu-icon {
+.export-menu-icon,
+.tree-menu-icon {
   flex: 0 0 auto;
   color: var(--muted);
+}
+
+/* 文件树扩展菜单里的分组分隔线。 */
+.tree-menu-separator {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border);
 }
 
 .workspace {
@@ -2596,30 +2614,6 @@ body.resizing * {
   border-top: 0;
 }
 
-.sidebar-header {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  height: 33px;
-  padding: 0 8px;
-  border-bottom: 1px solid var(--border);
-  user-select: none;
-}
-
-/* 文档操作（新建/打开/保存）与工作区操作之间的紧凑分组。 */
-.sidebar-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 1px;
-}
-
-.sidebar-divider {
-  width: 1px;
-  height: 14px;
-  margin: 0 3px;
-  background: var(--border);
-}
-
 .sidebar-title {
   flex: 1;
   min-width: 0;
@@ -2630,13 +2624,6 @@ body.resizing * {
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: none;
-}
-
-.sidebar-actions {
-  display: flex;
-  gap: 2px;
-  padding: 3px 8px;
-  border-bottom: 1px solid var(--border);
 }
 
 .sidebar-error {
@@ -2682,6 +2669,29 @@ body.resizing * {
 .tree-row.active .tree-icon {
   color: var(--accent);
   font-weight: 600;
+}
+
+/* 工作区 tab 的专属工具栏：文件夹数量 label 左对齐，按钮右对齐。 */
+.files-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 33px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--border);
+  user-select: none;
+}
+
+.files-toolbar-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: none;
 }
 
 .tree-toggle {
@@ -2739,6 +2749,15 @@ body.resizing * {
 
 .tree-row:hover .tree-actions,
 .tree-row:focus-within .tree-actions {
+  display: flex;
+}
+
+/* 扩展菜单展开时保持行按钮可见，避免鼠标移入菜单后菜单随行失去 hover 而消失。 */
+.tree-row:has(.tree-menu) .tree-actions {
+  display: flex;
+}
+
+.workspace-root-header:has(.tree-menu) .workspace-root-actions {
   display: flex;
 }
 
