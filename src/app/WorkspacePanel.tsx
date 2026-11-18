@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -327,46 +328,55 @@ export function WorkspacePanel({
     previousRoot.current = root;
   }, [state.roots]);
 
-  // 当前标签切换后自动展开文件树的父目录，并展开被折叠的工作区根。
-  useEffect(() => {
-    if (!activePath) return;
-    void store.revealPath(activePath);
-    const key = (value: string): string => {
-      const normalized = value.replace(/\\/g, "/").replace(/\/+$/u, "");
-      return /^[a-zA-Z]:/.test(normalized) ? normalized.toLowerCase() : normalized;
-    };
-    const target = key(activePath);
-    const owner = store.getState().roots.find((entry) =>
-      target.startsWith(`${key(entry.root.path)}/`),
-    );
-    if (!owner) return;
-    setCollapsedRoots((current) => {
-      if (!current.has(owner.root.path)) return current;
-      const next = new Set(current);
-      next.delete(owner.root.path);
-      return next;
-    });
-  }, [activePath, store]);
+  // 把活动文件行滚动到文件栏视口中部。仅在切换文档/切换标签的路径上调用，
+  // 用户手动展开/折叠不应改变视口。
+  const scrollToActive = useCallback((): boolean => {
+    const scroller = filesRef.current?.querySelector<HTMLElement>(".workspace-roots");
+    const row = scroller?.querySelector<HTMLElement>(".tree-row.active");
+    if (!scroller || !row) return false;
+    const rowTop =
+      row.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
+    const centered = rowTop - (scroller.clientHeight - row.offsetHeight) / 2;
+    scroller.scrollTo({ top: Math.max(0, centered) });
+    return true;
+  }, []);
 
-  // 切换标签后把活动文件滚动到文件栏中部；从文件树点开的切换不滚动。
+  // 当前标签切换后自动展开文件树的父目录，并展开被折叠的工作区根；
+  // 展开完成后滚动定位（定位可能尚未展开父目录，行此时还未渲染）。
   useEffect(() => {
     if (!activePath) return;
-    if (treeOpenRef.current === activePath) {
-      treeOpenRef.current = null;
-      return;
-    }
-    if (tab !== "files") return;
-    const frame = requestAnimationFrame(() => {
-      const scroller = filesRef.current?.querySelector<HTMLElement>(".workspace-roots");
-      const row = scroller?.querySelector<HTMLElement>(".tree-row.active");
-      if (!scroller || !row) return;
-      const rowTop =
-        row.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
-      const centered = rowTop - (scroller.clientHeight - row.offsetHeight) / 2;
-      scroller.scrollTo({ top: Math.max(0, centered) });
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [activePath, tab, state.roots, collapsedRoots]);
+    let cancelled = false;
+    void (async () => {
+      await store.revealPath(activePath);
+      const key = (value: string): string => {
+        const normalized = value.replace(/\\/g, "/").replace(/\/+$/u, "");
+        return /^[a-zA-Z]:/.test(normalized) ? normalized.toLowerCase() : normalized;
+      };
+      const target = key(activePath);
+      const owner = store.getState().roots.find((entry) =>
+        target.startsWith(`${key(entry.root.path)}/`),
+      );
+      if (owner) {
+        setCollapsedRoots((current) => {
+          if (!current.has(owner.root.path)) return current;
+          const next = new Set(current);
+          next.delete(owner.root.path);
+          return next;
+        });
+      }
+      if (cancelled || tab !== "files") return;
+      if (treeOpenRef.current === activePath) {
+        treeOpenRef.current = null;
+        return;
+      }
+      requestAnimationFrame(() => {
+        if (!cancelled) scrollToActive();
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activePath, store, tab, scrollToActive]);
 
   const askName = (title: string, initial: string, submit: (value: string) => void): void => {
     setPromptValue(initial);
