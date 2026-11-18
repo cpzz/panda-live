@@ -26,7 +26,7 @@ test("M17：保存换行符与行号设置生效", async () => {
     await page.keyboard.press("Control+O");
     await expect(page.locator(".tab-name")).toHaveText("crlf.md");
     await expect(page.locator(".statusbar")).toContainText("CRLF");
-    // Markdown 默认以所见即所得打开；换行符/缩进设置作用于源码编辑器。
+    // Markdown 默认以预览模式打开；换行符/缩进设置作用于源码编辑器。
     await page.getByRole("button", { name: "源码", exact: true }).click();
 
     await page.getByRole("button", { name: "设置", exact: true }).click();

@@ -82,7 +82,7 @@ test("M33：源码编辑器支持语法折叠、标题分节与章节折叠", as
     await page.locator(".app").waitFor();
     await page.keyboard.press("Control+O");
     await expect(page.locator(".tab-name")).toHaveText("fold.md");
-    // Markdown 默认所见即所得；折叠能力在源码模式验证。
+    // Markdown 默认预览模式；折叠能力在源码模式验证。
     await page.getByRole("button", { name: "源码", exact: true }).click();
     // gutter 含一个 visibility:hidden 的宽度占位 span，用 :visible 过滤真实标记。
     const gutter = page.locator(".pane:not([hidden]) .cm-foldGutter span:visible");

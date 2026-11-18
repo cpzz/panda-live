@@ -486,6 +486,8 @@ test("M38：粘贴 Markdown 文本与图片", async () => {
     }, filePath);
     await page.locator(".app").waitFor();
     await page.keyboard.press("Control+O");
+    // Markdown 默认预览模式；大图占位场景在所见即所得中验证。
+    await page.getByRole("button", { name: "所见即所得", exact: true }).click();
     const editor = page.locator(".prose-editor");
     await editor.waitFor();
 
@@ -666,20 +668,21 @@ test("M38：模式条布局与默认模式", async () => {
     await mockOpen(markdownPath);
     await page.locator(".app").waitFor();
     await page.keyboard.press("Control+O");
-    const editor = page.locator(".prose-editor");
-    // 打开 Markdown 默认进入所见即所得，模式条固定在文件窗口顶部。
-    await expect(editor).toBeVisible();
+    // 打开 Markdown 默认进入预览模式，模式条固定在文件窗口顶部。
     const bar = page.locator(".mode-bar");
     await expect(bar).toBeVisible();
     const modes = bar.locator(".mode-bar-modes button:not(.mode-button-git)");
     await expect(modes).toHaveCount(4);
     await expect(modes.nth(0)).toHaveAccessibleName("所见即所得");
-    await expect(modes.nth(0)).toHaveAttribute("aria-pressed", "true");
     await expect(modes.nth(1)).toHaveAccessibleName("源码");
     await expect(modes.nth(2)).toHaveAccessibleName("分栏");
     await expect(modes.nth(3)).toHaveAccessibleName("预览");
+    await expect(modes.nth(3)).toHaveAttribute("aria-pressed", "true");
 
-    // 块级工具栏在模式条左侧，模式按钮在右侧。
+    // 所见即所得模式：块级工具栏在模式条左侧，模式按钮在右侧。
+    await page.getByRole("button", { name: "所见即所得", exact: true }).click();
+    const editor = page.locator(".prose-editor");
+    await expect(editor).toBeVisible();
     const tools = bar.locator(".mode-bar-tools .block-toolbar");
     await expect(tools).toBeVisible();
     const toolsBox = await tools.boundingBox();
@@ -701,14 +704,13 @@ test("M38：模式条布局与默认模式", async () => {
     await expect(textModes.first()).toHaveAccessibleName("源码");
     await expect(textModes.first()).toHaveAttribute("aria-pressed", "true");
 
-    // 从 .txt（源码）再打开 Markdown：仍然默认所见即所得。
+    // 从 .txt（源码）再打开 Markdown：仍然默认预览模式。
     await mockOpen(secondPath);
     await page.locator(".app").waitFor();
     await page.keyboard.press("Control+O");
-    await expect(page.locator(".prose-editor")).toBeVisible();
     const markdownModes = page.locator(".mode-bar .mode-bar-modes button:not(.mode-button-git)");
     await expect(markdownModes).toHaveCount(4);
-    await expect(markdownModes.nth(0)).toHaveAttribute("aria-pressed", "true");
+    await expect(markdownModes.nth(3)).toHaveAttribute("aria-pressed", "true");
   } finally {
     await app.close();
     await fs.rm(tempDir, { recursive: true, force: true });
@@ -799,6 +801,8 @@ test("M38：另存为代码格式后回落源码模式", async () => {
     }, markdownPath);
     await page.locator(".app").waitFor();
     await page.keyboard.press("Control+O");
+    // Markdown 默认预览模式；另存为场景在所见即所得中验证。
+    await page.getByRole("button", { name: "所见即所得", exact: true }).click();
     await expect(page.locator(".prose-editor")).toBeVisible();
 
     await app.evaluate(({ dialog }, target) => {

@@ -89,10 +89,13 @@ export class InputPopover {
     this.removeButton.textContent = options.removeLabel ?? t("移除");
     this.dom.hidden = false;
 
+    // 垂直方向同样钳制在视口内：光标贴近文档底部时 coordsAtPos 可能返回视口外的坐标。
     const width = this.dom.offsetWidth || 280;
+    const height = this.dom.offsetHeight || 120;
     const left = Math.max(8, Math.min(position.left, window.innerWidth - width - 8));
     this.dom.style.left = `${Math.round(left)}px`;
-    this.dom.style.top = `${Math.round(Math.max(8, position.top))}px`;
+    const top = Math.max(8, Math.min(position.top, window.innerHeight - height - 8));
+    this.dom.style.top = `${Math.round(top)}px`;
     this.input.focus();
     this.input.select();
     document.addEventListener("pointerdown", this.onPointerDown, true);

@@ -44,7 +44,7 @@ test("M4：外部修改未保存文档 → 冲突横幅 → 重新加载", async
     const page = await app.firstWindow();
     await openSample(app, page, filePath);
 
-    // Markdown 默认所见即所得；本场景直接验证源码编辑与冲突恢复。
+    // Markdown 默认预览模式；本场景直接验证源码编辑与冲突恢复。
     await page.getByRole("button", { name: "源码", exact: true }).click();
     await page.locator(".cm-content").click();
     await page.keyboard.press("Control+A");
@@ -185,6 +185,8 @@ test("M4：查找与替换模式、快捷键与按钮提示", async () => {
   try {
     const page = await app.firstWindow();
     await openSample(app, page, filePath);
+    // Markdown 默认预览模式；查找面板的这些场景在所见即所得中验证。
+    await page.getByRole("button", { name: "所见即所得", exact: true }).click();
     await expect(page.locator(".prose-editor")).toBeVisible();
 
     // Ctrl+F 只打开查找：没有替换行，也不提供关闭按钮。
@@ -277,6 +279,8 @@ test("M4：查找替换窗口布局与预览查找", async () => {
   try {
     const page = await app.firstWindow();
     await openSample(app, page, filePath);
+    // Markdown 默认预览模式；查找面板的这些场景在所见即所得中验证。
+    await page.getByRole("button", { name: "所见即所得", exact: true }).click();
     await expect(page.locator(".prose-editor")).toBeVisible();
     const panel = page.locator(".search-panel");
 
@@ -391,6 +395,8 @@ test("M4：查找面板跨模式保持与分栏预览查找", async () => {
   try {
     const page = await app.firstWindow();
     await openSample(app, page, filePath);
+    // Markdown 默认预览模式；查找面板的这些场景在所见即所得中验证。
+    await page.getByRole("button", { name: "所见即所得", exact: true }).click();
     await expect(page.locator(".prose-editor")).toBeVisible();
     const panel = page.locator(".search-panel");
 
@@ -518,6 +524,8 @@ test("M4：切换标签自动定位文件树", async () => {
     await app.evaluate(({ dialog }, target) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
     }, tempDir);
+    // 全新会话无根目录时侧栏默认大纲，先切到工作区 tab 再用其工具栏打开文件夹。
+    await page.locator(".sidebar-tabs").getByRole("tab", { name: "工作区", exact: true }).click();
     await page
       .locator(".files-toolbar")
       .getByRole("button", { name: "打开文件夹", exact: true })

@@ -822,14 +822,14 @@ export class DocumentManager {
         watchId,
       };
       this.rememberActiveMode();
-      // 新打开的 Markdown 文档一律以所见即所得展示；大文件等强制源码的情况除外。
-      // 会话恢复时用 entry.mode 覆盖，避免先 wysiwyg 再切源码造成一次多余的状态重建。
+      // 新打开的 Markdown 文档默认进入预览模式；大文件等强制源码的情况除外。
+      // 切换标签时按 modeByDocument 恢复该标签上次使用的模式；会话恢复时用 entry.mode 覆盖。
       const desiredMode: EditorMode = isBinary
         ? "preview"
         : forceSource
           ? "source"
           : (options.mode ??
-            (document.format === "markdown" ? "wysiwyg" : this.state.mode));
+            (document.format === "markdown" ? "preview" : this.state.mode));
       const mode = isBinary || modeSupported(desiredMode, document.format) ? desiredMode : "source";
       this.modeByDocument.set(document.id, mode);
       this.commit({

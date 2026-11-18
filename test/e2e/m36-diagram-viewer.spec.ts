@@ -147,7 +147,7 @@ test("M36：图表缩放与持久缓存回归", async () => {
       }, mdPath);
       await page.locator(".app").waitFor();
       await page.keyboard.press("Control+O");
-      // Markdown 默认所见即所得；图表布局在渲染预览中验证。
+      // Markdown 默认预览模式；图表布局在渲染预览中验证。
       await page.getByRole("button", { name: "预览", exact: true }).click();
       const preview = page.locator(".preview-pane .markdown-body");
       const block = preview.locator(".preview-diagram").first();

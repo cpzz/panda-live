@@ -32,7 +32,7 @@ test("M9：Markdown 大纲显示标题层级并可跳转到源码行", async () 
 
   const { app, page, userDataDir } = await launchWithFile(filePath);
   try {
-    // Markdown 默认所见即所得；大纲跳转的目标是源码行。
+    // Markdown 默认预览模式；大纲跳转的目标是源码行。
     await page.getByRole("button", { name: "源码", exact: true }).click();
     const items = page.locator(".outline-item");
     await expect(items).toHaveCount(2);

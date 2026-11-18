@@ -32,7 +32,7 @@ test("M18：预览代码高亮背景随主题切换", async () => {
     }, filePath);
     await page.locator(".app").waitFor();
     await page.keyboard.press("Control+O");
-    // Markdown 默认以所见即所得打开；本用例验证渲染预览。
+    // Markdown 默认以预览模式打开；本用例验证渲染预览。
     await page.getByRole("button", { name: "预览", exact: true }).click();
     await expect(page.locator(".pane:not([hidden]) .markdown-body pre.shiki")).toBeVisible({
       timeout: 30_000,

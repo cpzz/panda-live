@@ -21,7 +21,7 @@ async function launchWithFile(
   await page.locator(".app").waitFor();
   await page.keyboard.press("Control+O");
   await expect(page.locator(".tab-name")).toHaveText(path.basename(filePath));
-  // Markdown 默认以所见即所得打开；这些用例验证源码编辑器能力。
+  // Markdown 默认以预览模式打开；这些用例验证源码编辑器能力。
   await page.getByRole("button", { name: "源码", exact: true }).click();
   return { app, page, userDataDir };
 }
