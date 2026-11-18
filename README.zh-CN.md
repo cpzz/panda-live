@@ -71,6 +71,11 @@ npm run package    # 构建并生成当前平台的安装包
 
 - **Git** 不内置，需系统安装 `git`，或在 **设置 → Git** 指定绝对路径 / `wsl git`；缺少 Git 时编辑与导出照常，差异退化为「上次保存」；
 - **LaTeX** 内置 Tectonic，但首次编译需联网下载 TeX bundle（之后缓存），也可改用本地 latexmk / xelatex；
+- **Electron 二进制下载**：`npm run package` 检测到本地二进制缺失时会自动下载（默认 GitHub 直连）；下载失败时先设置镜像再执行：
+  ```powershell
+  $env:ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/"
+  npm run package
+  ```
 - 安装包只针对打包时的平台生成。
 
 ## 常用命令
@@ -80,7 +85,7 @@ npm run package    # 构建并生成当前平台的安装包
 | `npm run dev` | 启动 Electron 与 Vite 开发服务器 |
 | `npm run build` | 类型检查并构建渲染层与主进程 |
 | `npm run win` | 运行构建后的应用 |
-| `npm run package` | 构建并生成当前平台安装包（内置 Tectonic） |
+| `npm run package` | 构建并生成当前平台安装包（缺失 Electron 二进制时自动下载，内置 Tectonic） |
 | `npm test` | 运行单元测试（Vitest） |
 | `npm run test:e2e` | 运行 Playwright 端到端测试 |
 | `npm run lint` | 使用 ESLint 检查 |

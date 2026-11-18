@@ -71,6 +71,11 @@ The packaged app bundles the Electron runtime, application code and the Tectonic
 
 - **Git** is not bundled: install `git` system-wide, or point to an absolute path / `wsl git` under **Settings → Git**. Without Git, editing and export still work and diffs fall back to "last saved";
 - **LaTeX** ships with Tectonic, but the first compile downloads the TeX bundle from the network (cached afterwards); a local latexmk / xelatex can be used instead;
+- **Electron binary download**: `npm run package` auto-downloads the Electron binary when it is missing locally (GitHub by default). If the download fails, set the mirror first:
+  ```powershell
+  $env:ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/"
+  npm run package
+  ```
 - Installers are only produced for the platform they are built on.
 
 ## Scripts
@@ -80,7 +85,7 @@ The packaged app bundles the Electron runtime, application code and the Tectonic
 | `npm run dev` | Start Electron with the Vite dev server |
 | `npm run build` | Type-check and build renderer + main process |
 | `npm run win` | Run the built app |
-| `npm run package` | Build an installer for the current platform (bundles Tectonic) |
+| `npm run package` | Build an installer for the current platform (auto-downloads the Electron binary if missing; bundles Tectonic) |
 | `npm test` | Run unit tests (Vitest) |
 | `npm run test:e2e` | Run Playwright end-to-end tests |
 | `npm run lint` | Lint with ESLint |
