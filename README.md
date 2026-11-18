@@ -9,28 +9,29 @@ Panda Live is a local-first desktop document editor. It keeps source and rendere
 - **Multiple view modes** — source (CodeMirror 6), WYSIWYG (ProseMirror, with a Word-style block toolbar and slash commands), split, rendered preview and a read-only Git diff view.
 - **Rendered Git diff** — compare the current buffer or two commits. Markdown is compared in rendered form with block/word/ghost decorations; every other text format gets a side-by-side, syntax-highlighted source diff.
 - **Git-compatible diff options** — `-w` (ignore whitespace), `--ignore-blank-lines`, and `--ignore-cr-at-eol` are available as independent toggles.
+- **Git workflow** — the sidebar's Git tab has Changes / History / Compare views: stage, unstage, commit and amend, switch and create branches, fetch / pull / push, ahead/behind badges, and file-level comparison between any two commits (or a commit and the working tree). Pull strategy, fetch pruning, network timeout, auto-refresh and the default diff baseline are configurable under **Settings → Git**.
 - **Markdown pipeline** — GFM, front matter, math (KaTeX), syntax highlighting (Shiki), and sanitized HTML.
 - **LaTeX preview** — compile with Tectonic, latexmk or xelatex; diagnostics are collected in the Problems panel.
 - **Diagrams** — PlantUML and Mermaid preview with caching, theme support and a zoomable viewer: standalone files and diagrams embedded in Markdown zoom via the toolbar or Ctrl +/- and Ctrl+wheel, with a reset to natural width.
-- **Image preview** — PNG, JPEG, GIF, WebP and BMP open read-only with the same zoomable viewer.
+- **Image preview** — PNG, APNG, JPEG/JFIF, GIF, WebP, BMP, ICO and AVIF open read-only with the same zoomable viewer.
 - **Bilingual UI** — Chinese and English, switchable at runtime.
-- **Desktop integration** — workspace sidebar, outline, recovery drafts, recent files, HTML/PDF/SVG export, and installable format extensions.
+- **Desktop integration** — workspace sidebar, outline, recovery drafts, recent files, and installable format extensions. The mode bar exposes format-aware export: Markdown opens an HTML / PDF menu, while PlantUML and Mermaid export SVG directly.
 
 ## Supported formats
 
 | Kind | Formats |
 |---|---|
 | Documents | Markdown, plain text, PDF (read-only preview) |
-| Markup / math | LaTeX (`.tex`), MathML, HTML, XML |
+| Markup / math | LaTeX (`.tex`), MathML, HTML, XML, SVG |
 | Diagrams | PlantUML, Mermaid |
-| Images | PNG, JPEG, GIF, WebP, BMP (read-only preview) |
+| Images | PNG, APNG, JPEG/JFIF, GIF, WebP, BMP, ICO, AVIF (read-only preview) |
 | Code | C/C++, Java, JavaScript/TypeScript, JSON, YAML, CSS, Python, SQL, PHP, Rust, C#, Go, Ruby, Kotlin, Swift, R, Scala, Shell, Dart, Lua, Perl, Objective-C, INI, TOML |
 
 Extensions can contribute additional formats, previews and commands.
 
 ## Language
 
-The interface ships in Simplified Chinese and English. Switch instantly with the globe button in the toolbar, or choose a preference under **Settings → Appearance → Language**:
+The interface ships in Simplified Chinese and English. Choose a preference under **Settings → Appearance → Language**:
 
 - **中文** — always Chinese
 - **English** — always English
@@ -40,10 +41,10 @@ The preference is stored in `settings.json` in the application data directory.
 
 ## Getting started
 
-Requirements:
+Requirements for running from source and building:
 
 - Node.js 22 or newer, npm 10 or newer
-- Git is optional (needed for repository-based diffs)
+- Git is optional (needed for repository-based diffs; install it separately)
 - Tectonic, latexmk or xelatex is optional (needed for LaTeX compilation)
 
 ```bash
@@ -56,8 +57,21 @@ Build a production bundle:
 ```bash
 npm run build
 npm run win        # run the built app
-npm run package    # build an installer
+npm run package    # build an installer for the current platform
 ```
+
+### Packaged build
+
+On Windows, `npm run package` produces:
+
+- `release/Panda Live Setup <version>.exe` — an NSIS installer that can be distributed as a single file;
+- `release/win-unpacked/Panda Live.exe` — a no-install build; keep the whole `win-unpacked` folder (DLLs, locales, resources).
+
+The packaged app bundles the Electron runtime, application code and the Tectonic executable for the current platform, so **the target machine does not need Node.js or npm**. Notes:
+
+- **Git** is not bundled: install `git` system-wide, or point to an absolute path / `wsl git` under **Settings → Git**. Without Git, editing and export still work and diffs fall back to "last saved";
+- **LaTeX** ships with Tectonic, but the first compile downloads the TeX bundle from the network (cached afterwards); a local latexmk / xelatex can be used instead;
+- Installers are only produced for the platform they are built on.
 
 ## Scripts
 
@@ -65,6 +79,8 @@ npm run package    # build an installer
 |---|---|
 | `npm run dev` | Start Electron with the Vite dev server |
 | `npm run build` | Type-check and build renderer + main process |
+| `npm run win` | Run the built app |
+| `npm run package` | Build an installer for the current platform (bundles Tectonic) |
 | `npm test` | Run unit tests (Vitest) |
 | `npm run test:e2e` | Run Playwright end-to-end tests |
 | `npm run lint` | Lint with ESLint |
@@ -84,6 +100,7 @@ src/formats/     Markdown/LaTeX/diagram parsing and serialization
 src/render/      Rendering pipeline, diagram service, export helpers
 src/services/    Document manager, settings, workspace, search, drafts
 src/shared/      Shared types and IPC contracts
+scripts/         Packaging and build helper scripts
 test/            Unit and Playwright tests
 doc/             Design notes
 ```
