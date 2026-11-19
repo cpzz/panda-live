@@ -20,7 +20,7 @@ function removeCopyButtons(host: HTMLElement): void {
 }
 
 /**
- * 代码块复制按钮：悬停显示在右上角，复制代码内容；差异视图自带「复制原文」，不重复提供。
+ * 代码块复制按钮：悬停时显示在代码框外右上角，不遮挡代码内容；差异视图自带「复制原文」，不重复提供。
  * 按钮挂在 pre 外层 .code-block 包装上，避免随代码横向滚动。
  */
 function attachCopyButtons(host: HTMLElement, withDiff: boolean): void {

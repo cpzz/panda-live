@@ -78,7 +78,7 @@
   line-height: 1.6;
 }
 
-/* 复制按钮的外层包装：按钮固定于代码块右上角，不随横向滚动移动。 */
+/* 复制按钮的外层包装：按钮固定于代码框外右上角，不随横向滚动移动。 */
 .markdown-body .code-block {
   position: relative;
   /* 背景按代码内容自然宽度收缩，不撑满内容区；上限见下方适配规则。 */
@@ -88,14 +88,15 @@
 
 .preview-copy {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  /* 悬停显示在代码框外右上角（紧挨上边框），不遮挡代码内容。 */
+  top: -24px;
+  right: 4px;
   z-index: 5;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   padding: 0;
   border: 1px solid var(--border);
   border-radius: 4px;
