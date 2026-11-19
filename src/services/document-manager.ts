@@ -49,6 +49,8 @@ export interface DocumentState {
   cursor?: { line: number; column: number };
   /** 源码编辑器折叠起始行号列表；随会话持久化。见 doc/design.md §21.6。 */
   folds?: number[];
+  /** 固定标签：不参与「关闭全部」，也无法单独关闭；固定标签始终排在最左侧。 */
+  pinned?: boolean;
 }
 
 export interface Notice {
@@ -229,7 +231,9 @@ export class DocumentManager {
     this.scheduleSessionSave();
   }
 
-  /** 调整标签顺序：把 fromId 移动到 toId 的位置，激活标签保持不变。 */
+  /** 调整标签顺序：把 fromId 移动到 toId 的位置，激活标签保持不变。
+   * 固定标签只能落在固定区（最左侧连续段）内，未固定标签只能落在其外；
+   * 越界时收敛到本区边界，保证固定标签始终排在未固定标签之前。 */
   moveDocument(fromId: string, toId: string): void {
     if (fromId === toId) return;
     const documents = [...this.state.documents];
@@ -238,8 +242,27 @@ export class DocumentManager {
     if (fromIndex < 0 || toIndex < 0) return;
     const [moved] = documents.splice(fromIndex, 1);
     if (!moved) return;
-    documents.splice(toIndex, 0, moved);
+    let insertAt = toIndex;
+    const pinnedCount = documents.filter((doc) => doc.pinned).length;
+    if (moved.pinned) {
+      insertAt = Math.min(insertAt, Math.max(pinnedCount, 0));
+    } else {
+      insertAt = Math.max(insertAt, pinnedCount);
+    }
+    documents.splice(insertAt, 0, moved);
     this.commit({ documents });
+    this.scheduleSessionSave();
+  }
+
+  /** 固定/取消固定标签：固定移到固定区末尾，取消固定移到未固定区开头（VS Code 行为）。 */
+  togglePinDocument(id: string): void {
+    const doc = this.state.documents.find((item) => item.id === id);
+    if (!doc) return;
+    const updated = { ...doc, pinned: !doc.pinned };
+    const rest = this.state.documents.filter((item) => item.id !== id);
+    const insertAt = rest.filter((item) => item.pinned).length;
+    rest.splice(insertAt, 0, updated);
+    this.commit({ documents: rest });
     this.scheduleSessionSave();
   }
 
@@ -666,6 +689,7 @@ export class DocumentManager {
         this.patchDocument(doc.id, () => ({
           cursor: entry.cursor,
           folds: entry.folds,
+          pinned: entry.pinned,
         }));
       }
     }
@@ -748,6 +772,7 @@ export class DocumentManager {
         mode: this.modeByDocument.get(doc.id) ?? args.mode,
         cursor: doc.cursor,
         folds: doc.folds,
+        pinned: doc.pinned,
       })),
       activeIndex: Math.max(
         0,

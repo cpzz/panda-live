@@ -1224,6 +1224,10 @@ export function App() {
     right: false,
   });
   const [tabMenu, setTabMenu] = useState<{ top: number; right: number } | null>(null);
+  /** 标签右键菜单：固定/取消固定单个标签。 */
+  const [tabContextMenu, setTabContextMenu] = useState<{ top: number; left: number; docId: string } | null>(
+    null,
+  );
   const [sidebarTabRequest, setSidebarTabRequest] = useState<{
     tab: "source-control";
     token: number;
@@ -1985,9 +1989,10 @@ export function App() {
       ?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [state.activeId, state.documents.length]);
 
-  /** 关闭全部文档：先确认；逐文档沿用三选一，用户点「取消」时中止剩余关闭。 */
+  /** 关闭全部文档：固定标签保留；先确认；逐文档沿用三选一，用户点「取消」时中止剩余关闭。 */
   const closeAllDocuments = async (): Promise<void> => {
-    const docs = manager.getState().documents;
+    const docs = manager.getState().documents.filter((doc) => !doc.pinned);
+    if (docs.length === 0) return;
     const dirtyCount = docs.filter((doc) => doc.dirty).length;
     const message =
       dirtyCount > 0
@@ -2149,7 +2154,8 @@ export function App() {
       title: t("关闭当前标签"),
       shortcut: "Ctrl+W",
       run: () => {
-        if (active) void manager.closeDocument(active.id);
+        // 固定标签不允许单独关闭（含快捷键），需先取消固定；与 × / 中键行为一致。
+        if (active && !active.pinned) void manager.closeDocument(active.id);
       },
     },
     {
@@ -2472,13 +2478,28 @@ export function App() {
                     key={doc.id}
                     className={doc.id === state.activeId ? "tab-item active" : "tab-item"}
                     draggable
-                    title={t("{0}（拖拽排序，中键关闭）", doc.path ?? doc.name)}
+                    title={
+                      doc.pinned
+                        ? t("{0}（已固定：不参与关闭全部，点击图钉取消固定）", doc.path ?? doc.name)
+                        : t("{0}（拖拽排序，中键关闭）", doc.path ?? doc.name)
+                    }
+                    onContextMenu={(event) => {
+                      event.preventDefault();
+                      const margin = 170;
+                      setTabContextMenu({
+                        top: Math.min(event.clientY, window.innerHeight - 100),
+                        left: Math.min(event.clientX, window.innerWidth - margin),
+                        docId: doc.id,
+                      });
+                    }}
                     onMouseDown={(event) => {
                       // 阻止中键在标签上触发自动滚动。
                       if (event.button === 1) event.preventDefault();
                     }}
                     onAuxClick={(event) => {
                       if (event.button !== 1) return;
+                      // 固定标签不允许中键关闭，与 VS Code 行为一致。
+                      if (doc.pinned) return;
                       event.preventDefault();
                       void manager.closeDocument(doc.id);
                     }}
@@ -2506,25 +2527,47 @@ export function App() {
                       type="button"
                       role="tab"
                       aria-selected={doc.id === state.activeId}
-                      className="tab"
+                      className={doc.pinned ? "tab tab-pinned" : "tab"}
                       onClick={() => manager.setActive(doc.id)}
                     >
-                      <Icon name={fileIconForPath(doc.path)} size={13} className="tab-icon" />
+                      <span
+                        role="button"
+                        tabIndex={-1}
+                        className="tab-pin-slot"
+                        aria-label={doc.pinned ? t("取消固定 {0}", doc.name) : t("固定 {0}", doc.name)}
+                        title={doc.pinned ? t("取消固定 {0}", doc.name) : t("固定 {0}", doc.name)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          manager.togglePinDocument(doc.id);
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key !== "Enter" && event.key !== " ") return;
+                          event.preventDefault();
+                          event.stopPropagation();
+                          manager.togglePinDocument(doc.id);
+                        }}
+                      >
+                        <Icon name={fileIconForPath(doc.path)} size={13} className="tab-icon tab-file-icon" />
+                        <Icon name="pin" size={12} className="tab-pin-hover" />
+                        {doc.pinned && <Icon name="pin" size={9} className="tab-pin-badge" />}
+                      </span>
                       {doc.dirty && <span className="tab-dot" aria-label={t("未保存")} />}
                       <span className="tab-name">{doc.name}</span>
                     </button>
-                    <button
-                      type="button"
-                      className="tab-close"
-                      aria-label={t("关闭 {0}", doc.name)}
-                      title={t("关闭 {0}", doc.name)}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        void manager.closeDocument(doc.id);
-                      }}
-                    >
-                      <Icon name="close" size={12} />
-                    </button>
+                    {!doc.pinned && (
+                      <button
+                        type="button"
+                        className="tab-close"
+                        aria-label={t("关闭 {0}", doc.name)}
+                        title={t("关闭 {0}", doc.name)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void manager.closeDocument(doc.id);
+                        }}
+                      >
+                        <Icon name="close" size={12} />
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
@@ -2616,6 +2659,7 @@ export function App() {
                   }}
                 >
                   <Icon name={fileIconForPath(doc.path)} size={13} className="tab-menu-icon" />
+                  {doc.pinned && <Icon name="pin" size={11} className="tab-menu-pin" />}
                   {doc.dirty && <span className="tab-dot" aria-label={t("未保存")} />}
                   <span className="tab-menu-name">{doc.name}</span>
                   {doc.id === state.activeId && (
@@ -2627,7 +2671,8 @@ export function App() {
                   role="menuitem"
                   className="tab-menu-close"
                   aria-label={t("关闭 {0}", doc.name)}
-                  title={t("关闭 {0}", doc.name)}
+                  title={doc.pinned ? t("固定标签需先取消固定") : t("关闭 {0}", doc.name)}
+                  disabled={doc.pinned}
                   onClick={(event) => {
                     event.stopPropagation();
                     void manager.closeDocument(doc.id).then(() => {
@@ -2653,6 +2698,33 @@ export function App() {
                 </button>
               </div>
             )}
+          </div>
+        </>
+      )}
+
+      {tabContextMenu && (
+        <>
+          <div className="tab-menu-backdrop" onClick={() => setTabContextMenu(null)} />
+          <div
+            className="tab-menu tab-context-menu"
+            role="menu"
+            aria-label={t("标签操作")}
+            style={{ top: tabContextMenu.top, left: tabContextMenu.left }}
+          >
+            <button
+              type="button"
+              role="menuitem"
+              className="tab-menu-action"
+              onClick={() => {
+                manager.togglePinDocument(tabContextMenu.docId);
+                setTabContextMenu(null);
+              }}
+            >
+              <Icon name="pin" size={12} />
+              {state.documents.find((doc) => doc.id === tabContextMenu.docId)?.pinned
+                ? t("取消固定")
+                : t("固定标签")}
+            </button>
           </div>
         </>
       )}

@@ -620,6 +620,62 @@ button {
   color: var(--fg);
 }
 
+/* 标签固定标识：文件图标位置的插槽——
+ * 未固定时悬停把文件图标切换为图钉（点击固定）；
+ * 已固定时文件图标右下角显示图钉角标（点击取消固定）。 */
+.tab-pin-slot {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+
+.tab-pin-slot .tab-pin-hover {
+  display: none;
+  color: var(--accent);
+}
+
+.tab-pin-slot:hover .tab-file-icon {
+  display: none;
+}
+
+.tab-pin-slot:hover .tab-pin-hover {
+  display: inline-flex;
+}
+
+.tab-pin-slot .tab-pin-badge {
+  position: absolute;
+  right: -4px;
+  bottom: -2px;
+  color: var(--accent);
+}
+
+.tab-pin-slot:hover .tab-pin-badge {
+  color: var(--fg);
+}
+
+/* 固定标签没有关闭按钮，加宽右侧留白保持与普通标签相近的视觉密度。 */
+.tab.tab-pinned {
+  padding-right: 14px;
+}
+
+/* 标签右键菜单：宽度随内容收缩——需覆盖 .tab-menu 的固定最小宽度，故提升特异性。 */
+.tab-menu.tab-context-menu {
+  min-width: 0;
+  max-width: none;
+  width: fit-content;
+}
+
+/* 「全部标签」菜单里固定标签的图钉标记。 */
+.tab-menu-pin {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+
 .tabstrip-empty {
   align-self: center;
   padding: 0 12px;
@@ -745,6 +801,16 @@ button {
 .tab-menu-close:hover {
   background: var(--surface);
   color: var(--fg);
+}
+
+.tab-menu-close:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.tab-menu-close:disabled:hover {
+  background: transparent;
+  color: var(--muted);
 }
 
 .tab-menu-name {
