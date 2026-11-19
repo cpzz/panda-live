@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Settings } from "../shared/settings";
+import type { AppInfo } from "../shared/ipc";
 import { t } from "../i18n";
 import { ExtensionSettings } from "./ExtensionSettings";
 import { useFocusTrap } from "./useFocusTrap";
@@ -22,7 +23,8 @@ type SettingsSectionKey =
   | "latex"
   | "diff"
   | "extensions"
-  | "privacy";
+  | "privacy"
+  | "about";
 
 const SECTIONS: { key: SettingsSectionKey; title: string }[] = [
   { key: "appearance", title: "外观" },
@@ -33,6 +35,7 @@ const SECTIONS: { key: SettingsSectionKey; title: string }[] = [
   { key: "diff", title: "Git" },
   { key: "extensions", title: "扩展" },
   { key: "privacy", title: "隐私" },
+  { key: "about", title: "关于" },
 ];
 
 /** 设置对话框：左侧分类导航 + 右侧内容面板；保存写盘不关闭窗口。见 doc/design.md §15.3。 */
@@ -45,6 +48,8 @@ export function SettingsDialog({
 }: SettingsDialogProps) {
   const [draft, setDraft] = useState<Settings>(settings);
   const [section, setSection] = useState<SettingsSectionKey>("appearance");
+  /** 应用信息（版本等）；对话框打开时读取一次，供「关于」页展示。 */
+  const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
   const dialogRef = useFocusTrap(open);
   const wasOpen = useRef(false);
 
@@ -53,6 +58,7 @@ export function SettingsDialog({
       setDraft(settings);
       // 仅在「打开」瞬间回到默认分类；保存后 settings 变化不应打断当前浏览的分类。
       if (!wasOpen.current) setSection("appearance");
+      void window.panda.app.getInfo().then(setAppInfo).catch(() => undefined);
     }
     wasOpen.current = open;
   }, [open, settings]);
@@ -449,6 +455,32 @@ export function SettingsDialog({
                   </select>
                 </label>
                 <p className="settings-note">{t("草稿与缓存仅写入应用数据目录，不会上传。")}</p>
+              </>
+            )}
+
+            {section === "about" && (
+              <>
+                <h3 className="settings-pane-title">{t("Panda Live")}</h3>
+                <p className="settings-note">
+                  {t("本地优先的桌面文档编辑器：源码与渲染结果实时同步，保留文件原有编码与换行符，草稿与文档不会被上传。")}
+                </p>
+                <div className="settings-row">
+                  <span>{t("版本")}</span>
+                  <span className="settings-about-value">{appInfo?.version ?? "…"}</span>
+                </div>
+                <div className="settings-row">
+                  <span>{t("Electron 版本")}</span>
+                  <span className="settings-about-value">{appInfo?.electronVersion || "…"}</span>
+                </div>
+                <div className="settings-row">
+                  <span>{t("平台")}</span>
+                  <span className="settings-about-value">{appInfo?.platform ?? "…"}</span>
+                </div>
+                <div className="settings-row settings-row-top">
+                  <span>{t("用户数据目录")}</span>
+                  <code className="settings-about-path">{appInfo?.userDataPath ?? "…"}</code>
+                </div>
+                <p className="settings-note">{t("排障时可提供以上版本与目录信息。")}</p>
               </>
             )}
           </div>

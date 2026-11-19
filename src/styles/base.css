@@ -3483,6 +3483,19 @@ body.resizing * {
   font-size: 12.5px;
 }
 
+/* 「关于」页的只读信息值与用户数据目录路径。 */
+.settings-about-value {
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-about-path {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .settings-row-top {
   align-items: flex-start;
 }
