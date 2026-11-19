@@ -1,5 +1,6 @@
 import { describeError } from "../shared/errors";
 import type { GitBranch, GitCommit, GitCommitDetail, GitSnapshot } from "../shared/git";
+import { pathKey } from "../utils/paths";
 
 export interface GitStoreState {
   /** 用于探测仓库的路径（工作区根或当前文件目录）。 */
@@ -20,6 +21,13 @@ export interface GitStoreState {
 
 function joinPath(root: string, relative: string): string {
   return `${root.replace(/[\\/]+$/u, "")}/${relative}`;
+}
+
+/** 判断路径是否位于指定目录内（归一化分隔符与 Windows 盘符大小写）。 */
+function isPathUnder(filePath: string, root: string): boolean {
+  const target = pathKey(filePath);
+  const base = pathKey(root);
+  return target === base || target.startsWith(`${base}/`);
 }
 
 /** 历史列表默认每页条数；可在设置中改为 100 / 200。 */
@@ -64,23 +72,34 @@ export class GitStore {
     return this.state.snapshot?.root ?? null;
   }
 
-  /** 切换探测路径；同一路径重复设置时保留现有快照。 */
+  /**
+   * 切换探测路径；同一路径重复设置时保留现有快照。
+   * 新路径仍位于当前仓库内时（例如打开仓库里的其他文件，探测路径从根变成子目录），
+   * 保留快照、提交列表与已展开的提交详情，避免侧栏整块闪烁或详情被清空。
+   */
   async setPath(path: string | null): Promise<void> {
     if (this.state.path === path) return;
     // 作废在途的刷新与提交详情，避免旧仓库结果覆盖新状态。
     this.refreshToken += 1;
     this.detailToken += 1;
-    this.commitLimit = this.pageSize;
+    const previousRoot = this.state.snapshot?.root ?? null;
+    const sameRepo = path !== null && previousRoot !== null && isPathUnder(path, previousRoot);
+    // 仅切换仓库时重置分页深度；同仓库内换探测路径保留用户已加载的历史。
+    if (!sameRepo) this.commitLimit = this.pageSize;
     this.patch({
       path,
-      snapshot: null,
-      branches: [],
-      commits: [],
-      commitsHasMore: false,
-      detail: null,
       loading: false,
       busy: null,
       error: null,
+      ...(sameRepo
+        ? {}
+        : {
+            snapshot: null,
+            branches: [],
+            commits: [],
+            commitsHasMore: false,
+            detail: null,
+          }),
     });
     if (path) await this.refresh();
   }
@@ -97,12 +116,20 @@ export class GitStore {
     const path = this.state.path;
     if (!path) return;
     const token = ++this.refreshToken;
+    const previousRoot = this.state.snapshot?.root ?? null;
     this.patch({ loading: true, error: null });
     try {
       const snapshot = await window.panda.git.snapshot({ path });
       if (token !== this.refreshToken || this.state.path !== path) return;
       if (!snapshot.inRepo || !snapshot.root) {
-        this.patch({ snapshot, branches: [], commits: [], commitsHasMore: false, loading: false });
+        this.patch({
+          snapshot,
+          branches: [],
+          commits: [],
+          commitsHasMore: false,
+          detail: null,
+          loading: false,
+        });
         return;
       }
       const root = snapshot.root;
@@ -112,12 +139,15 @@ export class GitStore {
         window.panda.git.log({ root, limit }).catch(() => []),
       ]);
       if (token !== this.refreshToken || this.state.path !== path) return;
+      // 探测到的是另一个仓库（如嵌套仓库）时，原提交详情已不适用。
+      const rootChanged = previousRoot !== null && pathKey(previousRoot) !== pathKey(root);
       this.patch({
         snapshot,
         branches,
         commits,
         commitsHasMore: commits.length === limit,
         loading: false,
+        ...(rootChanged ? { detail: null } : {}),
       });
     } catch (error) {
       if (token !== this.refreshToken || this.state.path !== path) return;

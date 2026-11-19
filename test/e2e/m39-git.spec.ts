@@ -888,3 +888,60 @@ test("M39：对比视图改动标记与滚动联动", async () => {
     await fs.rm(userDataDir, { recursive: true, force: true });
   }
 });
+
+/** M39：打开子目录文件只会改变仓库探测路径，不应重置历史详情或对比列表。 */
+test("M39：打开子目录文件不重置历史与对比栏", async () => {
+  test.setTimeout(180_000);
+  const repo = await fs.mkdtemp(path.join(os.tmpdir(), "panda-probe-"));
+  const userDataDir = await fs.mkdtemp(path.join(os.tmpdir(), "panda-probe-ud-"));
+  await initRepo(repo);
+  await fs.mkdir(path.join(repo, "docs"), { recursive: true });
+  await fs.mkdir(path.join(repo, "other"), { recursive: true });
+  await fs.writeFile(path.join(repo, "docs", "a.md"), "# A\n\n第一版\n", "utf8");
+  await fs.writeFile(path.join(repo, "other", "b.md"), "# B\n", "utf8");
+  await git(repo, ["add", "."]);
+  await git(repo, ["commit", "-m", "初始提交"]);
+  await fs.writeFile(path.join(repo, "docs", "a.md"), "# A\n\n第二版\n", "utf8");
+  await fs.writeFile(path.join(repo, "other", "b.md"), "# B\n\n更新\n", "utf8");
+  await git(repo, ["add", "."]);
+  await git(repo, ["commit", "-m", "第二次提交"]);
+
+  const app = await electron.launch({
+    args: ["."],
+    cwd: CWD,
+    env: { ...process.env, PANDA_USER_DATA_DIR: userDataDir },
+  });
+  try {
+    const page = await app.firstWindow();
+    await openFolder(page, app, repo);
+    await page.getByRole("tab", { name: "Git", exact: true }).click();
+
+    // 历史：展开提交后打开子目录文件，详情不应被清空。
+    await page.getByRole("tab", { name: "历史", exact: true }).click();
+    await expect(page.locator(".git-commit-row")).toHaveCount(2, { timeout: 20_000 });
+    await page.locator(".git-commit-row").first().click();
+    const detailFile = page.locator(".git-detail-file").filter({ hasText: "docs/a.md" });
+    await expect(detailFile).toBeVisible({ timeout: 20_000 });
+    await detailFile.click();
+    await expect(page.locator(".git-diff-pane")).toBeVisible({ timeout: 20_000 });
+    // 探测路径从仓库根变为 docs/：历史详情与提交列表必须保留。
+    await expect(page.locator(".git-commit-expand")).toContainText("docs/a.md");
+    await expect(page.locator(".git-commit-expand")).not.toContainText("读取提交详情");
+    await expect(page.locator(".git-commit-row")).toHaveCount(2);
+
+    // 对比：选择另一个子目录的文件，列表节点不应被“读取中”整体替换。
+    await page.getByRole("tab", { name: "比较", exact: true }).click();
+    const compareFiles = page.locator(".git-compare-files");
+    await expect(page.locator(".git-compare-file")).toHaveCount(2, { timeout: 20_000 });
+    const listHandle = await compareFiles.elementHandle();
+    expect(listHandle).not.toBeNull();
+    await page.locator(".git-compare-file").filter({ hasText: "other/b.md" }).click();
+    await expect(page.locator(".git-diff-pane")).toBeVisible({ timeout: 20_000 });
+    // 旧实现会先清空对比状态并渲染“读取中…”，列表 DOM 被卸载。
+    expect(await listHandle?.isVisible()).toBe(true);
+  } finally {
+    await app.close();
+    await fs.rm(repo, { recursive: true, force: true });
+    await fs.rm(userDataDir, { recursive: true, force: true });
+  }
+});

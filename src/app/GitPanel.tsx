@@ -214,6 +214,8 @@ export function GitPanel({
   const [pickerQuery, setPickerQuery] = useState("");
   const [pickerLoadingMore, setPickerLoadingMore] = useState(false);
   const compareTokenRef = useRef(0);
+  /** 上一次比较使用的仓库与引用；相同则只静默刷新，不把列表换成“读取中”。 */
+  const compareKeyRef = useRef("");
   const compareWrapRef = useRef<HTMLDivElement>(null);
   const compareTouchedRef = useRef(false);
   const previousRepoRef = useRef(selectedRepo);
@@ -322,7 +324,14 @@ export function GitPanel({
     }
     let cancelled = false;
     const token = ++compareTokenRef.current;
-    setCompareStatus("loading");
+    const key = `${root}|${base}|${target}`;
+    const refsChanged = compareKeyRef.current !== key;
+    compareKeyRef.current = key;
+    // 仓库状态刷新（如打开文件）时引用未变：保留现有结果，等新结果到达再替换。
+    if (refsChanged) {
+      setCompareStatus("loading");
+      setCompareResult(null);
+    }
     setCompareError(null);
     const timer = setTimeout(() => {
       void window.panda.git
