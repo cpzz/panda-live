@@ -253,6 +253,8 @@ test("M4：查找与替换模式、快捷键与按钮提示", async () => {
     await page.keyboard.press("Control+h");
     await expect(sourceReplace).toBeVisible();
     await expect(sourceReplace).toHaveValue("Omega");
+    // Ctrl+F / Ctrl+H 打开面板后，焦点都落在查找输入框。
+    await expect(sourcePanel.locator('input[name="search"]')).toBeFocused();
     // 源码面板的替换按钮同样生效。
     await sourcePanel.locator('input[name="search"]').fill("Alpha");
     await expect(sourcePanel.locator(".search-count")).toContainText("1 / 1");
@@ -305,6 +307,24 @@ test("M4：查找替换窗口布局与预览查找", async () => {
     expect(Math.abs(findBox!.x - replaceBox!.x)).toBeLessThan(1);
     expect(Math.abs(findBox!.width - replaceBox!.width)).toBeLessThan(1);
 
+    // Ctrl+F / Ctrl+H 打开面板后，焦点都落在查找输入框。
+    await expect(panel.getByLabel("查找内容")).toBeFocused();
+
+    // 清除按钮：清空输入并让焦点回到输入框；无内容时按钮禁用并隐藏但保留占位。
+    const findInput = panel.getByLabel("查找内容");
+    const findClear = panel.locator(".search-row").first().locator(".find-clear");
+    const replaceClear = panel.locator(".search-replace-row").locator(".find-clear");
+    await replaceInput.fill("Omega");
+    await findInput.fill("Alpha");
+    await findClear.click();
+    await expect(findInput).toHaveValue("");
+    await expect(findInput).toBeFocused();
+    // 清空后按钮禁用并隐藏，但占位元素仍在。
+    await expect(findClear).toBeDisabled();
+    await replaceClear.click();
+    await expect(replaceInput).toHaveValue("");
+    await expect(replaceInput).toBeFocused();
+
     // 面板打开时选中正文再按 Ctrl+F，查找框带入选中内容。
     const paragraph = page.locator(".prose-editor p").first();
     await paragraph.click();
@@ -328,6 +348,8 @@ test("M4：查找替换窗口布局与预览查找", async () => {
     await page.keyboard.press("Control+f");
     const sourcePanel = page.locator(".cm-panels-top .source-search-panel");
     await expect(sourcePanel).toBeVisible();
+    // Ctrl+F / Ctrl+H 打开源码面板后，焦点都落在查找输入框。
+    await expect(sourcePanel.locator('input[name="search"]')).toBeFocused();
     const sourcePanelBox = await sourcePanel.boundingBox();
     const editorBox = await page.locator(".cm-editor").boundingBox();
     expect(sourcePanelBox).not.toBeNull();
@@ -356,6 +378,13 @@ test("M4：查找替换窗口布局与预览查找", async () => {
     expect(sourceReplaceBox).not.toBeNull();
     expect(Math.abs(sourceFindBox!.x - sourceReplaceBox!.x)).toBeLessThan(1);
     expect(Math.abs(sourceFindBox!.width - sourceReplaceBox!.width)).toBeLessThan(1);
+
+    // 源码面板的清除按钮：清空输入并让焦点回到输入框。
+    const sourceSearch = sourcePanel.locator('input[name="search"]');
+    await sourceSearch.fill("Alpha");
+    await sourcePanel.locator('button[name="clearSearch"]').click();
+    await expect(sourceSearch).toHaveValue("");
+    await expect(sourceSearch).toBeFocused();
     await page.keyboard.press("Escape");
     await expect(sourcePanel).toHaveCount(0);
 
@@ -365,7 +394,15 @@ test("M4：查找替换窗口布局与预览查找", async () => {
     await page.keyboard.press("Control+f");
     const previewPanel = page.locator(".preview-search-panel");
     await expect(previewPanel).toBeVisible();
-    await expect(previewPanel.getByLabel("替换内容")).toHaveCount(0);
+    // Ctrl+F 打开后焦点落在查找输入框，清除按钮可用。
+    await expect(previewPanel.getByLabel("查找内容")).toBeFocused();
+    await expect(previewPanel.locator(".find-clear")).toBeEnabled();
+    // 清除按钮清空内容并保持焦点；清空后按钮禁用。
+    await previewPanel.getByLabel("查找内容").fill("Alpha");
+    await previewPanel.locator(".find-clear").click();
+    await expect(previewPanel.getByLabel("查找内容")).toHaveValue("");
+    await expect(previewPanel.getByLabel("查找内容")).toBeFocused();
+    await expect(previewPanel.locator(".find-clear")).toBeDisabled();
     await previewPanel.getByLabel("查找内容").fill("Alpha");
     await expect(previewPanel.locator(".search-count")).toContainText("1 / 3");
     const highlighted = await page.evaluate(
@@ -431,6 +468,9 @@ test("M4：查找面板跨模式保持与分栏预览查找", async () => {
     await page.keyboard.press("Control+f");
     const previewPanel = page.locator(".preview-search-panel");
     await expect(previewPanel).toBeVisible();
+    // 分栏预览侧 Ctrl+F 后焦点同样落在查找输入框，清除按钮可用。
+    await expect(previewPanel.getByLabel("查找内容")).toBeFocused();
+    await expect(previewPanel.locator(".find-clear")).toBeEnabled();
     await expect(previewPanel.getByLabel("查找内容")).toHaveValue("Alpha");
     await expect(previewPanel.locator(".search-count")).toContainText("1 / 3");
 

@@ -50,6 +50,7 @@ const CHEVRON_UP_ICON = `<svg ${ICON_ATTRS}><path d="m18 15-6-6-6 6"/></svg>`;
 const SELECT_ALL_ICON = `<svg ${ICON_ATTRS}><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M16 3h3a2 2 0 0 1 2 2v3"/><path d="M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/><path d="m9 12 2 2 4-4"/></svg>`;
 const REPLACE_ICON = `<svg ${ICON_ATTRS}><path d="M14 4a1 1 0 0 1 1-1"/><path d="M15 10a1 1 0 0 1-1-1"/><path d="M21 4a1 1 0 0 0-1-1"/><path d="M21 9a1 1 0 0 1-1 1"/><path d="m3 7 3 3 3-3"/><path d="M6 10V5a2 2 0 0 1 2-2h2"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>`;
 const REPLACE_ALL_ICON = `<svg ${ICON_ATTRS}><path d="M14 14a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1"/><path d="M14 4a1 1 0 0 1 1-1"/><path d="M15 10a1 1 0 0 1-1-1"/><path d="M19 14a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1"/><path d="M21 4a1 1 0 0 0-1-1"/><path d="M21 9a1 1 0 0 1-1 1"/><path d="M6 10V5a2 2 0 0 1 2-2h2"/><path d="m3 7 3 3 3-3"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>`;
+const CLOSE_ICON = `<svg ${ICON_ATTRS}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>`;
 
 function svgButton(markup: string, label: string, title: string): HTMLButtonElement {
   const button = createElement("button", "find-icon");
@@ -57,6 +58,17 @@ function svgButton(markup: string, label: string, title: string): HTMLButtonElem
   button.innerHTML = markup;
   button.setAttribute("aria-label", label);
   button.title = title;
+  return button;
+}
+
+/** 输入框旁的清除按钮：无内容时隐藏但保留占位，避免行内按钮左右跳动。 */
+function clearButton(): HTMLButtonElement {
+  const button = createElement("button", "find-clear");
+  button.type = "button";
+  button.innerHTML = CLOSE_ICON;
+  button.setAttribute("aria-label", t("清除"));
+  button.title = t("清除");
+  button.disabled = true;
   return button;
 }
 
@@ -81,6 +93,8 @@ export class SourceSearchPanel implements Panel {
   private wholeWord: boolean;
   private readonly searchField: HTMLInputElement;
   private readonly replaceField: HTMLInputElement;
+  private readonly searchClearButton: HTMLButtonElement;
+  private readonly replaceClearButton: HTMLButtonElement;
   private readonly replaceRow: HTMLElement;
   private readonly expandButton: HTMLButtonElement;
   private readonly caseButton: HTMLButtonElement;
@@ -135,6 +149,17 @@ export class SourceSearchPanel implements Panel {
 
     const selectButton = svgButton(SELECT_ALL_ICON, t("选中全部匹配"), t("选中全部匹配"));
     selectButton.name = "select";
+    const searchClear = clearButton();
+    searchClear.name = "clearSearch";
+    this.searchClearButton = searchClear;
+    // 清除按钮内嵌在输入框右侧（VS Code 风格），不增加行宽，保证查找/替换输入框对齐。
+    const searchWrap = createElement("div", "search-field");
+    searchWrap.append(this.searchField, searchClear);
+    const replaceClear = clearButton();
+    replaceClear.name = "clearReplace";
+    this.replaceClearButton = replaceClear;
+    const replaceWrap = createElement("div", "search-field");
+    replaceWrap.append(this.replaceField, replaceClear);
     const previousButton = svgButton(CHEVRON_UP_ICON, t("上一个"), t("上一个（Shift+Enter）"));
     previousButton.name = "prev";
     const nextButton = svgButton(CHEVRON_DOWN_ICON, t("下一个"), t("下一个（Enter）"));
@@ -147,7 +172,7 @@ export class SourceSearchPanel implements Panel {
     const findRow = createElement("div", "search-row");
     findRow.append(
       this.expandButton,
-      this.searchField,
+      searchWrap,
       this.caseButton,
       this.regexpButton,
       this.wordButton,
@@ -159,7 +184,7 @@ export class SourceSearchPanel implements Panel {
     this.replaceRow = createElement("div", "search-row search-replace-row");
     const replaceSpacer = createElement("span", "search-spacer");
     replaceSpacer.setAttribute("aria-hidden", "true");
-    this.replaceRow.append(replaceSpacer, this.replaceField, replaceButton, replaceAllButton);
+    this.replaceRow.append(replaceSpacer, replaceWrap, replaceButton, replaceAllButton);
 
     this.dom = createElement("div", "source-search-panel");
     this.dom.setAttribute("role", "search");
@@ -186,8 +211,26 @@ export class SourceSearchPanel implements Panel {
       this.syncToggles();
       this.commit();
     });
-    this.searchField.addEventListener("input", () => this.commit());
-    this.replaceField.addEventListener("input", () => this.commit());
+    this.searchField.addEventListener("input", () => {
+      this.syncClearButtons();
+      this.commit();
+    });
+    this.replaceField.addEventListener("input", () => {
+      this.syncClearButtons();
+      this.commit();
+    });
+    searchClear.addEventListener("click", () => {
+      this.searchField.value = "";
+      this.syncClearButtons();
+      this.commit();
+      this.searchField.focus();
+    });
+    replaceClear.addEventListener("click", () => {
+      this.replaceField.value = "";
+      this.syncClearButtons();
+      this.commit();
+      this.replaceField.focus();
+    });
     selectButton.addEventListener("click", () => {
       selectMatches(view);
     });
@@ -211,10 +254,17 @@ export class SourceSearchPanel implements Panel {
       closeSearchPanel(view);
     };
     window.addEventListener("keydown", this.onWindowKeyDown, true);
+    this.syncClearButtons();
     this.updateCount();
   }
 
-  /** 打开面板或切换模式时聚焦对应输入：查找模式聚焦查找框，替换模式聚焦替换框。 */
+  /** 同步清除按钮的可用状态；禁用时保留占位避免按钮左右跳动。 */
+  private syncClearButtons(): void {
+    this.searchClearButton.disabled = this.searchField.value.length === 0;
+    this.replaceClearButton.disabled = this.replaceField.value.length === 0;
+  }
+
+  /** 打开面板或切换模式时聚焦查找框；替换框由展开按钮或 Tab 进入。 */
   focus(mode: SearchMode = this.mode): void {
     const target = mode === "replace" ? this.replaceField : this.searchField;
     target.focus();
@@ -256,6 +306,7 @@ export class SourceSearchPanel implements Panel {
     this.regexp = query.regexp;
     this.wholeWord = query.wholeWord;
     this.syncToggles();
+    this.syncClearButtons();
     this.scheduleCount();
   }
 
@@ -363,9 +414,10 @@ export function openSourceSearch(
   const panel = openPanels.get(view);
   if (panel) {
     panel.setMode(mode);
-    panel.focus(mode);
+    // Ctrl+F / Ctrl+H 打开时都聚焦查找框，替换框由展开按钮或 Tab 进入。
+    panel.focus("find");
     return;
   }
   openSearchPanel(view);
-  openPanels.get(view)?.focus(mode);
+  openPanels.get(view)?.focus("find");
 }

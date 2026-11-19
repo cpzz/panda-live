@@ -2967,6 +2967,51 @@ body.resizing * {
   color: var(--accent);
 }
 
+/* 查找/替换输入框容器：清除按钮内嵌在输入框右侧，不增加行宽。 */
+.search-field {
+  position: relative;
+  flex: 0 1 190px;
+  min-width: 0;
+  width: 190px;
+}
+
+.search-field .search-input {
+  flex: 1 1 auto;
+  width: 100%;
+}
+
+.search-field:has(.find-clear:not(:disabled)) .search-input {
+  padding-right: 24px;
+}
+
+/* 查找/替换输入框的清除按钮：无内容时隐藏但保留占位，输入框宽度不跳动。 */
+.find-clear {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.find-clear:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--fg);
+}
+
+.find-clear:disabled {
+  visibility: hidden;
+  cursor: default;
+}
+
 .find-icon {
   flex: 0 0 auto;
   display: inline-flex;

@@ -58,6 +58,8 @@ export function PreviewSearchPanel({ containerRef, request, contentKey }: Previe
   const [active, setActive] = useState(0);
   const [invalid, setInvalid] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  /** Ctrl+F/H 打开面板时待聚焦标记；由 ref callback 在 DOM 提交时同步消费。 */
+  const pendingFocusRef = useRef(false);
   /** 已消费的请求 token；模式切换导致 request 变为 null 再恢复时不重放。 */
   const handledTokenRef = useRef(0);
 
@@ -82,9 +84,23 @@ export function PreviewSearchPanel({ containerRef, request, contentKey }: Previe
     setOpen(true);
     if (request.seed) setTerm(request.seed);
     if (request.options) setOptions(request.options);
-    const frame = requestAnimationFrame(() => inputRef.current?.focus());
-    return () => cancelAnimationFrame(frame);
+    // 面板已挂载时立即聚焦；首次打开面板尚未挂载，交给 ref callback 同步聚焦——
+    // 不用 requestAnimationFrame：窗口被遮挡节流时回调不执行，焦点会丢失。
+    if (inputRef.current) {
+      inputRef.current.focus();
+    } else {
+      pendingFocusRef.current = true;
+    }
   }, [request]);
+
+  /** 查找输入框的 ref callback：DOM 提交时同步消费待聚焦标记。 */
+  const focusSearchInput = (el: HTMLInputElement | null): void => {
+    inputRef.current = el;
+    if (el && pendingFocusRef.current) {
+      pendingFocusRef.current = false;
+      el.focus();
+    }
+  };
 
   // 输入、选项或预览内容变化后重算匹配。
   useEffect(() => {
@@ -175,14 +191,29 @@ export function PreviewSearchPanel({ containerRef, request, contentKey }: Previe
   return (
     <div className="search-panel preview-search-panel" role="search" onKeyDown={onKeyDown}>
       <div className="search-row">
-        <input
-          ref={inputRef}
-          className="search-input"
-          placeholder={t("查找")}
-          value={term}
-          aria-label={t("查找内容")}
-          onChange={(event) => setTerm(event.target.value)}
-        />
+        <div className="search-field">
+          <input
+            ref={focusSearchInput}
+            className="search-input"
+            placeholder={t("查找")}
+            value={term}
+            aria-label={t("查找内容")}
+            onChange={(event) => setTerm(event.target.value)}
+          />
+          <button
+            type="button"
+            className="find-clear"
+            aria-label={t("清除")}
+            title={t("清除")}
+            disabled={term.length === 0}
+            onClick={() => {
+              setTerm("");
+              inputRef.current?.focus();
+            }}
+          >
+            <Icon name="close" size={12} />
+          </button>
+        </div>
         <button
           type="button"
           className={options.caseSensitive ? "find-toggle active" : "find-toggle"}

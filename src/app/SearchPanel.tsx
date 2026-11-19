@@ -22,6 +22,8 @@ export function SearchPanel({ editor, request, onClose }: SearchPanelProps) {
   const [info, setInfo] = useState({ active: 0, total: 0 });
   const inputRef = useRef<HTMLInputElement>(null);
   const replaceInputRef = useRef<HTMLInputElement>(null);
+  /** Ctrl+F/H 打开面板时待聚焦标记；由 ref callback 在 DOM 提交时同步消费。 */
+  const pendingFocusRef = useRef(false);
   /** 已消费的请求 token；模式切换导致 request 变为 null 再恢复时不重放。 */
   const handledTokenRef = useRef(0);
 
@@ -38,13 +40,24 @@ export function SearchPanel({ editor, request, onClose }: SearchPanelProps) {
     if (request.seed) setTerm(request.seed);
     if (request.replacement !== undefined) setReplacement(request.replacement);
     if (request.options) setOptions(request.options);
-    // 替换模式聚焦替换框；状态更新后再取 ref。
-    const frame = requestAnimationFrame(() => {
-      const target = request.mode === "replace" ? replaceInputRef.current : inputRef.current;
-      target?.focus();
-    });
-    return () => cancelAnimationFrame(frame);
+    // Ctrl+F / Ctrl+H 打开时都聚焦查找框，替换框由展开按钮或 Tab 进入。
+    // 面板已挂载时立即聚焦；首次打开面板尚未挂载，交给 ref callback 同步聚焦——
+    // 不用 requestAnimationFrame：窗口被遮挡节流时回调不执行，焦点会丢失。
+    if (inputRef.current) {
+      inputRef.current.focus();
+    } else {
+      pendingFocusRef.current = true;
+    }
   }, [request]);
+
+  /** 查找输入框的 ref callback：DOM 提交时同步消费待聚焦标记。 */
+  const focusSearchInput = (el: HTMLInputElement | null): void => {
+    inputRef.current = el;
+    if (el && pendingFocusRef.current) {
+      pendingFocusRef.current = false;
+      el.focus();
+    }
+  };
 
   // 模式切换时 request 变为 null：关闭面板，避免切回该模式时重新出现。
   useEffect(() => {
@@ -129,14 +142,29 @@ export function SearchPanel({ editor, request, onClose }: SearchPanelProps) {
         >
           <Icon name={mode === "replace" ? "chevron-down" : "chevron-right"} size={14} />
         </button>
-        <input
-          ref={inputRef}
-          className="search-input"
-          placeholder={t("查找")}
-          value={term}
-          aria-label={t("查找内容")}
-          onChange={(event) => setTerm(event.target.value)}
-        />
+        <div className="search-field">
+          <input
+            ref={focusSearchInput}
+            className="search-input"
+            placeholder={t("查找")}
+            value={term}
+            aria-label={t("查找内容")}
+            onChange={(event) => setTerm(event.target.value)}
+          />
+          <button
+            type="button"
+            className="find-clear"
+            aria-label={t("清除")}
+            title={t("清除")}
+            disabled={term.length === 0}
+            onClick={() => {
+              setTerm("");
+              inputRef.current?.focus();
+            }}
+          >
+            <Icon name="close" size={12} />
+          </button>
+        </div>
         <button
           type="button"
           className={options.caseSensitive ? "find-toggle active" : "find-toggle"}
@@ -194,14 +222,29 @@ export function SearchPanel({ editor, request, onClose }: SearchPanelProps) {
       {mode === "replace" && (
         <div className="search-row search-replace-row">
           <span className="search-spacer" aria-hidden="true" />
-          <input
-            ref={replaceInputRef}
-            className="search-input"
-            placeholder={t("替换为")}
-            value={replacement}
-            aria-label={t("替换内容")}
-            onChange={(event) => setReplacement(event.target.value)}
-          />
+          <div className="search-field">
+            <input
+              ref={replaceInputRef}
+              className="search-input"
+              placeholder={t("替换为")}
+              value={replacement}
+              aria-label={t("替换内容")}
+              onChange={(event) => setReplacement(event.target.value)}
+            />
+            <button
+              type="button"
+              className="find-clear"
+              aria-label={t("清除")}
+              title={t("清除")}
+              disabled={replacement.length === 0}
+              onClick={() => {
+                setReplacement("");
+                replaceInputRef.current?.focus();
+              }}
+            >
+              <Icon name="close" size={12} />
+            </button>
+          </div>
           <button
             type="button"
             className="find-icon"
