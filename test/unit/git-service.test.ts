@@ -266,6 +266,8 @@ describe.skipIf(!hasGit)("Git 历史与提交详情", () => {
       const service = new GitService();
       const merge = await service.commitDetail(repo, "HEAD");
       expect(merge.subject).toBe("合并功能分支");
+      // rawMessage 为 %B 原始完整信息，供 Amend 回填。
+      expect(merge.rawMessage).toContain("合并功能分支");
       // 与 `git diff HEAD~1 --name-only` 一致：只列出第一父提交之后带来的文件。
       expect(merge.files).toContain("feature.txt");
       expect(merge.files).not.toContain("main.txt");

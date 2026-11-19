@@ -581,11 +581,12 @@ export class GitService {
       throw new PandaError("E_GIT_OPERATION", t("提交引用不合法：{0}", hash));
     }
     const meta = await runGit(
-      ["show", "-s", "--pretty=format:%H%x1f%h%x1f%s%x1f%an%x1f%aI%x1f%b", hash],
+      // 末尾追加 %B：subject（%s）会把第一段折叠成一行，Amend 回填需要原始换行结构。
+      ["show", "-s", "--pretty=format:%H%x1f%h%x1f%s%x1f%an%x1f%aI%x1f%b%x1f%B", hash],
       root,
       command,
     );
-    const [fullHash, shortHash, subject, author, date, body] = meta.stdout.split("\x1f");
+    const [fullHash, shortHash, subject, author, date, body, rawMessage] = meta.stdout.split("\x1f");
     const files = await runGit(
       // 合并提交默认不输出文件列表：--first-parent 按第一父提交比较，
       // 与 `git diff HEAD~1 --name-only` 一致；--root 保证首个提交也能列出文件。
@@ -600,6 +601,7 @@ export class GitService {
       author: author ?? "",
       date: date ?? "",
       body: body ?? "",
+      rawMessage: rawMessage ?? "",
       files: parseCommitFiles(files.stdout),
     };
   }

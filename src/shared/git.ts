@@ -60,6 +60,8 @@ export interface GitCommit {
 
 export interface GitCommitDetail extends GitCommit {
   body: string;
+  /** 原始完整提交信息（%B，含换行结构），供 Amend 回填使用。 */
+  rawMessage: string;
   files: string[];
 }
 

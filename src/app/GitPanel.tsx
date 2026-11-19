@@ -234,12 +234,13 @@ export function GitPanel({
     [changes],
   );
   const stagedCount = groups.staged.length;
-  const canCommit = stagedCount > 0 && message.trim().length > 0 && !busy && !committing;
+  // Amend 只改提交信息时允许零暂存提交（git commit --amend 本身支持）。
+  const canCommit = (amend || stagedCount > 0) && message.trim().length > 0 && !busy && !committing;
   const commitHint = committing
     ? t("提交中…")
     : busy
       ? t("正在执行其他 Git 操作")
-      : stagedCount === 0
+      : stagedCount === 0 && !amend
         ? t("请先暂存文件")
         : message.trim().length === 0
           ? t("请填写提交信息")
@@ -516,7 +517,8 @@ export function GitPanel({
       .commitDetail({ root, hash: head.hash })
       .then((detail) => {
         if (token !== amendTokenRef.current) return;
-        setMessage([detail.subject, detail.body.trim()].filter(Boolean).join("\n\n"));
+        // 用原始完整信息（%B）回填，保留多行结构；subject（%s）会把第一段折叠成一行。
+        setMessage(detail.rawMessage.trim());
       })
       .catch(() => {
         if (token === amendTokenRef.current) setMessage("");
@@ -525,7 +527,9 @@ export function GitPanel({
 
   const runCommit = (): void => {
     const text = message.trim();
-    if (!text || stagedCount === 0 || busy || committing) return;
+    if (!text || busy || committing) return;
+    // Amend 且零暂存时跳过暂存检查，仅改写上次提交的信息。
+    if (!amend && stagedCount === 0) return;
     if (!confirmDirty("commit")) return;
     setCommitting(true);
     void (async () => {

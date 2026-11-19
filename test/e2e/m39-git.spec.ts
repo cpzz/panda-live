@@ -32,7 +32,8 @@ async function openFolder(page: import("@playwright/test").Page, app: import("@p
   await app.evaluate(({ dialog }, target) => {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
   }, dir);
-  await page.getByRole("button", { name: "打开文件夹", exact: true }).click();
+  // 打开文件夹后工作区空态会出现同名按钮，限定工具栏避免 strict mode 冲突。
+  await page.locator(".toolbar").getByRole("button", { name: "打开文件夹", exact: true }).click();
 }
 
 /** M39：源代码管理面板的变更、暂存、提交、分支与历史。 */
@@ -499,6 +500,56 @@ test("M39：修订上次提交", async () => {
     await expect(page.locator(".git-commit-row")).toHaveCount(1);
     await expect(page.locator(".git-commit-row").first()).toContainText("修订初始提交");
     expect(await git(repo, ["log", "--format=%s"])).toBe("修订初始提交");
+  } finally {
+    await app.close();
+    await fs.rm(repo, { recursive: true, force: true });
+    await fs.rm(userDataDir, { recursive: true, force: true });
+  }
+});
+
+/** M39：Amend 用 %B 回填保留多行提交信息；零暂存时仍可仅改写提交信息。 */
+test("M39：Amend 多行信息与零暂存修订", async () => {
+  test.setTimeout(180_000);
+  const repo = await fs.mkdtemp(path.join(os.tmpdir(), "panda-amend-multi-"));
+  const userDataDir = await fs.mkdtemp(path.join(os.tmpdir(), "panda-amend-multi-ud-"));
+  await initRepo(repo);
+  await fs.writeFile(path.join(repo, "base.md"), "# 基础\n", "utf8");
+  await git(repo, ["add", "."]);
+  // 多行提交信息：标题 + 正文（正文内含换行）。
+  await git(repo, ["commit", "-m", "多行提交标题", "-m", "正文第一行\n正文第二行"]);
+
+  const app = await electron.launch({
+    args: ["."],
+    cwd: CWD,
+    env: { ...process.env, PANDA_USER_DATA_DIR: userDataDir },
+  });
+  try {
+    const page = await app.firstWindow();
+    await openFolder(page, app, repo);
+    await page.getByRole("tab", { name: "Git", exact: true }).click();
+
+    await expect(page.locator(".git-clean")).toHaveText("工作区没有变更", { timeout: 20_000 });
+
+    const amendBox = page.getByRole("checkbox", { name: "修订上次提交" });
+    const messageBox = page.getByRole("textbox", { name: "提交信息", exact: true });
+
+    // 勾选 Amend 后按原始多行结构回填，而非折叠成一行。
+    await amendBox.check();
+    await expect(messageBox).toHaveValue("多行提交标题\n\n正文第一行\n正文第二行");
+
+    // 无暂存改动时修改提交信息并提交，仅改写上次提交。
+    const commitButton = page.getByRole("button", { name: "提交", exact: true });
+    await expect(commitButton).toBeEnabled();
+    await messageBox.fill("修订后的标题\n\n修订后的正文");
+    await commitButton.click();
+    await expect(page.locator(".git-clean")).toHaveText("工作区没有变更", { timeout: 20_000 });
+
+    await page.getByRole("tab", { name: "历史", exact: true }).click();
+    await expect(page.locator(".git-commit-row")).toHaveCount(1);
+    await expect(page.locator(".git-commit-row").first()).toContainText("修订后的标题");
+    expect((await git(repo, ["log", "--format=%B", "-1"])).trim()).toBe(
+      "修订后的标题\n\n修订后的正文",
+    );
   } finally {
     await app.close();
     await fs.rm(repo, { recursive: true, force: true });
