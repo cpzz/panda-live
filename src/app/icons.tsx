@@ -356,7 +356,7 @@ const ICONS = {
 
 export type IconName = keyof typeof ICONS;
 
-const TEXT_FILE_EXT = /\.(md|markdown|mdown|mkd|qmd|rmd|mdx|adoc|txt)$/i;
+const TEXT_FILE_EXT = /\.(md|markdown|mdown|mkd|qmd|rmd|mdx|myst|mst|adoc|txt)$/i;
 const CODE_FILE_EXT = /\.(tex|latex|mml|mathml)$/i;
 const DIAGRAM_FILE_EXT = /\.(puml|plantuml|mmd|mermaid)$/i;
 const PDF_FILE_EXT = /\.pdf$/i;

@@ -781,41 +781,48 @@
   max-width: none;
 }
 
-/* MyST 容器：tab-set / grid */
-.prose-editor .myst-tab-set {
+/* MyST tab-set：标签页风格（激活页签与内容面板连成一体）；WYSIWYG 与预览共用 */
+.myst-tab-set {
   margin: 1em 0;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  overflow: hidden;
 }
 
 .myst-tab-bar {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface-muted);
+  gap: 2px;
+  padding: 0 8px;
 }
 
 .myst-tab-button {
-  padding: 4px 10px;
-  border: 0;
-  border-radius: 6px;
+  position: relative;
+  z-index: 1;
+  margin-bottom: -1px;
+  padding: 5px 16px;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 8px 8px 0 0;
   background: transparent;
   color: var(--muted);
   font-size: 0.85em;
   cursor: pointer;
 }
 
+.myst-tab-button:hover {
+  color: var(--fg);
+}
+
 .myst-tab-button.active {
+  border-color: var(--border);
   background: var(--surface);
   color: var(--fg);
-  box-shadow: inset 0 0 0 1px var(--border);
+  font-weight: 600;
 }
 
 .myst-tab-body {
-  padding: 10px 14px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 0 8px 8px 8px;
+  background: var(--surface);
 }
 
 .myst-tab-body > .myst-tab-item {
@@ -829,20 +836,42 @@
 .myst-tab-set[data-active="4"] > .myst-tab-body > .myst-tab-item:nth-child(5),
 .myst-tab-set[data-active="5"] > .myst-tab-body > .myst-tab-item:nth-child(6),
 .myst-tab-set[data-active="6"] > .myst-tab-body > .myst-tab-item:nth-child(7),
-.myst-tab-set[data-active="7"] > .myst-tab-body > .myst-tab-item:nth-child(8) {
+.myst-tab-set[data-active="7"] > .myst-tab-body > .myst-tab-item:nth-child(8),
+.myst-tab-set[data-active="8"] > .myst-tab-body > .myst-tab-item:nth-child(9),
+.myst-tab-set[data-active="9"] > .myst-tab-body > .myst-tab-item:nth-child(10),
+.myst-tab-set[data-active="10"] > .myst-tab-body > .myst-tab-item:nth-child(11),
+.myst-tab-set[data-active="11"] > .myst-tab-body > .myst-tab-item:nth-child(12),
+.myst-tab-set[data-active="12"] > .myst-tab-body > .myst-tab-item:nth-child(13),
+.myst-tab-set[data-active="13"] > .myst-tab-body > .myst-tab-item:nth-child(14),
+.myst-tab-set[data-active="14"] > .myst-tab-body > .myst-tab-item:nth-child(15),
+.myst-tab-set[data-active="15"] > .myst-tab-body > .myst-tab-item:nth-child(16) {
   display: block;
 }
 
-.prose-editor .myst-grid {
+/* MyST grid：编辑器侧列数由行内样式控制，预览侧由 data-columns 映射 */
+.prose-editor .myst-grid,
+.myst-grid[data-columns] {
   display: grid;
   gap: 16px;
   margin: 1em 0;
 }
 
-.prose-editor .myst-grid-outline > .myst-grid-item {
+.prose-editor .myst-grid-outline > .myst-grid-item,
+.myst-grid.myst-grid-outline > .myst-grid-item {
   padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: 8px;
 }
 
-
+.myst-grid[data-columns="1"] { grid-template-columns: repeat(1, minmax(0, 1fr)); }
+.myst-grid[data-columns="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.myst-grid[data-columns="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.myst-grid[data-columns="4"] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.myst-grid[data-columns="5"] { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.myst-grid[data-columns="6"] { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.myst-grid[data-columns="7"] { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.myst-grid[data-columns="8"] { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+.myst-grid[data-columns="9"] { grid-template-columns: repeat(9, minmax(0, 1fr)); }
+.myst-grid[data-columns="10"] { grid-template-columns: repeat(10, minmax(0, 1fr)); }
+.myst-grid[data-columns="11"] { grid-template-columns: repeat(11, minmax(0, 1fr)); }
+.myst-grid[data-columns="12"] { grid-template-columns: repeat(12, minmax(0, 1fr)); }

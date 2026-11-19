@@ -75,7 +75,7 @@ const CODE_EXTENSIONS = [
   "toml",
 ];
 
-const MARKDOWN_EXTENSIONS = ["md", "markdown", "mdown", "mkd", "qmd", "rmd", "mdx"];
+const MARKDOWN_EXTENSIONS = ["md", "markdown", "mdown", "mkd", "qmd", "rmd", "mdx", "myst", "mst"];
 
 /** 以只读图片预览打开的扩展名。 */
 const IMAGE_EXTENSIONS = [

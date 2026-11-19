@@ -209,6 +209,31 @@ export function RenderedMarkdown({
     return () => host.removeEventListener("click", onClick);
   }, [html]);
 
+  // MyST 预览页签：点击页签按钮切换激活项，机制与 WYSIWYG 一致（data-active 索引）。见 §8.2。
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    const onClick = (event: MouseEvent): void => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const button = target.closest<HTMLElement>(".myst-tab-button");
+      const bar = button?.parentElement;
+      if (!button || !bar || !bar.classList.contains("myst-tab-bar")) return;
+      const set = bar.closest<HTMLElement>(".myst-tab-set");
+      if (!set) return;
+      const index = [...bar.children].indexOf(button);
+      if (index < 0) return;
+      set.setAttribute("data-active", String(index));
+      [...bar.children].forEach((child, childIndex) => {
+        const item = child as HTMLElement;
+        item.classList.toggle("active", childIndex === index);
+        item.setAttribute("aria-selected", String(childIndex === index));
+      });
+    };
+    host.addEventListener("click", onClick);
+    return () => host.removeEventListener("click", onClick);
+  }, [html]);
+
   // 片段视图的「返回全文」通过 DOM 事件通知上层切换粒度。
   useEffect(() => {
     const host = hostRef.current;

@@ -43,6 +43,9 @@ const EXTENSION_MAP: Record<string, BuiltinDocumentFormat> = {
   qmd: "markdown",
   rmd: "markdown",
   mdx: "markdown",
+  // MyST 增强标记：按 Markdown 解析，预览渲染 tab-set / grid 指令
+  myst: "markdown",
+  mst: "markdown",
   tex: "latex",
   latex: "latex",
   mathml: "mathml",

@@ -122,7 +122,7 @@ Panda Live 是本地优先的桌面文档编辑器，核心特征是**编辑区�
 
 | 扩展名 | 格式适配器 | 模式 |
 |---|---|---|
-| `.md` `.markdown` `.mdown` `.mkd` `.qmd` `.rmd` `.mdx` | Markdown | WYSIWYG / 源码 / 分栏 / 预览 |
+| `.md` `.markdown` `.mdown` `.mkd` `.qmd` `.rmd` `.mdx` `.myst` `.mst` | Markdown | WYSIWYG / 源码 / 分栏 / 预览 |
 | `.tex` `.latex` | LaTeX | 源码 / 分栏 / 预览（PDF 编译） |
 | `.mathml` `.mml` | MathML | 源码 / 分栏 / 预览（渲染） |
 | `.puml` `.plantuml` | PlantUML | 源码 / 分栏 / 预览（SVG） |
@@ -133,7 +133,7 @@ Panda Live 是本地优先的桌面文档编辑器，核心特征是**编辑区�
 | 扩展提供的格式 | Extension Provider | 按 `capabilities`：源码或 WYSIWYG + 预览 |
 | 其他文本与代码 | Text / 代码 | 源码 |
 
-`.mdx` 按 Markdown 处理，JSX 片段作为原始块保留，不执行。`.puml` / `.plantuml` / `.mmd` / `.mermaid` 作为单图表文档打开：源码可写，预览为 SVG，不套用 Markdown schema。`.svg` 作为独立文本格式打开：源码按 XML 编辑，预览以 data URL 放入 `<img>` 隔离渲染，SVG 内脚本不执行、样式不影响应用界面。
+`.mdx` 按 Markdown 处理，JSX 片段作为原始块保留，不执行。`.myst` / `.mst` 同样按 Markdown 处理，额外支持官方冒号围栏写法（`:::{tab-set}`）。`.puml` / `.plantuml` / `.mmd` / `.mermaid` 作为单图表文档打开：源码可写，预览为 SVG，不套用 Markdown schema。`.svg` 作为独立文本格式打开：源码按 XML 编辑，预览以 data URL 放入 `<img>` 隔离渲染，SVG 内脚本不执行、样式不影响应用界面。
 
 ---
 
@@ -785,7 +785,9 @@ stop
 | 脚注 `[^1]` 与 `[^1]: …` | mdast `footnoteReference` / `footnoteDefinition` | `raw_inline` / `raw_markdown`，只保留源码写法（渲染层不支持脚注） |
 | 未知 mdast 节点 | 无映射 | `raw_markdown`（原子），行内未知节点用 `raw_inline` |
 
-MyST 不需要正则预处理。外层围栏（例如六个反引号 + `{tab-set}`）被 micromark 解析为 `code` 节点，`lang` 为 `{tab-set}`，`value` 为内部文本；后置插件递归解析 `value`，将内部 `{tab-item}` 代码块转换为容器节点。该方式天然处理嵌套围栏，优于字符串替换。
+反引号围栏不需要正则预处理：外层围栏（例如六个反引号 + `{tab-set}`）被 micromark 解析为 `code` 节点，`lang` 为 `{tab-set}`，`value` 为内部文本；后置插件递归解析 `value`，将内部 `{tab-item}` 代码块转换为容器节点。该方式天然处理嵌套围栏，优于字符串替换。
+
+官方同样支持冒号围栏（`::::{tab-set}` / `:::{tab-item}`）。解析前先做一次按行重写：识别冒号块的嵌套关系（外层冒号数更多），按内部出现的反引号围栏长度把支持的指令块改写为等价的加长反引号围栏，其余行保持不动；存在未闭合块或非法嵌套时整体不转换，按普通文本渲染，避免误伤正文。
 
 ### 8.3 mdast ↔ ProseMirror 映射
 

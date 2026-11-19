@@ -86,7 +86,7 @@ export async function buildDocumentHtml(
 ): Promise<string> {
   const rendered = await renderMarkdownToHtml(document.content);
   const body = await inlineImages(await inlineDiagrams(rendered, options.theme), document.path);
-  const title = escapeTitle(document.name.replace(/\.(md|markdown|mdown|mkd|qmd|rmd|mdx)$/i, ""));
+  const title = escapeTitle(document.name.replace(/\.(md|markdown|mdown|mkd|qmd|rmd|mdx|myst|mst)$/i, ""));
   return `<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -106,7 +106,7 @@ ${body}
 
 /** 把导出 HTML 写入用户选择的位置。 */
 export async function saveHtml(document: DocumentState, html: string): Promise<string | null> {
-  const suggestedName = `${document.name.replace(/\.(md|markdown|mdown|mkd|qmd|rmd|mdx)$/i, "")}.html`;
+  const suggestedName = `${document.name.replace(/\.(md|markdown|mdown|mkd|qmd|rmd|mdx|myst|mst)$/i, "")}.html`;
   const ref = await window.panda.dialog.saveAs({
     suggestedName,
     filters: [{ name: "HTML", extensions: ["html"] }],

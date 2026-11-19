@@ -41,7 +41,7 @@ let extensions: ExtensionService | undefined;
 let windowStateTimer: ReturnType<typeof setTimeout> | null = null;
 const pendingOpenPaths: string[] = [];
 
-const DOCUMENT_EXTENSION = /\.(md|markdown|mdown|mkd|qmd|rmd|mdx|tex|latex|mathml|mml|puml|plantuml|mmd|mermaid|adoc|pdf)$/i;
+const DOCUMENT_EXTENSION = /\.(md|markdown|mdown|mkd|qmd|rmd|mdx|myst|mst|tex|latex|mathml|mml|puml|plantuml|mmd|mermaid|adoc|pdf)$/i;
 
 /** 从命令行参数提取可打开的文档路径（文件关联 / 第二实例）。见 §12.7。 */
 function extractOpenPaths(argv: readonly string[]): string[] {

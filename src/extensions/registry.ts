@@ -61,7 +61,7 @@ const BUILTIN_CAPABILITIES: Record<BuiltinDocumentFormat, FormatCapabilities> = 
 };
 
 const BUILTIN_EXTENSIONS: Record<BuiltinDocumentFormat, string[]> = {
-  markdown: [".md", ".markdown", ".mdown", ".mkd", ".qmd", ".rmd", ".mdx"],
+  markdown: [".md", ".markdown", ".mdown", ".mkd", ".qmd", ".rmd", ".mdx", ".myst", ".mst"],
   latex: [".tex", ".latex"],
   mathml: [".mathml", ".mml"],
   plantuml: [".puml", ".plantuml"],
