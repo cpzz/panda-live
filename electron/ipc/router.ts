@@ -42,7 +42,10 @@ export function registerAppHandlers(): void {
   handle("app:getInfo", (): AppInfo => ({
     version: app.getVersion(),
     electronVersion: process.versions.electron ?? "",
+    chromiumVersion: process.versions.chrome ?? "",
+    nodeVersion: process.versions.node ?? "",
     platform: process.platform,
+    arch: process.arch,
     userDataPath: app.getPath("userData"),
   }));
 }

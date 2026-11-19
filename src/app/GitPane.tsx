@@ -471,11 +471,13 @@ export function GitPane({
       cards.length > 0
         ? [...cards]
         : [...host.querySelectorAll<HTMLElement>(".diff-add, .diff-change, [data-diff-ghost]")];
-    if (targets.length === 0) return;
-    targets[Math.min(next, targets.length - 1)]?.scrollIntoView({
-      block: "start",
-      behavior: "smooth",
-    });
+    const target = targets[Math.min(next, targets.length - 1)];
+    if (!target) return;
+    // 把目标改动放到视口约 1/3 高度处，保留上文供阅读，而不是贴顶。
+    const scrollerRect = host.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    const delta = targetRect.top - scrollerRect.top - host.clientHeight / 3;
+    host.scrollTo({ top: Math.max(0, host.scrollTop + delta), behavior: "smooth" });
   };
 
   /** 逐处跳转：预览对比滚动到改动块，分栏移动右侧编辑器光标。 */

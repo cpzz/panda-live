@@ -1062,6 +1062,28 @@ export class SourceEditor {
     return { line: line.number, column: head - line.from + 1 };
   }
 
+  /**
+   * 按行/列定位光标，并把目标行放到视口约 1/3 高度处，
+   * 为跳转后的上文阅读留出空间（逐处改动跳转使用）。
+   */
+  setCursorAtRatio(cursor: { line: number; column: number }, ratio = 1 / 3): void {
+    const lineInfo = this.view.state.doc.line(
+      Math.min(Math.max(1, cursor.line), this.view.state.doc.lines),
+    );
+    const offset = Math.min(lineInfo.to, lineInfo.from + Math.max(0, cursor.column - 1));
+    this.view.dispatch({
+      selection: { anchor: offset },
+      scrollIntoView: true,
+    });
+    const scroller = this.view.scrollDOM;
+    const coords = this.view.coordsAtPos(offset);
+    if (coords) {
+      const rect = scroller.getBoundingClientRect();
+      scroller.scrollTop += coords.top - (rect.top + rect.height * ratio);
+    }
+    this.view.focus();
+  }
+
   /** 按行/列定位光标并滚动到可见区域。 */
   setCursor(cursor: { line: number; column: number }): void {
     const lineInfo = this.view.state.doc.line(Math.min(Math.max(1, cursor.line), this.view.state.doc.lines));

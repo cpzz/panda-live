@@ -238,7 +238,10 @@ export interface SaveDraftResult {
 export interface AppInfo {
   version: string;
   electronVersion: string;
+  chromiumVersion: string;
+  nodeVersion: string;
   platform: string;
+  arch: string;
   userDataPath: string;
 }
 

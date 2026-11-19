@@ -163,7 +163,7 @@ export function SourceDiffPane({
     if (!reveal) return;
     // 目标行可能落在折叠区内，先展开再定位。
     newEditorRef.current?.unfoldAtLine(reveal.line);
-    newEditorRef.current?.setCursor({ line: reveal.line, column: 1 });
+    newEditorRef.current?.setCursorAtRatio({ line: reveal.line, column: 1 });
   }, [reveal]);
 
   return (

@@ -2748,16 +2748,31 @@ body.resizing * {
   user-select: none;
 }
 
-.files-toolbar-label {
+/* 文件夹下拉列表：快速定位已打开的工作区目录。 */
+.files-folder-select {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* 与右侧「打开文件夹」按钮留出更明显的间隔。 */
+  margin-right: 10px;
+  height: 22px;
+  padding: 0 4px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg);
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: none;
+  letter-spacing: 0.04em;
+}
+
+.files-folder-select:hover:not(:disabled),
+.files-folder-select:focus-visible {
+  border-color: var(--border-strong);
+  background: var(--surface);
+}
+
+.files-folder-select:disabled {
+  color: var(--muted);
 }
 
 .tree-toggle {
@@ -3483,7 +3498,33 @@ body.resizing * {
   font-size: 12.5px;
 }
 
-/* 「关于」页的只读信息值与用户数据目录路径。 */
+/* 「关于」页：应用标识、分组标题与只读信息值。 */
+.settings-about-header {
+  padding-bottom: 12px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-about-header .settings-pane-title {
+  margin-bottom: 2px;
+}
+
+.settings-about-tagline {
+  margin: 0 0 6px;
+  color: var(--fg);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.settings-about-group {
+  margin: 18px 0 2px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
 .settings-about-value {
   color: var(--fg);
   font-variant-numeric: tabular-nums;

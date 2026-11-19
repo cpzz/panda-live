@@ -38,6 +38,14 @@ const SECTIONS: { key: SettingsSectionKey; title: string }[] = [
   { key: "about", title: "关于" },
 ];
 
+/** 把 Electron 的平台标识转换为展示名称。 */
+function describePlatform(platform: string): string {
+  if (platform === "win32") return "Windows";
+  if (platform === "darwin") return "macOS";
+  if (platform === "linux") return "Linux";
+  return platform;
+}
+
 /** 设置对话框：左侧分类导航 + 右侧内容面板；保存写盘不关闭窗口。见 doc/design.md §15.3。 */
 export function SettingsDialog({
   open,
@@ -460,10 +468,15 @@ export function SettingsDialog({
 
             {section === "about" && (
               <>
-                <h3 className="settings-pane-title">{t("Panda Live")}</h3>
-                <p className="settings-note">
-                  {t("本地优先的桌面文档编辑器：源码与渲染结果实时同步，保留文件原有编码与换行符，草稿与文档不会被上传。")}
-                </p>
+                <header className="settings-about-header">
+                  <h3 className="settings-pane-title">{t("Panda Live")}</h3>
+                  <p className="settings-about-tagline">{t("本地优先的 Markdown 文档编辑器")}</p>
+                  <p className="settings-note">
+                    {t("源码与渲染结果实时同步，保留文件原有编码与换行符；草稿与文档仅保存在本机。")}
+                  </p>
+                </header>
+
+                <h4 className="settings-about-group">{t("版本信息")}</h4>
                 <div className="settings-row">
                   <span>{t("版本")}</span>
                   <span className="settings-about-value">{appInfo?.version ?? "…"}</span>
@@ -473,14 +486,30 @@ export function SettingsDialog({
                   <span className="settings-about-value">{appInfo?.electronVersion || "…"}</span>
                 </div>
                 <div className="settings-row">
+                  <span>{t("Chromium 版本")}</span>
+                  <span className="settings-about-value">{appInfo?.chromiumVersion || "…"}</span>
+                </div>
+                <div className="settings-row">
+                  <span>{t("Node.js 版本")}</span>
+                  <span className="settings-about-value">{appInfo?.nodeVersion || "…"}</span>
+                </div>
+
+                <h4 className="settings-about-group">{t("运行环境")}</h4>
+                <div className="settings-row">
                   <span>{t("平台")}</span>
-                  <span className="settings-about-value">{appInfo?.platform ?? "…"}</span>
+                  <span className="settings-about-value">
+                    {appInfo ? describePlatform(appInfo.platform) : "…"}
+                  </span>
+                </div>
+                <div className="settings-row">
+                  <span>{t("架构")}</span>
+                  <span className="settings-about-value">{appInfo?.arch || "…"}</span>
                 </div>
                 <div className="settings-row settings-row-top">
                   <span>{t("用户数据目录")}</span>
                   <code className="settings-about-path">{appInfo?.userDataPath ?? "…"}</code>
                 </div>
-                <p className="settings-note">{t("排障时可提供以上版本与目录信息。")}</p>
+                <p className="settings-note">{t("反馈问题时，请附上以上版本与运行环境信息。")}</p>
               </>
             )}
           </div>

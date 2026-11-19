@@ -102,7 +102,6 @@ function TreeMenu({
 function NodeRow({
   node,
   depth,
-  parentPath,
   rootId,
   store,
   activePath,
@@ -115,8 +114,6 @@ function NodeRow({
 }: {
   node: WorkspaceNode;
   depth: number;
-  /** 该节点所在目录（根目录时为根路径），文件行刷新的目标。 */
-  parentPath: string;
   rootId: string;
   store: WorkspaceStore;
   activePath: string | null;
@@ -227,15 +224,17 @@ function NodeRow({
           {node.name}
         </button>
         <span className="tree-actions">
-          <button
-            type="button"
-            className="tree-action"
-            title={t("刷新")}
-            aria-label={t("刷新 {0}", node.name)}
-            onClick={() => void store.refreshNode(node.kind === "dir" ? node.path : parentPath)}
-          >
-            <Icon name="refresh" size={13} />
-          </button>
+          {node.kind === "dir" && (
+            <button
+              type="button"
+              className="tree-action"
+              title={t("刷新")}
+              aria-label={t("刷新 {0}", node.name)}
+              onClick={() => void store.refreshNode(node.path)}
+            >
+              <Icon name="refresh" size={13} />
+            </button>
+          )}
           <TreeMenu
             open={menuOpen}
             label={t("更多操作")}
@@ -252,7 +251,6 @@ function NodeRow({
               key={child.path}
               node={child}
               depth={depth + 1}
-              parentPath={node.path}
               rootId={rootId}
               store={store}
               activePath={activePath}
@@ -340,6 +338,29 @@ export function WorkspacePanel({
     scroller.scrollTo({ top: Math.max(0, centered) });
     return true;
   }, []);
+
+  /** 文件夹下拉列表：展开并滚动到指定工作区根目录。 */
+  const locateRoot = (rootPath: string): void => {
+    setCollapsedRoots((current) => {
+      if (!current.has(rootPath)) return current;
+      const next = new Set(current);
+      next.delete(rootPath);
+      return next;
+    });
+    requestAnimationFrame(() => {
+      const scroller = filesRef.current?.querySelector<HTMLElement>(".workspace-roots");
+      if (!scroller) return;
+      const section = [...scroller.querySelectorAll<HTMLElement>(".workspace-root")].find(
+        (element) => element.dataset.rootPath === rootPath,
+      );
+      if (!section) return;
+      const top =
+        section.getBoundingClientRect().top -
+        scroller.getBoundingClientRect().top +
+        scroller.scrollTop;
+      scroller.scrollTo({ top: Math.max(0, top) });
+    });
+  };
 
   // 当前标签切换后自动展开文件树的父目录，并展开被折叠的工作区根；
   // 展开完成后滚动定位（定位可能尚未展开父目录，行此时还未渲染）。
@@ -540,14 +561,30 @@ export function WorkspacePanel({
         {tab === "files" ? (
           <div className="sidebar-panel" ref={filesRef}>
             <div className="files-toolbar">
-              <span
-                className="files-toolbar-label"
-                title={state.roots.map((entry) => entry.root.path).join("\n")}
+              <select
+                className="files-folder-select"
+                aria-label={t("定位文件夹")}
+                title={
+                  state.roots.length === 0
+                    ? t("未打开文件夹")
+                    : state.roots.map((entry) => entry.root.path).join("\n")
+                }
+                defaultValue=""
+                disabled={state.roots.length === 0}
+                onChange={(event) => {
+                  const rootPath = event.target.value;
+                  // 复位为占位项，便于重复选择同一个文件夹。
+                  event.currentTarget.value = "";
+                  if (rootPath) locateRoot(rootPath);
+                }}
               >
-                {state.roots.length === 0
-                  ? t("工作区")
-                  : t("{0} 个文件夹", state.roots.length)}
-              </span>
+                <option value="">{`${t("文件夹")} (${state.roots.length})`}</option>
+                {state.roots.map((entry) => (
+                  <option key={entry.root.path} value={entry.root.path}>
+                    {entry.root.name}
+                  </option>
+                ))}
+              </select>
               <button
                 type="button"
                 className="icon-button"
@@ -579,6 +616,7 @@ export function WorkspacePanel({
                     <section
                       className={collapsed ? "workspace-root collapsed" : "workspace-root"}
                       key={entry.root.path}
+                      data-root-path={entry.root.path}
                     >
                       <div className="workspace-root-header">
                         <button
@@ -647,7 +685,6 @@ export function WorkspacePanel({
                               key={node.path}
                               node={node}
                               depth={0}
-                              parentPath={entry.root.path}
                               rootId={entry.root.rootId}
                               store={store}
                               activePath={activePath}
