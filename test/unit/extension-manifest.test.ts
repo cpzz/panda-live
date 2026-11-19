@@ -1,12 +1,26 @@
-import { describe, expect, it } from "vitest";
+﻿import { promises as fs } from "node:fs";
+import path from "node:path";
+import { beforeAll, describe, expect, it } from "vitest";
+import JSZip from "jszip";
 import { validateManifest } from "../../electron/extensions/manifest";
-import sample from "../../extensions/examples/asciidoc/extension.json";
 
 const VERSION = "0.1.0";
 
+/** 示例扩展清单从仓库内的 .panda 安装包读取，与真实发布产物保持一致。 */
+let sample: Record<string, unknown>;
+
+beforeAll(async () => {
+  const zip = await JSZip.loadAsync(
+    await fs.readFile(path.resolve("examples/asciidoc.panda")),
+  );
+  const entry = zip.file("extension.json");
+  expect(entry).not.toBeNull();
+  sample = JSON.parse((await entry!.async("string")) || "{}") as Record<string, unknown>;
+});
+
 function base(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    ...(sample as Record<string, unknown>),
+    ...sample,
     ...overrides,
   };
 }

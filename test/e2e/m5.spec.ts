@@ -1,4 +1,4 @@
-import { _electron as electron, expect, test, type ElectronApplication } from "@playwright/test";
+﻿import { _electron as electron, expect, test, type ElectronApplication } from "@playwright/test";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -59,10 +59,7 @@ test("M5：示例扩展新增 .adoc 格式，禁用后回退纯文本", async ()
   const app = await launch(userDataDir);
   try {
     const page = await app.firstWindow();
-    const archive = await packExtension(
-      path.resolve("extensions/examples/asciidoc"),
-      path.join(tempDir, "asciidoc.panda"),
-    );
+    const archive = path.resolve("examples/asciidoc.panda");
     const id = await installAndEnable(app, page, archive);
     expect(id).toBe("panda.sample-asciidoc");
 

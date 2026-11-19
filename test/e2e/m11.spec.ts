@@ -1,26 +1,8 @@
-import { _electron as electron, expect, test } from "@playwright/test";
+﻿import { _electron as electron, expect, test } from "@playwright/test";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import JSZip from "jszip";
-
 const CWD = path.resolve(".");
-
-async function packExtension(sourceDir: string, target: string): Promise<void> {
-  const zip = new JSZip();
-  const walk = async (current: string, prefix: string): Promise<void> => {
-    for (const entry of await fs.readdir(current, { withFileTypes: true })) {
-      const full = path.join(current, entry.name);
-      if (entry.isDirectory()) {
-        await walk(full, `${prefix}${entry.name}/`);
-      } else {
-        zip.file(`${prefix}${entry.name}`, await fs.readFile(full));
-      }
-    }
-  };
-  await walk(sourceDir, "");
-  await fs.writeFile(target, await zip.generateAsync({ type: "nodebuffer" }));
-}
 
 test("M11：命令面板支持过滤、执行与扩展命令", async () => {
   test.setTimeout(120_000);
@@ -63,8 +45,7 @@ test("M11：命令面板支持过滤、执行与扩展命令", async () => {
     await expect(palette).toHaveCount(0);
 
     // 安装示例扩展后，其贡献命令出现在面板并可执行。
-    const archive = path.join(tempDir, "asciidoc.panda");
-    await packExtension(path.resolve("extensions/examples/asciidoc"), archive);
+    const archive = path.resolve("examples/asciidoc.panda");
     await app.evaluate(({ dialog }, target) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
     }, archive);
