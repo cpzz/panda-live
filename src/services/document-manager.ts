@@ -416,24 +416,34 @@ export class DocumentManager {
   /** 由 App 注入的工作区打开动作（工作区状态保存在 WorkspaceStore）。 */
   openWorkspaceFolder: () => Promise<void> = async () => undefined;
 
-  async closeDocument(id: string): Promise<void> {
+  async closeDocument(
+    id: string,
+    bypass?: { saveAll?: boolean; discardAll?: boolean },
+  ): Promise<void> {
     const doc = this.findDocument(id);
     if (!doc) return;
     if (doc.dirty) {
-      // 弹窗前取消自动保存：否则对话框停留超过 10 s 时会把修改写盘，
-      // 用户选择“取消”后脏标记已经被清掉。
-      const pendingAutosave = this.autosaveTimers.get(id);
-      if (pendingAutosave) {
-        clearTimeout(pendingAutosave);
-        this.autosaveTimers.delete(id);
-      }
-      // 三选一：保存 / 不保存 / 取消；取消必须真正中止关闭且保留脏标记。
-      const choice = await window.panda.dialog.confirmClose({ name: doc.name });
-      if (choice === "cancel") return;
-      if (choice === "save") {
+      // 批量关闭时（关闭全部）：用 bypass 跳过逐文档确认，统一处理保存 / 丢弃。
+      if (bypass?.saveAll) {
         await this.saveDocument(id);
         const current = this.findDocument(id);
-        if (current?.dirty) return;
+        if (current?.dirty) return; // 保存失败则中止关闭
+      } else if (bypass?.discardAll) {
+        // 直接释放：不保存、不清 dirty（资源释放后 dirty 标记随对象一起丢）。
+      } else {
+        // 单个关闭：走三选一，允许"取消"中止。
+        const pendingAutosave = this.autosaveTimers.get(id);
+        if (pendingAutosave) {
+          clearTimeout(pendingAutosave);
+          this.autosaveTimers.delete(id);
+        }
+        const choice = await window.panda.dialog.confirmClose({ name: doc.name });
+        if (choice === "cancel") return;
+        if (choice === "save") {
+          await this.saveDocument(id);
+          const current = this.findDocument(id);
+          if (current?.dirty) return;
+        }
       }
     }
     await this.releaseDocumentResources(doc);

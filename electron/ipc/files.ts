@@ -173,6 +173,32 @@ export function registerFileHandlers({ files, getWindow }: FileHandlerOptions): 
     return "cancel" as const;
   });
 
+  // 关闭全部且有未保存文档时的四选一：全部保存 / 全部丢弃 / 逐个询问 / 取消。
+  handle("dialog:confirmCloseAll", async (request) => {
+    const options: MessageBoxOptions = {
+      type: "warning",
+      buttons: [
+        t("全部保存"),
+        t("全部丢弃"),
+        t("逐个询问"),
+        t("取消"),
+      ],
+      defaultId: 0,
+      cancelId: 3,
+      noLink: true,
+      message: t("关闭全部 {0} 个文档（其中 {1} 个有未保存修改）", request.total, request.dirty),
+      detail: t("“逐个询问”会对每个未保存文档逐一弹出三选一对话框。"),
+    };
+    const window = getWindow();
+    const result = window
+      ? await dialog.showMessageBox(window, options)
+      : await dialog.showMessageBox(options);
+    if (result.response === 0) return "saveAll" as const;
+    if (result.response === 1) return "discardAll" as const;
+    if (result.response === 2) return "askOneByOne" as const;
+    return "cancel" as const;
+  });
+
   handle("fs:readText", async (request) => files.readText(request.path));
 
   handle("fs:writeText", async (request) => files.writeText(request));

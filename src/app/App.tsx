@@ -2012,21 +2012,43 @@ export function App() {
       ?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [state.activeId, state.documents.length]);
 
-  /** 关闭全部文档：固定标签保留；先确认；逐文档沿用三选一，用户点「取消」时中止剩余关闭。 */
+  /** 关闭全部文档：固定标签保留；dirty 时弹四选一（全部保存 / 全部丢弃 / 逐个询问 / 取消）。 */
   const closeAllDocuments = async (): Promise<void> => {
     const docs = manager.getState().documents.filter((doc) => !doc.pinned);
     if (docs.length === 0) return;
     const dirtyCount = docs.filter((doc) => doc.dirty).length;
-    const message =
-      dirtyCount > 0
-        ? t("确定关闭全部 {0} 个文档吗？其中 {1} 个有未保存修改，关闭时将逐个询问。", docs.length, dirtyCount)
-        : t("确定关闭全部 {0} 个文档吗？", docs.length);
-    if (!window.confirm(message)) return;
     const ids = docs.map((doc) => doc.id);
-    for (const id of ids) {
-      await manager.closeDocument(id);
-      // 文档仍在列表中说明关闭被取消（保存/不保存/取消中的「取消」或保存失败）。
-      if (manager.getState().documents.some((item) => item.id === id)) return;
+
+    let mode: "saveAll" | "discardAll" | "askOneByOne" | "cancel" | null = null;
+    if (dirtyCount > 0) {
+      mode = await window.panda.dialog.confirmCloseAll({ total: ids.length, dirty: dirtyCount });
+      if (mode === "cancel") return;
+    } else {
+      // 无未保存：纯 window.confirm 一次过。
+      if (
+        !window.confirm(
+          t("确定关闭全部 {0} 个文档吗？", ids.length),
+        )
+      )
+        return;
+      mode = "saveAll"; // 全部 clean，bypass 实际不触发保存
+    }
+
+    if (mode === "saveAll") {
+      for (const id of ids) {
+        await manager.closeDocument(id, { saveAll: true });
+      }
+    } else if (mode === "discardAll") {
+      for (const id of ids) {
+        await manager.closeDocument(id, { discardAll: true });
+      }
+    } else {
+      // askOneByOne：保留原 for...of await，让每个 dirty 弹三选一 dialog
+      for (const id of ids) {
+        await manager.closeDocument(id);
+        // 文档仍在列表中说明关闭被取消，中止剩余关闭。
+        if (manager.getState().documents.some((item) => item.id === id)) break;
+      }
     }
     setTabMenu(null);
   };

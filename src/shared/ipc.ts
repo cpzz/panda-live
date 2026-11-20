@@ -57,8 +57,16 @@ export interface SaveAsRequest {
 /** 关闭有未保存修改的文档时用户的三种选择。 */
 export type CloseDocumentChoice = "save" | "discard" | "cancel";
 
+/** 关闭全部且有未保存文档时用户的四种选择。 */
+export type CloseAllDocumentsChoice = "saveAll" | "discardAll" | "askOneByOne" | "cancel";
+
 export interface ConfirmCloseRequest {
   name: string;
+}
+
+export interface ConfirmCloseAllRequest {
+  total: number;
+  dirty: number;
 }
 
 export interface ReadTextRequest {
@@ -377,6 +385,7 @@ export const ipcRequestSchemas = {
     filters: z.array(FileFilterSchema).optional(),
   }),
   "dialog:confirmClose": z.object({ name: z.string().min(1) }),
+  "dialog:confirmCloseAll": z.object({ total: z.number().int().min(0), dirty: z.number().int().min(0) }),
   "fs:readText": z.object({ path: z.string().min(1) }),
   "fs:writeText": z.object({
     path: z.string().min(1),
@@ -521,6 +530,7 @@ export interface IpcResponseMap {
   "dialog:openDirectory": FileRef | null;
   "dialog:saveAs": FileRef | null;
   "dialog:confirmClose": CloseDocumentChoice;
+  "dialog:confirmCloseAll": CloseAllDocumentsChoice;
   "fs:readText": ReadTextResult;
   "fs:writeText": WriteTextResult;
   "fs:readBase64": ReadBase64Result;
@@ -596,6 +606,8 @@ export interface PandaApi {
     saveAs(request: SaveAsRequest): Promise<FileRef | null>;
     /** 关闭未保存文档时的三选一确认。 */
     confirmClose(request: ConfirmCloseRequest): Promise<CloseDocumentChoice>;
+    /** 关闭全部且有未保存文档时的四选一确认。 */
+    confirmCloseAll(request: ConfirmCloseAllRequest): Promise<CloseAllDocumentsChoice>;
   };
   fs: {
     readText(request: ReadTextRequest): Promise<ReadTextResult>;
