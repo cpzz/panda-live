@@ -296,6 +296,15 @@ export class DocumentManager {
     this.commit({ mode: "source" });
   }
 
+  /** 打开文件时的默认视图：支持渲染预览的格式（Markdown、PlantUML、Mermaid、LaTeX、
+   * SVG、扩展格式）与 PDF/图片进入预览，其余进入源码；`preferSource` 用于大文件降级，
+   * 但二进制文档只能预览。 */
+  private defaultModeFor(formatId: string, preferSource = false): EditorMode {
+    if (formatId === "pdf" || formatId === "image") return "preview";
+    if (preferSource) return "source";
+    return formatHasPreview(formatId) ? "preview" : "source";
+  }
+
   /** 记住当前文档的视图模式，供切回该标签时恢复。 */
   private rememberActiveMode(): void {
     if (!this.state.activeId) return;
@@ -691,11 +700,9 @@ export class DocumentManager {
     for (const entry of session.documents) {
       if (!entry.path) continue;
       const ref: FileRef = { path: entry.path, name: basename(entry.path), rootId: "" };
-      await this.openRef(ref, { silentRecent: true, silentErrors: true, mode: entry.mode });
+      await this.openRef(ref, { silentRecent: true, silentErrors: true });
       const doc = this.state.documents.find((item) => item.path === entry.path);
       if (doc) {
-        // 会话中的每文档模式作为该标签的偏好在切回时恢复。
-        this.modeByDocument.set(doc.id, entry.mode);
         this.patchDocument(doc.id, () => ({
           cursor: entry.cursor,
           folds: entry.folds,
@@ -705,7 +712,6 @@ export class DocumentManager {
     }
     const active = this.state.documents[Math.min(session.activeIndex, this.state.documents.length - 1)];
     if (active) {
-      if (!this.modeByDocument.has(active.id)) this.modeByDocument.set(active.id, session.mode);
       this.commit({ activeId: active.id, mode: this.activationMode(active.id) });
     } else {
       this.commit({ mode: session.mode });
@@ -803,7 +809,7 @@ export class DocumentManager {
 
   private async openRef(
     ref: FileRef,
-    options: { silentRecent?: boolean; silentErrors?: boolean; mode?: EditorMode } = {},
+    options: { silentRecent?: boolean; silentErrors?: boolean } = {},
   ): Promise<void> {
     // 同一文件的不同入口可能拼出字符串不同的路径（Git 根来自 rev-parse，分隔符/盘符
     // 大小写可能与工作区不同），去重按归一化身份比较，保证只开一个标签。
@@ -812,7 +818,24 @@ export class DocumentManager {
       doc.path && target ? pathKey(doc.path) === target : doc.path === ref.path,
     );
     if (existing) {
+      // 当前文档重复打开时保持现有显示模式。
+      if (existing.id === this.state.activeId) return;
       this.setActive(existing.id);
+      // 从非 Git 入口再次打开已打开的文件：按格式默认视图显示；
+      // 大文件与超长 Markdown 沿用首次打开时的源码降级规则。
+      let preferSource = decideOpenPolicy(existing.size).preferSource;
+      if (!preferSource && existing.format === "markdown") {
+        try {
+          preferSource = preferSourceByBlocks(
+            parseMarkdown(existing.content).doc.content?.length ?? 0,
+          );
+        } catch {
+          // 解析失败时按格式默认视图显示
+        }
+      }
+      const mode = this.defaultModeFor(existing.format, preferSource);
+      this.modeByDocument.set(existing.id, mode);
+      this.commit({ mode });
       return;
     }
     try {
@@ -867,15 +890,10 @@ export class DocumentManager {
         watchId,
       };
       this.rememberActiveMode();
-      // 新打开的 Markdown 文档默认进入预览模式；大文件等强制源码的情况除外。
-      // 切换标签时按 modeByDocument 恢复该标签上次使用的模式；会话恢复时用 entry.mode 覆盖。
-      const desiredMode: EditorMode = isBinary
-        ? "preview"
-        : forceSource
-          ? "source"
-          : (options.mode ??
-            (document.format === "markdown" ? "preview" : this.state.mode));
-      const mode = isBinary || modeSupported(desiredMode, document.format) ? desiredMode : "source";
+      // 新打开的文档按格式默认视图显示：支持预览的格式进入预览，其余进入源码；
+      // 大文件等强制源码的情况除外。
+      const desiredMode: EditorMode = this.defaultModeFor(formatId, forceSource);
+      const mode = modeSupported(desiredMode, document.format) ? desiredMode : "source";
       this.modeByDocument.set(document.id, mode);
       this.commit({
         documents: [...this.state.documents, document],
@@ -884,7 +902,7 @@ export class DocumentManager {
       });
       if (blockLimit) {
         this.notify("info", t("文档顶层块超过 8000，已默认切换到源码模式"));
-      } else if (policy.preferSource) {
+      } else if (policy.preferSource && !isBinary) {
         this.notify("info", t("文件较大，已默认切换到源码模式"));
       }
       if (!options.silentRecent) {

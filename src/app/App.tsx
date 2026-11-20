@@ -30,6 +30,7 @@ import type { DraftEntry, RecentEntry, SessionState } from "../shared/ipc";
 import type { CompileResult, EngineStatus } from "../shared/ipc";
 import type { Settings } from "../shared/settings";
 import { describeError, getErrorCode } from "../shared/errors";
+import { pathKey } from "../utils/paths";
 import { getLocale, localeTag, resolveLocale, setLocale, t } from "../i18n";
 import { RecoveryDialog } from "./RecoveryDialog";
 import { CommandPalette, type CommandItem } from "./CommandPalette";
@@ -319,6 +320,8 @@ function SourcePane({
             mode !== "git"))
       ) {
         editor.reset(document.content, document.readOnly, language);
+        // 模式切换/外部重载会重建状态；重建后恢复折叠范围，避免折叠丢失。
+        applySavedFolds();
       }
     }
     lastRef.current = { id: document.id, revision: document.revision, mode, language };
@@ -1371,7 +1374,7 @@ export function App() {
     void manager.openPath(filePath).then(() => {
       const current = manager.getState();
       const doc = current.documents.find((item) => item.id === current.activeId);
-      if (!doc || doc.path !== filePath) return;
+      if (!doc || !doc.path || pathKey(doc.path) !== pathKey(filePath)) return;
       updateDiffOption(doc.id, { base: "head", ref: "", target, paneMode: "baseline" });
       if (doc.format !== "pdf" && doc.format !== "image") {
         if (current.mode !== "git") modeBeforeGitRef.current = current.mode;
@@ -1386,7 +1389,7 @@ export function App() {
     void manager.openPath(filePath).then(() => {
       const current = manager.getState();
       const doc = current.documents.find((item) => item.id === current.activeId);
-      if (!doc || doc.path !== filePath) return;
+      if (!doc || !doc.path || pathKey(doc.path) !== pathKey(filePath)) return;
       updateDiffOption(doc.id, { paneMode: "refs", refA: `${shortHash}^`, refB: shortHash });
       if (doc.format !== "pdf" && doc.format !== "image") {
         if (current.mode !== "git") modeBeforeGitRef.current = current.mode;
@@ -1399,7 +1402,7 @@ export function App() {
     void manager.openPath(filePath).then(() => {
       const current = manager.getState();
       const doc = current.documents.find((item) => item.id === current.activeId);
-      if (!doc || doc.path !== filePath) return;
+      if (!doc || !doc.path || pathKey(doc.path) !== pathKey(filePath)) return;
       if (target) {
         updateDiffOption(doc.id, { paneMode: "refs", refA: base, refB: target });
       } else {
@@ -1410,6 +1413,24 @@ export function App() {
           target: "worktree",
         });
       }
+      if (doc.format !== "pdf" && doc.format !== "image") {
+        if (current.mode !== "git") modeBeforeGitRef.current = current.mode;
+        manager.setMode("git");
+      }
+    });
+  };
+  /** 从 Git 栏打开冲突文件：与其它 Git 入口一致进入差异视图。 */
+  const openConflictFile = (filePath: string): void => {
+    void manager.openPath(filePath).then(() => {
+      const current = manager.getState();
+      const doc = current.documents.find((item) => item.id === current.activeId);
+      if (!doc || !doc.path || pathKey(doc.path) !== pathKey(filePath)) return;
+      updateDiffOption(doc.id, {
+        paneMode: "baseline",
+        base: "head",
+        ref: "",
+        target: "worktree",
+      });
       if (doc.format !== "pdf" && doc.format !== "image") {
         if (current.mode !== "git") modeBeforeGitRef.current = current.mode;
         manager.setMode("git");
@@ -2493,7 +2514,7 @@ export function App() {
                   onOpenStagedFile={(filePath) => openGitFile(filePath, "index")}
                   onOpenCommitFile={(shortHash, file) => openCommitFile(shortHash, file)}
                   onOpenCompareFile={openCompareFile}
-                  onOpenConflictFile={(filePath) => void manager.openPath(filePath)}
+                  onOpenConflictFile={(filePath) => openConflictFile(filePath)}
                 />
               }
               sourceControlCount={gitState.snapshot?.changes.length ?? 0}

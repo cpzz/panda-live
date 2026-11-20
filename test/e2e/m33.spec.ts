@@ -122,6 +122,8 @@ test("M33：源码编辑器支持语法折叠、标题分节与章节折叠", as
     await page.locator(".app").waitFor();
     await page.keyboard.press("Control+O");
     await expect(page.locator(".tab-item.active .tab-name")).toHaveText("sections.tex");
+    // LaTeX 默认预览模式；折叠能力在源码模式验证。
+    await page.getByRole("button", { name: "源码", exact: true }).click();
     const texGutter = page.locator(".pane:not([hidden]) .cm-foldGutter span:visible");
     await expect(texGutter).toHaveCount(3, { timeout: 15_000 });
     await texGutter.first().click();
@@ -134,6 +136,8 @@ test("M33：源码编辑器支持语法折叠、标题分节与章节折叠", as
     await page.locator(".app").waitFor();
     await page.keyboard.press("Control+O");
     await expect(page.locator(".tab-item.active .tab-name")).toHaveText("blocks.puml");
+    // PlantUML 默认预览模式；折叠能力在源码模式验证。
+    await page.getByRole("button", { name: "源码", exact: true }).click();
     const pumlGutter = page.locator(".pane:not([hidden]) .cm-foldGutter span:visible");
     await expect(pumlGutter).toHaveCount(2, { timeout: 15_000 });
     await pumlGutter.first().click();

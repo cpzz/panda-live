@@ -73,6 +73,8 @@ test("M5：示例扩展新增 .adoc 格式，禁用后回退纯文本", async ()
     await page.locator(".app").waitFor();
     await page.keyboard.press("Control+O");
     await expect(page.locator(".tab-name")).toHaveText("sample.adoc");
+    // 扩展格式默认进入预览；本用例需要源码与扩展预览同时可见。
+    await page.getByRole("button", { name: "分栏", exact: true }).click();
     await expect(page.locator(".extension-preview h1")).toHaveText("示例标题", { timeout: 15_000 });
     await expect(page.locator(".extension-preview p")).toHaveText("正文段落");
 

@@ -77,6 +77,8 @@ test("M35：源码折叠状态随会话持久化，重启后恢复", async () =>
     await expect(page2.locator(".tab-name", { hasText: "folds.md" })).toBeVisible({
       timeout: 20_000,
     });
+    // 重启后按默认视图打开（Markdown 预览）；折叠能力在源码模式验证。
+    await page2.getByRole("button", { name: "源码", exact: true }).click();
     // 重启后折叠状态恢复。
     await expect(page2.locator(".pane:not([hidden]) .cm-foldPlaceholder")).toBeVisible({
       timeout: 15_000,

@@ -634,3 +634,58 @@ test("M4：切换标签自动定位文件树", async () => {
     await fs.rm(userDataDir, { recursive: true, force: true });
   }
 });
+
+test("M4：工作区打开与非当前文件重开按默认视图显示，标签切换保留各自视图", async () => {
+  test.setTimeout(120_000);
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "panda-m4-view-"));
+  const userDataDir = await prepareUserData(false);
+  await fs.writeFile(path.join(tempDir, "alpha.md"), "# Alpha\n\n正文\n", "utf8");
+  await fs.writeFile(path.join(tempDir, "beta.md"), "# Beta\n\n正文\n", "utf8");
+
+  const app = await launch(userDataDir);
+  try {
+    const page = await app.firstWindow();
+    await app.evaluate(({ dialog }, target) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
+    }, tempDir);
+    await page.locator(".app").waitFor();
+    await page.locator(".sidebar-tabs").getByRole("tab", { name: "工作区", exact: true }).click();
+    await page
+      .locator(".files-toolbar")
+      .getByRole("button", { name: "打开文件夹", exact: true })
+      .click();
+    await expect(page.locator(".workspace-root")).toHaveCount(1);
+
+    const modeButton = (name: string) =>
+      page.locator(".mode-bar .mode-bar-modes").getByRole("button", { name, exact: true });
+
+    // 新打开的文件按格式默认视图显示：Markdown 进入预览。
+    await page.locator(".tree-name", { hasText: "alpha.md" }).click();
+    await expect(page.locator(".tab-item.active .tab-name")).toHaveText("alpha.md");
+    await expect(modeButton("预览")).toHaveAttribute("aria-pressed", "true");
+
+    await modeButton("源码").click();
+    await expect(page.locator(".cm-content")).toBeVisible();
+
+    // 第二个文件同样按默认视图打开。
+    await page.locator(".tree-name", { hasText: "beta.md" }).click();
+    await expect(page.locator(".tab-item.active .tab-name")).toHaveText("beta.md");
+    await expect(modeButton("预览")).toHaveAttribute("aria-pressed", "true");
+
+    // 从工作区再次打开非当前文件：回到默认视图，而不是上次使用的源码。
+    await page.locator(".tree-name", { hasText: "alpha.md" }).click();
+    await expect(page.locator(".tab-item.active .tab-name")).toHaveText("alpha.md");
+    await expect(modeButton("预览")).toHaveAttribute("aria-pressed", "true");
+
+    // 标签切换不改变各标签自己的显示模式。
+    await modeButton("源码").click();
+    await page.locator(".tab-item").filter({ hasText: "beta.md" }).click();
+    await expect(modeButton("预览")).toHaveAttribute("aria-pressed", "true");
+    await page.locator(".tab-item").filter({ hasText: "alpha.md" }).click();
+    await expect(modeButton("源码")).toHaveAttribute("aria-pressed", "true");
+  } finally {
+    await app.close();
+    await fs.rm(tempDir, { recursive: true, force: true });
+    await fs.rm(userDataDir, { recursive: true, force: true });
+  }
+});

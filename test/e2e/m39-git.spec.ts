@@ -945,3 +945,49 @@ test("M39：打开子目录文件不重置历史与对比栏", async () => {
     await fs.rm(userDataDir, { recursive: true, force: true });
   }
 });
+
+/** M39：文件先以默认视图打开，再从 Git 栏选择同一文件时应进入差异视图。 */
+test("M39：从 Git 栏再次打开已打开的文件进入差异视图", async () => {
+  test.setTimeout(180_000);
+  const repo = await fs.mkdtemp(path.join(os.tmpdir(), "panda-git-reopen-"));
+  const userDataDir = await fs.mkdtemp(path.join(os.tmpdir(), "panda-git-reopen-ud-"));
+  const note = path.join(repo, "note.md");
+  await initRepo(repo);
+  await fs.writeFile(note, "# 初始\n", "utf8");
+  await git(repo, ["add", "."]);
+  await git(repo, ["commit", "-m", "初始提交"]);
+  await fs.writeFile(note, "# 初始\n\n修改后的正文。\n", "utf8");
+
+  const app = await electron.launch({
+    args: ["."],
+    cwd: CWD,
+    env: { ...process.env, PANDA_USER_DATA_DIR: userDataDir },
+  });
+  try {
+    const page = await app.firstWindow();
+    // 先从文件对话框打开（非 Git 入口），Markdown 进入默认预览视图。
+    await app.evaluate(({ dialog }, file) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] });
+    }, note);
+    await page.locator(".app").waitFor();
+    await page.keyboard.press("Control+O");
+    await expect(page.locator(".tab-item.active .tab-name")).toHaveText("note.md");
+    const previewButton = page
+      .locator(".mode-bar .mode-bar-modes")
+      .getByRole("button", { name: "预览", exact: true });
+    await expect(previewButton).toHaveAttribute("aria-pressed", "true");
+
+    // 打开仓库后从 Git 栏选择同一文件：应切换到 Git 差异视图。
+    await openFolder(page, app, repo);
+    await page.getByRole("tab", { name: "Git", exact: true }).click();
+    const changeRow = page.locator(".git-change-row").filter({ hasText: "note.md" });
+    await expect(changeRow).toHaveCount(1, { timeout: 20_000 });
+    await changeRow.locator(".git-change-path").click();
+    await expect(page.locator(".git-diff-pane")).toBeVisible({ timeout: 20_000 });
+    await expect(page.locator(".mode-button-git")).toHaveAttribute("aria-pressed", "true");
+  } finally {
+    await app.close();
+    await fs.rm(repo, { recursive: true, force: true });
+    await fs.rm(userDataDir, { recursive: true, force: true });
+  }
+});
