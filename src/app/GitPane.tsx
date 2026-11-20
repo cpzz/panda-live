@@ -33,6 +33,8 @@ interface GitPaneProps {
   /** git 模式下模式条左侧工具区的容器；工具通过 portal 渲染到这里。 */
   toolbarHost: HTMLElement | null;
   onDiffChange(patch: Partial<DocDiffState>): void;
+  /** 打开本地文件的回调（Markdown 预览中的链接点击）。 */
+  onOpenLocalFile?: (path: string) => void;
 }
 
 /** git 模式下的两种显示方式；「预览对比」仅支持渲染的格式可用。 */
@@ -63,6 +65,7 @@ export function GitPane({
   refreshKey,
   toolbarHost,
   onDiffChange,
+  onOpenLocalFile,
 }: GitPaneProps) {
   const [chipOpen, setChipOpen] = useState(false);
   const chipWrapRef = useRef<HTMLDivElement>(null);
@@ -874,6 +877,7 @@ export function GitPane({
               sourceKey={`git-diff:${document.id}:diff`}
               diff={model}
               onDiffModeChange={(mode) => onDiffChange({ mode })}
+              onOpenLocalFile={onOpenLocalFile}
               className="git-diff-body"
               plainFences
             />

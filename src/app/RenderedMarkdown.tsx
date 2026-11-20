@@ -85,7 +85,7 @@ function scrollToAnchor(host: HTMLElement, hash: string): boolean {
 
 export interface RenderedMarkdownProps {
   html: string;
-  /** 用于相对图片路径解析；null 表示不解析。 */
+  /** 用于相对图片与本地 link 解析；null 表示不解析。 */
   filePath: string | null;
   /** 图表缓存与重建的标识（同一文档应保持稳定）。 */
   sourceKey: string;
@@ -98,6 +98,11 @@ export interface RenderedMarkdownProps {
    * 预览对比用，保证改动前/后的围栏内容可直接比较。见 §21.15。
    */
   plainFences?: boolean;
+  /**
+   * Markdown link 点击：href 解析为本地文件路径后回调。
+   * 不传时本地 link 被安全拦截（不跳），外部 URL 默认用系统默认处理器打开。
+   */
+  onOpenLocalFile?: (path: string) => void;
 }
 
 /**
@@ -113,6 +118,7 @@ export function RenderedMarkdown({
   onDiffJump,
   className,
   plainFences = false,
+  onOpenLocalFile,
 }: RenderedMarkdownProps) {
   const hostRef = useRef<HTMLElement>(null);
   const [theme, setTheme] = useState<AppTheme>(resolveTheme);
@@ -190,24 +196,114 @@ export function RenderedMarkdown({
     };
   }, [html, sourceKey, theme, diff, plainFences]);
 
-  // 页内目录：拦截 `#anchor` 链接，避免 Electron 修改 URL，改为容器内平滑滚动。
+/**
+ * 外部 http(s) 链接信任记忆（localStorage，避免频繁弹 confirm）。
+ * `"1"` 表示总是信任（不再提示）；未设置或其他值表示每次都弹 confirm。
+ */
+const EXTERNAL_TRUST_KEY = "panda.preview.trustExternalLinks";
+
+/** 协议分类结果。 */
+type LinkKind = "anchor" | "local" | "external" | "system" | "denied";
+
+function classifyHref(href: string): LinkKind {
+  if (href.startsWith("#")) return "anchor";
+  // 协议判断前先尝试 decode——Markdown 渲染器会把非 ASCII 字符 URL 编码，
+  // scheme 前缀不会受影响，但 pathname 里可能有编码字符。
+  try {
+    href = decodeURIComponent(href);
+  } catch {
+    // 非法 URI（如孤立 %），保持原值让后续分类拒绝。
+  }
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(href)) {
+    try {
+      const protocol = new URL(href).protocol.toLowerCase();
+      if (protocol === "http:" || protocol === "https:") return "external";
+      if (protocol === "mailto:" || protocol === "tel:" || protocol === "file:") return "system";
+      return "denied";
+    } catch {
+      return "denied";
+    }
+  }
+  // / 开头的"绝对路径"（相对文档根）在 Markdown 预览中不支持，安全起见 denied。
+  if (href.startsWith("/") || href.startsWith("\\")) return "denied";
+  return "local";
+}
+
+/** 提示用户打开外部 http(s) 链接；第一次提示后记住，后续静默打开。 */
+function confirmOpenExternal(url: string): boolean {
+  if (localStorage.getItem(EXTERNAL_TRUST_KEY) === "1") return true;
+  const proceed = window.confirm(
+    `即将用默认浏览器打开：\n${url}\n\n点击"确定"打开，此偏好将被记住；"取消"则不打开。`,
+  );
+  if (proceed) localStorage.setItem(EXTERNAL_TRUST_KEY, "1");
+  return proceed;
+}
+
+/** 统一拦截预览中的 <a> 点击，分流为锚点滚动 / 本地文件打开 / 外部 URL。 */
+function handleLinkClick(
+  event: MouseEvent,
+  host: HTMLElement,
+  filePath: string | null,
+  onOpenLocalFile?: (path: string) => void,
+): void {
+  if (event.defaultPrevented || event.button !== 0) return;
+  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+  const link = target.closest("a[href]");
+  if (!(link instanceof HTMLAnchorElement)) return;
+  const href = link.getAttribute("href") ?? "";
+  if (!href) return;
+  const kind = classifyHref(href);
+  switch (kind) {
+    case "anchor":
+      if (scrollToAnchor(host, href)) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      return;
+    case "local": {
+      if (!filePath || !onOpenLocalFile) return;
+      const resolved = resolveRelativePath(filePath, href);
+      if (!resolved) return;
+      event.preventDefault();
+      event.stopPropagation();
+      onOpenLocalFile(resolved);
+      return;
+    }
+    case "external": {
+      event.preventDefault();
+      event.stopPropagation();
+      if (confirmOpenExternal(href)) {
+        void window.panda.shell.openExternal(href);
+      }
+      return;
+    }
+    case "system": {
+      event.preventDefault();
+      event.stopPropagation();
+      void window.panda.shell.openExternal(href);
+      return;
+    }
+    case "denied":
+    default:
+      // 未知或被禁止的 href：统一拦截，不交给浏览器。
+      event.preventDefault();
+      event.stopPropagation();
+  }
+}
+
+  // 页内目录与 Markdown link：统一拦截 <a[href]>，分流为锚点滚动 / 本地文件打开 / 外部 URL。
+  // 主进程已对 window.open 与 will-navigate 做 deny 兜底，这里再做 renderer 层分流。见 §12.5。
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
     const onClick = (event: MouseEvent): void => {
-      if (event.defaultPrevented || event.button !== 0) return;
-      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-      const target = event.target;
-      if (!(target instanceof Element)) return;
-      const link = target.closest("a[href]");
-      if (!(link instanceof HTMLAnchorElement)) return;
-      const href = link.getAttribute("href") ?? "";
-      if (!href.startsWith("#")) return;
-      if (scrollToAnchor(host, href)) event.preventDefault();
+      handleLinkClick(event, host, filePath, onOpenLocalFile);
     };
     host.addEventListener("click", onClick);
     return () => host.removeEventListener("click", onClick);
-  }, [html]);
+  }, [html, filePath, onOpenLocalFile]);
 
   // MyST 预览页签：点击页签按钮切换激活项，机制与 WYSIWYG 一致（data-active 索引）。见 §8.2。
   useEffect(() => {

@@ -21,6 +21,19 @@ describe("相对资源路径解析", () => {
   it("忽略查询串与片段", () => {
     expect(resolveRelativePath("/docs/a.md", "pic.png?v=1#top")).toBe("/docs/pic.png");
   });
+
+  it("支持中文文件名（Markdown 渲染器会输出 URL 编码）", () => {
+    // 直接中文
+    expect(resolveRelativePath("/docs/a.md", "我的文档.md")).toBe("/docs/我的文档.md");
+    // URL 编码后的中文（Markdown 渲染器产物）
+    expect(resolveRelativePath("/docs/a.md", "%E6%88%91%E7%9A%84%E6%96%87%E6%A1%A3.md")).toBe(
+      "/docs/我的文档.md",
+    );
+    // 混合 ../
+    expect(
+      resolveRelativePath("C:\\docs\\子目录\\a.md", "../%E4%BB%8B%E7%BB%8D.md"),
+    ).toBe("C:\\docs\\介绍.md");
+  });
 });
 
 describe("路径身份归一化", () => {

@@ -895,6 +895,7 @@ function PreviewPane({
   searchRequest,
   onDiffModeChange,
   onDiffJump,
+  onOpenLocalFile,
 }: {
   document: DocumentState;
   enabled: boolean;
@@ -906,6 +907,7 @@ function PreviewPane({
   searchRequest: SearchRequest | null;
   onDiffModeChange(mode: DiffViewMode): void;
   onDiffJump(line: number): void;
+  onOpenLocalFile?: (path: string) => void;
 }) {
   const [html, setHtml] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -976,6 +978,7 @@ function PreviewPane({
             diff={diff}
             onDiffModeChange={onDiffModeChange}
             onDiffJump={onDiffJump}
+            onOpenLocalFile={onOpenLocalFile}
           />
         )}
       </div>
@@ -3089,6 +3092,7 @@ export function App() {
                   jumpTokenRef.current += 1;
                   setSourceJump({ line, column: 1, token: jumpTokenRef.current });
                 }}
+                onOpenLocalFile={(path) => void manager.openPath(path)}
               />
             </section>
             <section
@@ -3104,6 +3108,7 @@ export function App() {
                 refreshKey={diffRefresh}
                 toolbarHost={state.mode === "git" ? gitToolbarHost : null}
                 onDiffChange={(patch) => updateDiffOption(active.id, patch)}
+                onOpenLocalFile={(path) => void manager.openPath(path)}
               />
             </section>
             <section
