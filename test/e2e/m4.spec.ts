@@ -635,7 +635,7 @@ test("M4：切换标签自动定位文件树", async () => {
   }
 });
 
-test("M4：工作区打开与非当前文件重开按默认视图显示，标签切换保留各自视图", async () => {
+test("M4：工作区打开与重复打开按默认视图显示，标签切换保留各自视图", async () => {
   test.setTimeout(120_000);
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "panda-m4-view-"));
   const userDataDir = await prepareUserData(false);
@@ -683,6 +683,10 @@ test("M4：工作区打开与非当前文件重开按默认视图显示，标签
     await expect(modeButton("预览")).toHaveAttribute("aria-pressed", "true");
     await page.locator(".tab-item").filter({ hasText: "alpha.md" }).click();
     await expect(modeButton("源码")).toHaveAttribute("aria-pressed", "true");
+
+    // 从工作区再次打开当前文件：同样回到默认视图。
+    await page.locator(".tree-name", { hasText: "alpha.md" }).click();
+    await expect(modeButton("预览")).toHaveAttribute("aria-pressed", "true");
   } finally {
     await app.close();
     await fs.rm(tempDir, { recursive: true, force: true });

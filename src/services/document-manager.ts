@@ -818,11 +818,9 @@ export class DocumentManager {
       doc.path && target ? pathKey(doc.path) === target : doc.path === ref.path,
     );
     if (existing) {
-      // 当前文档重复打开时保持现有显示模式。
-      if (existing.id === this.state.activeId) return;
-      this.setActive(existing.id);
-      // 从非 Git 入口再次打开已打开的文件：按格式默认视图显示；
+      // 从非 Git 入口再次打开（含当前文件）：按格式默认视图显示；
       // 大文件与超长 Markdown 沿用首次打开时的源码降级规则。
+      if (existing.id !== this.state.activeId) this.setActive(existing.id);
       let preferSource = decideOpenPolicy(existing.size).preferSource;
       if (!preferSource && existing.format === "markdown") {
         try {
