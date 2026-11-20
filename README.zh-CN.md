@@ -10,7 +10,7 @@ Panda Live 是一个本地优先的桌面文档编辑器。源码与渲染结果
 - **渲染态 Git 差异** —— 可对比当前缓冲区与指定提交，或两个提交之间。Markdown 以渲染结果对比，提供块级、词级与删除幽灵块标记；其他文本格式提供并排、带语法高亮的源码差异。
 - **Git 兼容参数** —— `-w`（忽略空白）、`--ignore-blank-lines`（忽略空行）与 `--ignore-cr-at-eol`（忽略行尾 CR）各自独立开关。
 - **Git 工作流** —— 侧栏「Git」提供更改 / 历史 / 比较三个视图：暂存、取消暂存、提交与 Amend、分支切换与创建、获取 / 拉取 / 推送、领先/落后提示，以及任意两个提交（或提交 ⇄ 工作区）之间的文件级比较。拉取策略、fetch prune、网络超时、自动刷新与默认对比基线可在 **设置 → Git** 中调整。
-- **Markdown 渲染管线** —— GFM、Front Matter、数学公式（KaTeX）、语法高亮（Shiki）与 HTML 净化。
+- **Markdown 渲染管线** —— GFM、Front Matter、数学公式（KaTeX）、语法高亮（Shiki）、MyST 指令（tab-set / grid）与 HTML 净化。
 - **LaTeX 预览** —— 支持 Tectonic、latexmk 或 xelatex 编译，诊断汇入问题面板。
 - **图表** —— PlantUML 与 Mermaid 预览，支持缓存、明暗主题与缩放查看：独立文件预览与文档内嵌图表都可在工具栏或 Ctrl +/-、Ctrl+滚轮缩放，支持复位到自然宽度。
 - **图片预览** —— PNG、APNG、JPEG/JFIF、GIF、WebP、BMP、ICO、AVIF 以只读方式打开，支持与图表一致的缩放查看。

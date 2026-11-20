@@ -10,7 +10,7 @@ Panda Live is a local-first desktop document editor. It keeps source and rendere
 - **Rendered Git diff** — compare the current buffer or two commits. Markdown is compared in rendered form with block/word/ghost decorations; every other text format gets a side-by-side, syntax-highlighted source diff.
 - **Git-compatible diff options** — `-w` (ignore whitespace), `--ignore-blank-lines`, and `--ignore-cr-at-eol` are available as independent toggles.
 - **Git workflow** — the sidebar's Git tab has Changes / History / Compare views: stage, unstage, commit and amend, switch and create branches, fetch / pull / push, ahead/behind badges, and file-level comparison between any two commits (or a commit and the working tree). Pull strategy, fetch pruning, network timeout, auto-refresh and the default diff baseline are configurable under **Settings → Git**.
-- **Markdown pipeline** — GFM, front matter, math (KaTeX), syntax highlighting (Shiki), and sanitized HTML.
+- **Markdown pipeline** — GFM, front matter, math (KaTeX), syntax highlighting (Shiki), MyST directives (tab-set / grid), and sanitized HTML.
 - **LaTeX preview** — compile with Tectonic, latexmk or xelatex; diagnostics are collected in the Problems panel.
 - **Diagrams** — PlantUML and Mermaid preview with caching, theme support and a zoomable viewer: standalone files and diagrams embedded in Markdown zoom via the toolbar or Ctrl +/- and Ctrl+wheel, with a reset to natural width.
 - **Image preview** — PNG, APNG, JPEG/JFIF, GIF, WebP, BMP, ICO and AVIF open read-only with the same zoomable viewer.
