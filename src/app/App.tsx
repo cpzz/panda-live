@@ -111,6 +111,9 @@ function formatClock(ms: number): string {
 
 const EMPTY_DIFF_HUNKS: DiffHunk[] = [];
 
+/** 预览面板滚动位置记忆：key = document.id；tab 切换时恢复。 */
+const previewScrollMem = new Map<string, number>();
+
 /** 计算文本行数；末尾换行不额外计入一行，与 diff 的行号口径一致。 */
 function textLineCount(text: string): number {
   if (!text) return 1;
@@ -914,6 +917,23 @@ function PreviewPane({
   const searchHostRef = useRef<HTMLDivElement>(null);
   const supported = document.format === "markdown";
   const annotate = diff !== null;
+
+  // tab 切换恢复预览滚动位置：从 previewScrollMem 恢复；新文件没有记忆，从 0 开始。
+  // 只在 document.id / enabled 变化时触发，不跟随 html（html 变化时 DOM 节点可能已替换，
+  // 强行设旧 scrollTop 会跳错位置；让浏览器自己滚动更安全）。
+  useEffect(() => {
+    const host = searchHostRef.current;
+    if (!host) return;
+    const saved = previewScrollMem.get(document.id);
+    if (saved != null) {
+      requestAnimationFrame(() => {
+        host.scrollTop = saved;
+      });
+    }
+    return () => {
+      previewScrollMem.set(document.id, host.scrollTop);
+    };
+  }, [document.id, enabled]);
 
   useEffect(() => {
     if (!supported || !enabled) return;

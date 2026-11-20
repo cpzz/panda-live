@@ -46,6 +46,9 @@ const PANE_VIEW_LABELS: Record<GitPaneView, string> = {
 /** 此文件提交历史每页条数（与弹层翻页一致）。 */
 const HISTORY_PAGE_SIZE = 20;
 
+/** Git 预览对比滚动位置记忆：key = document.id；切回同文档 git 模式时恢复。 */
+const gitDiffScrollMem = new Map<string, number>();
+
 function formatHistoryDate(iso: string): string {
   const time = Date.parse(iso);
   if (Number.isNaN(time)) return iso;
@@ -98,6 +101,54 @@ export function GitPane({
       ignoreCrAtEol: diff.flags.crAtEol,
     });
   }, [result, diff.flags]);
+
+  // 进入 Git 模式 / 切换到新文档后，自动跳到第一个改动点。
+  // 但如果是 tab 切回来（已恢复 scrollTop 记忆），navIndex 会被恢复 effect 提前设为 0，
+  // 这里 navIndex !== -1 的检查会自然跳过，避免覆盖用户之前的浏览位置。
+  useEffect(() => {
+    if (status !== "ready") return;
+    if (!baseDiff || baseDiff.hunks.length === 0) return;
+    if (navIndex !== -1) return; // 已手动导航过、已自动定位、或已恢复记忆——都不再覆盖
+    const hunk = baseDiff.hunks[0]!; // 已确认 length > 0
+    if (paneView !== "render") {
+      setReveal({ line: Math.max(1, hunk.newStart), token: 0 });
+    } else {
+      requestAnimationFrame(() => {
+        const host = bodyRef.current;
+        if (!host) return;
+        const cards = host.querySelectorAll<HTMLElement>(".diff-fragment-card");
+        const targets =
+          cards.length > 0
+            ? [...cards]
+            : [...host.querySelectorAll<HTMLElement>(".diff-add, .diff-change, [data-diff-ghost]")];
+        const target = targets[0];
+        if (!target) return;
+        const scrollerRect = host.getBoundingClientRect();
+        const targetRect = target.getBoundingClientRect();
+        const delta = targetRect.top - scrollerRect.top - host.clientHeight / 3;
+        host.scrollTo({ top: Math.max(0, host.scrollTop + delta), behavior: "smooth" });
+      });
+    }
+    setNavIndex(0);
+  }, [status, baseDiff, navIndex, paneView]);
+
+  // Git 预览对比滚动位置记忆：新文件从 0 开始；切回同文档时恢复上次浏览位置。
+  // 恢复成功后把 navIndex 设为 0，阻止"自动跳第一个改动点" effect 覆盖。
+  useEffect(() => {
+    if (!active) return;
+    const host = bodyRef.current;
+    if (!host) return;
+    const saved = gitDiffScrollMem.get(document.id);
+    if (saved != null) {
+      requestAnimationFrame(() => {
+        host.scrollTop = saved;
+      });
+      setNavIndex(0); // 已恢复记忆，禁止自动跳第一个改动点
+    }
+    return () => {
+      gitDiffScrollMem.set(document.id, host.scrollTop);
+    };
+  }, [document.id, active, paneView]);
 
   const model = useMemo<PreviewDiffModel | null>(() => {
     if (!result || !baseDiff) return null;
