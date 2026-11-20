@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, use
 import type { EditorState } from "@codemirror/state";
 import { renderMarkdownToHtml } from "../formats/markdown/preview";
 import { parseMarkdown } from "../formats/markdown/parse";
-import { buildOutline, type OutlineItem } from "../formats/outline";
+import { buildOutline, formatSupportsOutline, type OutlineItem } from "../formats/outline";
 import { EMPTY_PROBLEMS, problemStore, type Problem } from "../services/problem-store";
 import { mathOptionsSignature } from "../services/math-settings";
 import { formatHasPreview, getFormatEntry, refreshExtensionFormats } from "../extensions/registry";
@@ -39,6 +39,7 @@ import { diffLineMarkers, describeHunk, useDocumentDiff } from "./useDocumentDif
 import { hunkAnchorLine, type DiffHunk } from "../diff/compute";
 import type { PreviewDiffModel } from "../diff/preview";
 import { DEFAULT_DOC_DIFF, type DiffViewMode, type DocDiffState } from "../shared/diff";
+import { scrollElementToRatio } from "../shared/scroll";
 import { Icon, PandaMark, fileIconForPath, type IconName } from "./icons";
 import { OutlinePanel } from "./OutlinePanel";
 import { PdfPreview, PdfDocumentPreview } from "./PdfPreview";
@@ -156,7 +157,7 @@ function SourcePane({
   document: DocumentState;
   mode: EditorMode;
   searchRequest: SearchRequest | null;
-  jump: { line: number; column: number; token: number } | null;
+  jump: { line: number; column: number; token: number; ratio?: number } | null;
   tabSize: number;
   /** Tab 键输出空格（false = 硬制表符）。 */
   insertSpaces: boolean;
@@ -208,12 +209,6 @@ function SourcePane({
       editorRef.current = null;
     };
   }, []);
-
-  // 大纲跳转：按行定位源码光标。
-  useEffect(() => {
-    if (!jump) return;
-    editorRef.current?.setCursor({ line: jump.line, column: jump.column });
-  }, [jump]);
 
   // 会话恢复：折叠数据可能在编辑器创建后经 patchDocument 才到位，单独响应。
   useEffect(() => {
@@ -328,6 +323,21 @@ function SourcePane({
     editor.setDiffMarkers(diffMarkersRef.current);
     // 只响应标签切换、模式切换、外部重载与只读变化；普通输入由编辑器自身维护。
   }, [document.id, document.revision, document.readOnly, mode, language, document.content]);
+
+  // 大纲/问题跳转：放在编辑器创建与 reset 之后，避免 preview→source 切换时
+  // 模式切换触发的 state 重建把刚设置的光标/滚动位置清掉。带 ratio 时把目标行放到视口指定高度。
+  // 限定源码类模式：切到 preview 时不重放旧跳转，也不抢焦点到隐藏的编辑器。
+  useEffect(() => {
+    if (!jump || (mode !== "source" && mode !== "split")) return;
+    if (jump.ratio !== undefined) {
+      editorRef.current?.setCursorAtRatio(
+        { line: jump.line, column: jump.column },
+        jump.ratio,
+      );
+      return;
+    }
+    editorRef.current?.setCursor({ line: jump.line, column: jump.column });
+  }, [jump, mode]);
 
   // 切换编辑模式时关闭源码查找面板；若新请求随后到达会重新打开。
   useEffect(() => {
@@ -1275,7 +1285,12 @@ export function App() {
   const exportWrapRef = useRef<HTMLDivElement>(null);
   const problemsState = useSyncExternalStore(problemStore.subscribe, problemStore.getState);
   const [outline, setOutline] = useState<OutlineItem[]>([]);
-  const [sourceJump, setSourceJump] = useState<{ line: number; column: number; token: number } | null>(
+  const [sourceJump, setSourceJump] = useState<{
+    line: number;
+    column: number;
+    token: number;
+    ratio?: number;
+  } | null>(
     null,
   );
   const [wysiwygJump, setWysiwygJump] = useState<{ index: number; token: number } | null>(null);
@@ -1630,9 +1645,9 @@ export function App() {
   }, [diffState.diff, diffBase, diffEnabled, activeId]);
 
 
-  // 大纲随内容变化防抖重建；仅 Markdown 与 LaTeX 提供大纲。见 doc/design.md §15.1。
+  // 大纲随内容变化防抖重建；支持格式由 OUTLINE_FORMATS 统一声明。见 doc/design.md §15.1。
   useEffect(() => {
-    if (!activeId || (activeFormat !== "markdown" && activeFormat !== "latex")) {
+    if (!activeId || !formatSupportsOutline(activeFormat)) {
       setOutline([]);
       return;
     }
@@ -1687,13 +1702,20 @@ export function App() {
       return;
     }
     if (state.mode === "source" || state.mode === "split") {
-      setSourceJump({ line: item.line, column: 1, token });
+      setSourceJump({ line: item.line, column: 1, token, ratio: 1 / 3 });
       return;
     }
     const headings = document.querySelectorAll<HTMLElement>(
       ".pane:not([hidden]) .markdown-body :is(h1,h2,h3,h4,h5,h6)",
     );
-    headings[item.index]?.scrollIntoView({ block: "start", behavior: "smooth" });
+    const heading = headings[item.index];
+    if (heading) {
+      scrollElementToRatio(heading, 1 / 3);
+      return;
+    }
+    // 代码 / SVG / 图表类格式没有标题 DOM，退回源码按行号定位。
+    manager.setMode("source");
+    setSourceJump({ line: item.line, column: 1, token, ratio: 1 / 3 });
   };
 
   /** 定位到渲染预览中覆盖指定源码行号的块。见 doc/design.md §21.8.3。 */

@@ -1,4 +1,5 @@
 import { EditorState, TextSelection, type Command, type Transaction } from "prosemirror-state";
+import { scrollElementToRatio } from "../shared/scroll";
 import {
   DOMParser as PMDOMParser,
   Fragment,
@@ -758,7 +759,7 @@ export class PandaEditor {
   }
 
   /** 滚动到第 index 个标题（从 0 开始），用于大纲跳转。见 doc/design.md §15.1。 */
-  scrollToHeading(index: number): void {
+  scrollToHeading(index: number, ratio?: number): void {
     let count = 0;
     let target: number | null = null;
     this.view.state.doc.descendants((node, pos) => {
@@ -772,7 +773,7 @@ export class PandaEditor {
       return true;
     });
     if (target === null) return;
-    this.scrollToPosition(target + 1);
+    this.scrollToPosition(target + 1, false, ratio);
   }
 
   /**
@@ -836,11 +837,15 @@ export class PandaEditor {
     this.scrollToPosition(target + 1, true);
   }
 
-  private scrollToPosition(pos: number, flash = false): void {
+  private scrollToPosition(pos: number, flash = false, ratio?: number): void {
     const dom = this.view.domAtPos(pos);
     const element = dom.node.nodeType === 1 ? (dom.node as HTMLElement) : dom.node.parentElement;
     if (!element) return;
-    element.scrollIntoView({ block: "center", behavior: "smooth" });
+    if (ratio === undefined) {
+      element.scrollIntoView({ block: "center", behavior: "smooth" });
+    } else {
+      scrollElementToRatio(element, ratio);
+    }
     if (flash) {
       element.classList.add("diff-target");
       setTimeout(() => element.classList.remove("diff-target"), 600);

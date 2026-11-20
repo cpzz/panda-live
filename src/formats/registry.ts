@@ -161,7 +161,7 @@ export const PREVIEW_FORMATS: ReadonlySet<string> = new Set([
   "svg",
 ]);
 
-/** 纯代码格式：只有源码编辑，没有渲染预览与大纲。 */
+/** 纯代码格式：只有源码编辑、没有渲染预览，但提供符号大纲（见 formats/outline.ts）。 */
 export const CODE_FORMATS: ReadonlySet<BuiltinDocumentFormat> = new Set([
   "cpp",
   "java",

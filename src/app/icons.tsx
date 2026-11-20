@@ -1,4 +1,5 @@
 import type { ReactNode, SVGProps } from "react";
+import type { OutlineSymbol } from "../formats/outline";
 
 /*
  * 图标参考 markdown-viewer 的 Lucide 图标：24×24 viewBox、描边 2px。
@@ -369,6 +370,93 @@ export function fileIconForPath(filePath: string | null | undefined): IconName {
   if (CODE_FILE_EXT.test(filePath)) return "file-code";
   if (TEXT_FILE_EXT.test(filePath)) return "file-text";
   return "file";
+}
+
+/**
+ * 具体语法类型 → 英文首字母，用于「文件图标 + 字母」组合标记。
+ * 例如 类 → C、枚举 → E、函数 → F。未知类型留空，只显示文件轮廓。
+ */
+const OUTLINE_SYMBOL_LETTERS: Record<OutlineSymbol, string> = {
+  标题: "H",
+  类: "C",
+  结构体: "S",
+  接口: "I",
+  枚举: "E",
+  命名空间: "N",
+  模块: "M",
+  包: "P",
+  特质: "T",
+  实现: "I",
+  类型别名: "T",
+  记录: "R",
+  混入: "X",
+  协议: "P",
+  扩展: "X",
+  注解: "A",
+  单例对象: "O",
+  函数: "F",
+  方法: "M",
+  构造函数: "C",
+  子程序: "S",
+  键: "K",
+  节: "S",
+  标签: "T",
+  选择器: "S",
+  "@ 规则": "R",
+  表: "T",
+  视图: "V",
+  索引: "I",
+  存储过程: "P",
+  触发器: "T",
+  数据库: "D",
+  序列: "Q",
+  图: "G",
+  子图: "G",
+  参与者: "A",
+  图标题: "T",
+};
+
+/**
+ * 大纲子项图标：文件轮廓 + 类型英文首字母（类 → C、枚举 → E）。
+ * 用 text 元素叠加字母，避免为 37 种类型各画一套 SVG 路径。
+ */
+export function OutlineSymbolIcon({
+  symbol,
+  size = 13,
+  ...props
+}: { symbol: OutlineSymbol; size?: number } & Omit<SVGProps<SVGSVGElement>, "name">) {
+  const letter = OUTLINE_SYMBOL_LETTERS[symbol] ?? "";
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.75}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+      {...props}
+    >
+      <path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" />
+      <path d="M14 2v5a1 1 0 0 0 1 1h5" />
+      {letter && (
+        <text
+          x="11"
+          y="16.5"
+          textAnchor="middle"
+          fontSize="9"
+          fontWeight="700"
+          fill="currentColor"
+          stroke="none"
+        >
+          {letter}
+        </text>
+      )}
+    </svg>
+  );
 }
 
 /** 熊猫品牌标识：纯 SVG，可随尺寸缩放，浅色/深色下均可见。 */

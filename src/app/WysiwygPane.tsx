@@ -269,7 +269,7 @@ export function WysiwygPane({
   // 大纲跳转：滚动到对应标题。见 doc/design.md §15.1。
   useEffect(() => {
     if (!jump) return;
-    editorRef.current?.scrollToHeading(jump.index);
+    editorRef.current?.scrollToHeading(jump.index, 1 / 3);
   }, [jump]);
 
   // 改动导航：把源码行号映射到顶层块。

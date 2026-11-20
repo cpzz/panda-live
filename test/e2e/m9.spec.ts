@@ -41,11 +41,6 @@ test("M9：Markdown 大纲显示标题层级并可跳转到源码行", async () 
 
     await items.nth(1).click();
     await expect(page.locator(".statusbar")).toContainText("行 5，列 1", { timeout: 10_000 });
-
-    await page.getByRole("button", { name: "折叠大纲" }).click();
-    await expect(page.locator(".outline-list")).toHaveCount(0);
-    await page.getByRole("button", { name: "展开大纲" }).click();
-    await expect(page.locator(".outline-item")).toHaveCount(2);
   } finally {
     await app.close();
     await fs.rm(tempDir, { recursive: true, force: true });
@@ -69,6 +64,33 @@ test("M9：LaTeX 大纲提取章节命令", async () => {
     await expect(items).toHaveCount(2);
     await expect(items.nth(0)).toHaveText("绪论");
     await expect(items.nth(1)).toHaveText("背景");
+  } finally {
+    await app.close();
+    await fs.rm(tempDir, { recursive: true, force: true });
+    await fs.rm(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("M9：预览模式点大纲项切回源码并定位到目标行", async () => {
+  test.setTimeout(120_000);
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "panda-m9-svg-"));
+  // SVG 默认以预览模式打开；大纲项没有标题 DOM，需切回源码按行定位。
+  const filePath = path.join(tempDir, "shapes.svg");
+  await fs.writeFile(
+    filePath,
+    '<svg xmlns="http://www.w3.org/2000/svg">\n  <g id="layer-1">\n    <title>图形一</title>\n  </g>\n</svg>\n',
+    "utf8",
+  );
+
+  const { app, page, userDataDir } = await launchWithFile(filePath);
+  try {
+    const items = page.locator(".outline-item");
+    await expect(items).toHaveCount(2);
+    await items.nth(0).click();
+    // 点击后应切回源码模式并定位到目标行（<g id="layer-1"> 在第 2 行）；
+    // 该跳转不能被 preview→source 模式切换触发的编辑器 state 重建清掉。
+    await expect(page.locator(".source-pane")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator(".statusbar")).toContainText("行 2，列 1", { timeout: 10_000 });
   } finally {
     await app.close();
     await fs.rm(tempDir, { recursive: true, force: true });

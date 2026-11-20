@@ -2680,18 +2680,6 @@ body.resizing * {
   border-top: 0;
 }
 
-.sidebar-title {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: none;
-}
-
 .sidebar-error {
   padding: 6px 10px;
   color: var(--danger);
@@ -2869,16 +2857,6 @@ body.resizing * {
   border-top: 1px solid var(--border);
 }
 
-.outline-panel-header {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  height: 29px;
-  padding: 0 8px;
-  border-bottom: 1px solid var(--border);
-  user-select: none;
-}
-
 .outline-list {
   margin: 0;
   padding: 3px 0 8px;
@@ -2887,11 +2865,101 @@ body.resizing * {
   min-width: 0;
 }
 
+.outline-groups {
+  padding: 3px 0 8px;
+  overflow: auto;
+  min-width: 0;
+}
+
+.outline-groups .outline-list {
+  padding: 0;
+  overflow: visible;
+}
+
+.outline-group + .outline-group {
+  margin-top: 8px;
+}
+
+.outline-group-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  padding: 3px 8px 3px 6px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11.5px;
+  text-align: left;
+  cursor: pointer;
+  user-select: none;
+}
+
+.outline-group-header:hover {
+  background: var(--surface-hover);
+  color: var(--fg);
+}
+
+.outline-group-chevron {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  width: 18px;
+  height: 18px;
+  padding: 2px;
+}
+
+.outline-group-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.outline-group-count {
+  flex: 0 0 auto;
+  opacity: 0.7;
+}
+
+/* 分类定位工具栏：参考工作区 files-folder-select，只放一个下拉框。 */
+.outline-toolbar {
+  display: flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--border);
+  user-select: none;
+}
+
+.outline-group-select {
+  flex: 1;
+  min-width: 0;
+  height: 22px;
+  padding: 0 4px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.outline-group-select:hover,
+.outline-group-select:focus-visible {
+  border-color: var(--border-strong);
+  background: var(--surface);
+}
+
 .outline-list li {
   min-width: 0;
 }
 
 .outline-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   width: 100%;
   min-width: 0;
   max-width: 100%;
@@ -2902,10 +2970,19 @@ body.resizing * {
   color: var(--fg);
   font-size: 12.5px;
   text-align: left;
+  cursor: pointer;
+}
+
+.outline-item-icon {
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+
+.outline-item-text {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  cursor: pointer;
 }
 
 .outline-item:hover {

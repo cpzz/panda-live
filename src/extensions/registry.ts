@@ -11,11 +11,12 @@ export interface FormatEntry {
   syntax: LanguageSyntax;
 }
 
+/** 代码与结构化文本格式均提供符号/键路径大纲。见 doc/design.md §15.1。 */
 const CODE_CAPABILITIES: FormatCapabilities = {
   source: true,
   wysiwyg: false,
   preview: "none",
-  outline: false,
+  outline: true,
   exportHtml: false,
 };
 
@@ -23,14 +24,14 @@ const BUILTIN_CAPABILITIES: Record<BuiltinDocumentFormat, FormatCapabilities> = 
   markdown: { source: true, wysiwyg: true, preview: "inline", outline: true, exportHtml: true },
   latex: { source: true, wysiwyg: false, preview: "none", outline: true, exportHtml: false },
   mathml: { source: true, wysiwyg: false, preview: "inline", outline: false, exportHtml: true },
-  plantuml: { source: true, wysiwyg: false, preview: "inline", outline: false, exportHtml: false },
-  mermaid: { source: true, wysiwyg: false, preview: "inline", outline: false, exportHtml: false },
+  plantuml: { source: true, wysiwyg: false, preview: "inline", outline: true, exportHtml: false },
+  mermaid: { source: true, wysiwyg: false, preview: "inline", outline: true, exportHtml: false },
   // PDF：二进制只读，不支持源码编辑
   pdf: { source: false, wysiwyg: false, preview: "none", outline: false, exportHtml: false },
   // 图片：二进制只读，不支持源码编辑
   image: { source: false, wysiwyg: false, preview: "none", outline: false, exportHtml: false },
   // SVG：文本格式，源码为 XML 编辑，预览在 img 中隔离渲染
-  svg: { source: true, wysiwyg: false, preview: "inline", outline: false, exportHtml: false },
+  svg: { source: true, wysiwyg: false, preview: "inline", outline: true, exportHtml: false },
   text: { source: true, wysiwyg: false, preview: "none", outline: false, exportHtml: false },
   cpp: CODE_CAPABILITIES,
   java: CODE_CAPABILITIES,

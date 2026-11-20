@@ -69,6 +69,7 @@ import {
   WidgetType,
   type DecorationSet,
 } from "@codemirror/view";
+import { ratioMargin } from "../shared/scroll";
 import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap, acceptCompletion, completionStatus } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap, copyLineDown, copyLineUp, indentMore, moveLineDown, moveLineUp } from "@codemirror/commands";
 import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
@@ -1064,23 +1065,25 @@ export class SourceEditor {
 
   /**
    * 按行/列定位光标，并把目标行放到视口约 1/3 高度处，
-   * 为跳转后的上文阅读留出空间（逐处改动跳转使用）。
+   * 为跳转后的上文阅读留出空间（大纲/逐处改动跳转使用）。
+   *
+   * 用 CodeMirror 官方的 scrollIntoView effect（y: "start" + yMargin）而非
+   * coordsAtPos 手动算 scrollTop：目标行不在当前视口时会被虚拟滚动省略，
+   * coordsAtPos 返回 null 导致定位失效；官方 effect 在 measure 阶段执行，
+   * 无论目标远近都能先滚动到位再按 yMargin 落到指定高度。
    */
   setCursorAtRatio(cursor: { line: number; column: number }, ratio = 1 / 3): void {
     const lineInfo = this.view.state.doc.line(
       Math.min(Math.max(1, cursor.line), this.view.state.doc.lines),
     );
     const offset = Math.min(lineInfo.to, lineInfo.from + Math.max(0, cursor.column - 1));
+    const viewportHeight = this.view.scrollDOM.clientHeight;
+    // yMargin 必须小于编辑器高度；视口尚未布局（clientHeight=0）时退回贴顶。
+    const yMargin = viewportHeight > 0 ? ratioMargin(viewportHeight, ratio) : 0;
     this.view.dispatch({
       selection: { anchor: offset },
-      scrollIntoView: true,
+      effects: EditorView.scrollIntoView(offset, { y: "start", yMargin }),
     });
-    const scroller = this.view.scrollDOM;
-    const coords = this.view.coordsAtPos(offset);
-    if (coords) {
-      const rect = scroller.getBoundingClientRect();
-      scroller.scrollTop += coords.top - (rect.top + rect.height * ratio);
-    }
     this.view.focus();
   }
 
