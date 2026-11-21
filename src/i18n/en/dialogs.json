@@ -117,6 +117,8 @@
   "新建文件": "New File",
   "新建目录": "New Folder",
   "更多操作": "More Actions",
+  "复制路径": "Copy Path",
+  "复制相对路径": "Copy Relative Path",
   "从工作区移除": "Remove from Workspace",
   "打开文件（Ctrl+O）": "Open File (Ctrl+O)",
   "保存文件（Ctrl+S）": "Save File (Ctrl+S)",

@@ -17,6 +17,11 @@ export const MSG_ZOOM_GESTURE = `${MSG_PREFIX}gesture`;
 export const MSG_ZOOM_READY = `${MSG_PREFIX}ready`;
 /** 父 → 子：应用绝对缩放百分比。 */
 export const MSG_ZOOM_APPLY = `${MSG_PREFIX}apply`;
+/**
+ * 子 → 父：iframe 内发生了指针按下。iframe 是独立 browsing context，内部点击
+ * 不冒泡到父文档，父窗口据此补发事件以关闭工作区菜单等浮层。
+ */
+export const MSG_PREVIEW_POINTER = `${MSG_PREFIX}pointer`;
 
 export const HTML_ZOOM_MIN = 30;
 export const HTML_ZOOM_MAX = 500;
@@ -38,6 +43,7 @@ export function htmlPreviewInjectScript(): string {
   var GESTURE = ${JSON.stringify(MSG_ZOOM_GESTURE)};
   var READY = ${JSON.stringify(MSG_ZOOM_READY)};
   var APPLY = ${JSON.stringify(MSG_ZOOM_APPLY)};
+  var POINTER = ${JSON.stringify(MSG_PREVIEW_POINTER)};
   var MIN = ${HTML_ZOOM_MIN};
   var MAX = ${HTML_ZOOM_MAX};
 
@@ -55,6 +61,12 @@ export function htmlPreviewInjectScript(): string {
     if (!data || data.type !== APPLY) return;
     apply(data.zoom);
   });
+
+  // iframe 是独立 browsing context，内部点击不会冒泡到父文档。用捕获阶段
+  // 监听并通知父窗口，父窗口据此关闭工作区菜单等"点击外部关闭"浮层。
+  window.addEventListener("pointerdown", function () {
+    try { window.parent.postMessage({ type: POINTER }, "*"); } catch (e) {}
+  }, true);
 
   window.addEventListener("keydown", function (event) {
     if (!(event.ctrlKey || event.metaKey)) return;

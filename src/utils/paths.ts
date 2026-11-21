@@ -36,3 +36,20 @@ export function pathKey(filePath: string): string {
   const normalized = filePath.replace(/\\/g, "/").replace(/\/+$/u, "");
   return /^[a-zA-Z]:/.test(normalized) ? normalized.toLowerCase() : normalized;
 }
+
+/**
+ * 计算绝对路径相对工作区根目录的显示路径，统一用 "/" 分隔。
+ * 大小写不敏感匹配；不在根目录内（或输入为空）时回退为原路径。
+ */
+export function relativeToRoot(filePath: string, rootPath: string): string {
+  const normalize = (value: string): string => value.replace(/\\/g, "/").replace(/\/+$/u, "");
+  const file = normalize(filePath);
+  const root = normalize(rootPath);
+  if (!file || !root) return filePath;
+  if (file.toLowerCase() === root.toLowerCase()) return ".";
+  const prefix = `${root}/`;
+  if (file.toLowerCase().startsWith(prefix.toLowerCase())) {
+    return file.slice(prefix.length);
+  }
+  return filePath;
+}

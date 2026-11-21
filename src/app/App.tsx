@@ -14,6 +14,7 @@ import {
   HTML_ZOOM_MAX,
   HTML_ZOOM_MIN,
   HTML_ZOOM_STEP,
+  MSG_PREVIEW_POINTER,
   MSG_ZOOM_APPLY,
   MSG_ZOOM_GESTURE,
   MSG_ZOOM_READY,
@@ -677,6 +678,11 @@ function HtmlPreviewPane({ document, enabled }: { document: DocumentState; enabl
         if (data.action === "reset") setZoom(HTML_ZOOM_DEFAULT);
         else if (data.action === "in") setZoom((value) => clampHtmlZoom(value + HTML_ZOOM_STEP));
         else if (data.action === "out") setZoom((value) => clampHtmlZoom(value - HTML_ZOOM_STEP));
+      } else if (data.type === MSG_PREVIEW_POINTER) {
+        // iframe 是独立 browsing context，内部点击不冒泡到父文档，父侧 mousedown/focusin
+        // 监听收不到。这里在 iframe 元素上补发一个冒泡的 mousedown，触发工作区菜单等
+        // 基于 document mousedown 的"点击外部关闭"逻辑（iframe 不在菜单容器内，会被关闭）。
+        frameRef.current?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
       }
     };
     window.addEventListener("message", onMessage);
@@ -2644,6 +2650,7 @@ export function App() {
               onDeleted={(filePath) => {
                 void manager.removeDocumentByPath(filePath);
               }}
+              onNotice={(kind, message) => manager.showNotice(kind, message)}
               outline={<OutlinePanel items={outline} onSelect={jumpToOutline} />}
               sourceControl={
                 <GitPanel

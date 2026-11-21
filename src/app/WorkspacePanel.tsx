@@ -11,6 +11,8 @@ import {
 import type { FileRef } from "../shared/ipc";
 import { t } from "../i18n";
 import type { WorkspaceNode, WorkspaceStore } from "../services/workspace-store";
+import { copyText } from "../utils/clipboard";
+import { relativeToRoot } from "../utils/paths";
 import { Icon, fileIconForPath, type IconName } from "./icons";
 
 interface WorkspacePanelProps {
@@ -30,6 +32,8 @@ interface WorkspacePanelProps {
   sourceControlCount?: number;
   /** 外部请求切换侧栏标签（如点击状态栏分支）。 */
   tabRequest?: { tab: SidebarTab; token: number } | null;
+  /** 复制路径等操作的成功/失败提示。 */
+  onNotice(kind: "info" | "error", message: string): void;
 }
 
 type SidebarTab = "files" | "outline" | "source-control";
@@ -44,6 +48,41 @@ interface PromptState {
 type TreeMenuEntry =
   | { type: "separator" }
   | { type: "item"; label: string; icon: IconName; action(): void };
+
+/**
+ * 复制路径与相对路径菜单项（一组，位于删除项上方并以分隔线隔开）。
+ * 根目录自身作为「子项」时相对路径为 "."，由 relativeToRoot 处理。
+ */
+function copyPathEntries(
+  path: string,
+  rootPath: string,
+  onNotice: (kind: "info" | "error", message: string) => void,
+): TreeMenuEntry[] {
+  const copy = (text: string, done: string): void => {
+    void copyText(text).then((ok) => {
+      onNotice(ok ? "info" : "error", ok ? done : t("复制失败"));
+    });
+  };
+  return [
+    { type: "separator" },
+    {
+      type: "item",
+      label: t("复制路径"),
+      icon: "copy",
+      action: () => copy(path, t("已复制路径：{0}", path)),
+    },
+    {
+      type: "item",
+      label: t("复制相对路径"),
+      icon: "copy",
+      action: () => {
+        const relative = relativeToRoot(path, rootPath);
+        copy(relative, t("已复制相对路径：{0}", relative));
+      },
+    },
+    { type: "separator" },
+  ];
+}
 
 /** 目录/文件行的「扩展」下拉菜单（图标按钮 + 菜单项列表）。 */
 function TreeMenu({
@@ -103,6 +142,7 @@ function NodeRow({
   node,
   depth,
   rootId,
+  rootPath,
   store,
   activePath,
   menuPath,
@@ -111,10 +151,13 @@ function NodeRow({
   onRenamed,
   onDeleted,
   askName,
+  onNotice,
 }: {
   node: WorkspaceNode;
   depth: number;
   rootId: string;
+  /** 所属工作区根目录绝对路径，用于计算相对路径。 */
+  rootPath: string;
   store: WorkspaceStore;
   activePath: string | null;
   /** 当前展开扩展菜单的行路径；同一时间只开一个菜单。 */
@@ -124,6 +167,7 @@ function NodeRow({
   onRenamed(oldPath: string, ref: FileRef): void;
   onDeleted(filePath: string, isDir: boolean): void;
   askName(title: string, initial: string, submit: (value: string) => void): void;
+  onNotice(kind: "info" | "error", message: string): void;
 }) {
   const rename = (): void => {
     askName(t("将“{0}”重命名为", node.name), node.name, (next) => {
@@ -167,7 +211,7 @@ function NodeRow({
             icon: "reveal",
             action: () => void store.reveal(node.path),
           },
-          { type: "separator" },
+          ...copyPathEntries(node.path, rootPath, onNotice),
           { type: "item", label: t("删除"), icon: "trash", action: remove },
         ]
       : [
@@ -178,7 +222,7 @@ function NodeRow({
             icon: "reveal",
             action: () => void store.reveal(node.path),
           },
-          { type: "separator" },
+          ...copyPathEntries(node.path, rootPath, onNotice),
           { type: "item", label: t("删除"), icon: "trash", action: remove },
         ];
 
@@ -252,6 +296,7 @@ function NodeRow({
               node={child}
               depth={depth + 1}
               rootId={rootId}
+              rootPath={rootPath}
               store={store}
               activePath={activePath}
               menuPath={menuPath}
@@ -260,6 +305,7 @@ function NodeRow({
               onRenamed={onRenamed}
               onDeleted={onDeleted}
               askName={askName}
+              onNotice={onNotice}
             />
           ))}
         </div>
@@ -280,6 +326,7 @@ export function WorkspacePanel({
   sourceControl,
   sourceControlCount,
   tabRequest,
+  onNotice,
 }: WorkspacePanelProps) {
   const state = useSyncExternalStore(store.subscribe, store.getState);
   const [prompt, setPrompt] = useState<PromptState | null>(null);
@@ -296,7 +343,7 @@ export function WorkspacePanel({
   // 从文件树点开的路径：这类切换不发生滚动，避免点击时列表跳动。
   const treeOpenRef = useRef<string | null>(null);
 
-  // 扩展菜单打开时，点击菜单外或按 Esc 关闭。
+  // 扩展菜单打开时，点击菜单外、按 Esc 或焦点移到菜单外（如显示页面）时关闭。
   useEffect(() => {
     if (!menuPath) return;
     const onPointerDown = (event: MouseEvent): void => {
@@ -306,11 +353,18 @@ export function WorkspacePanel({
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key === "Escape") setMenuPath(null);
     };
+    // 焦点进入其它可聚焦区域（编辑器、预览等显示页面）时关闭菜单。
+    const onFocusIn = (event: FocusEvent): void => {
+      if (event.target instanceof HTMLElement && event.target.closest(".tree-menu-wrap")) return;
+      setMenuPath(null);
+    };
     document.addEventListener("mousedown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("focusin", onFocusIn);
     return () => {
       document.removeEventListener("mousedown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("focusin", onFocusIn);
     };
   }, [menuPath]);
 
@@ -667,7 +721,7 @@ export function WorkspacePanel({
                                 icon: "reveal",
                                 action: () => void store.reveal(entry.root.path),
                               },
-                              { type: "separator" },
+                              ...copyPathEntries(entry.root.path, entry.root.path, onNotice),
                               {
                                 type: "item",
                                 label: t("从工作区移除"),
@@ -686,6 +740,7 @@ export function WorkspacePanel({
                               node={node}
                               depth={0}
                               rootId={entry.root.rootId}
+                              rootPath={entry.root.path}
                               store={store}
                               activePath={activePath}
                               menuPath={menuPath}
@@ -694,6 +749,7 @@ export function WorkspacePanel({
                               onRenamed={onRenamed}
                               onDeleted={onDeleted}
                               askName={askName}
+                              onNotice={onNotice}
                             />
                           ))}
                           {entry.nodes.length === 0 && <p className="sidebar-empty">{t("目录为空")}</p>}

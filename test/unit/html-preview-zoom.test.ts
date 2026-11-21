@@ -6,6 +6,7 @@ import {
   HTML_ZOOM_MAX,
   HTML_ZOOM_MIN,
   htmlPreviewInjectScript,
+  MSG_PREVIEW_POINTER,
   MSG_ZOOM_APPLY,
   MSG_ZOOM_GESTURE,
   MSG_ZOOM_READY,
@@ -24,6 +25,15 @@ describe("HTML 预览缩放协议", () => {
     expect(script).toContain("document.documentElement.style.zoom");
     // 校验来源，避免被其他 postMessage 伪造手势。
     expect(script).toContain("event.source !== window.parent");
+  });
+
+  it("注入脚本在捕获阶段转发 iframe 内点击事件", () => {
+    const script = htmlPreviewInjectScript();
+    expect(script).toContain(MSG_PREVIEW_POINTER);
+    expect(script).toContain('addEventListener("pointerdown"');
+    // 捕获阶段监听：即使页面脚本 stopPropagation 也能转发。
+    expect(script).toMatch(/addEventListener\("pointerdown"[\s\S]*?\}, true\)/);
+    expect(script).toContain("postMessage({ type: POINTER }");
   });
 
   it("注入脚本插到 </body> 之前，保留原文档内容", () => {

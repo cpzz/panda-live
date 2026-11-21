@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pathKey, resolveRelativePath } from "../../src/utils/paths";
+import { pathKey, relativeToRoot, resolveRelativePath } from "../../src/utils/paths";
 
 describe("相对资源路径解析", () => {
   it("相对路径基于文件所在目录", () => {
@@ -49,5 +49,25 @@ describe("路径身份归一化", () => {
   it("非盘符路径保留大小写", () => {
     expect(pathKey("/Repo/Src/A.md")).toBe("/Repo/Src/A.md");
     expect(pathKey("/Repo/Src/A.md")).not.toBe(pathKey("/repo/src/a.md"));
+  });
+});
+
+describe("相对工作区根目录路径", () => {
+  it("去掉根目录前缀并统一用 / 分隔", () => {
+    expect(relativeToRoot("D:\\repo\\src\\app.ts", "D:\\repo")).toBe("src/app.ts");
+    expect(relativeToRoot("/repo/src/app.ts", "/repo")).toBe("src/app.ts");
+  });
+
+  it("盘符与目录大小写不敏感", () => {
+    expect(relativeToRoot("d:\\Repo\\A.md", "D:\\repo\\")).toBe("A.md");
+  });
+
+  it("根目录自身返回点号", () => {
+    expect(relativeToRoot("D:\\repo", "D:\\repo")).toBe(".");
+    expect(relativeToRoot("D:\\repo\\", "D:\\repo")).toBe(".");
+  });
+
+  it("不在根目录内时回退原路径", () => {
+    expect(relativeToRoot("D:\\other\\a.md", "D:\\repo")).toBe("D:\\other\\a.md");
   });
 });

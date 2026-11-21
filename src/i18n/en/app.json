@@ -43,6 +43,8 @@
   "图片": "Image",
   "已回到第一处": "Back to the first change",
   "已回到最后一处": "Back to the last change",
+  "已复制路径：{0}": "Copied path: {0}",
+  "已复制相对路径：{0}": "Copied relative path: {0}",
   "仅 Markdown 文档支持导出 HTML": "HTML export is only available for Markdown documents",
   "已导出 HTML：{0}": "Exported HTML: {0}",
   "仅 Markdown 文档支持导出 PDF": "PDF export is only available for Markdown documents",
