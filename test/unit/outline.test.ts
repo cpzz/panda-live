@@ -141,6 +141,96 @@ describe("大纲提取", () => {
     ]);
   });
 
+  it("C++ 识别初始化列表、限定符与单行带内容方法体", () => {
+    const source = [
+      "explicit Greeter(std::string name) : name_(std::move(name)) {}",
+      'void hello() const { std::cout << "Hello, " << name_ << \'\\n\'; }',
+      "int add(int a, int b) { return a + b; }",
+      "virtual void run() noexcept override final;",
+      "Foo() = default;",
+      "~Foo() {}",
+    ].join("\n");
+    expect(buildOutline(source, "cpp").map((item) => [item.text, item.symbol])).toEqual([
+      ["Greeter", "函数"],
+      ["hello", "函数"],
+      ["add", "函数"],
+      ["run", "函数"],
+      ["Foo", "函数"],
+      ["~Foo", "函数"],
+    ]);
+  });
+
+  it("C++ 识别函数体在下一行的函数声明", () => {
+    const source = [
+      "int main() {",
+      "    return 0;",
+      "}",
+      "namespace app {",
+      "void run(int x) {",
+      "    return;",
+      "}",
+      "}",
+    ].join("\n");
+    expect(buildOutline(source, "cpp").map((item) => [item.text, item.symbol])).toEqual([
+      ["main", "函数"],
+      ["app", "命名空间"],
+      ["run", "函数"],
+    ]);
+  });
+
+  it("Java / C# 识别注解、throws 与表达式体方法", () => {
+    const java = [
+      "public class Greeter {",
+      "  public Greeter(String name) { this.name = name; }",
+      '  @Override public String toString() { return "x"; }',
+      "  public static void main(String[] args) throws Exception {}",
+      "}",
+    ].join("\n");
+    expect(buildOutline(java, "java").map((item) => item.text)).toEqual([
+      "Greeter",
+      "Greeter",
+      "toString",
+      "main",
+    ]);
+
+    const csharp = [
+      "public class Greeter {",
+      "  public Greeter(string name) => this.name = name;",
+      '  void Hello() => Console.WriteLine("hi");',
+      '  public void Run() { Console.WriteLine("run"); }',
+      "}",
+    ].join("\n");
+    expect(buildOutline(csharp, "csharp").map((item) => item.text)).toEqual([
+      "Greeter",
+      "Greeter",
+      "Hello",
+      "Run",
+    ]);
+  });
+
+  it("JS/TS 识别生成器方法、类字段与带类型注解的箭头函数", () => {
+    const source = [
+      "class C {",
+      "  *gen() { yield 1; }",
+      "  handler = () => {};",
+      "}",
+      "export const bar = async (x: number): Promise<number> => x;",
+      "const baz = () => 1;",
+    ].join("\n");
+    expect(buildOutline(source, "javascript").map((item) => [item.text, item.symbol])).toEqual([
+      ["C", "类"],
+      ["gen", "方法"],
+      ["handler", "函数"],
+      ["bar", "函数"],
+      ["baz", "函数"],
+    ]);
+  });
+
+  it("Dart 识别表达式体方法", () => {
+    const source = ["class Greeter {", "  int value() => 1;", "}"].join("\n");
+    expect(buildOutline(source, "dart").map((item) => item.text)).toEqual(["Greeter", "value"]);
+  });
+
   it("Go 区分方法与顶层函数", () => {
     const source = [
       "type Server struct {}",

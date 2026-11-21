@@ -334,9 +334,18 @@ function kindForSymbol(symbol: OutlineSymbol): OutlineKind {
 
 /* --------------------------- 类 C 语言通用规则 --------------------------- */
 
-/** 形如 `[返回类型] 名称(参数...) {` 的方法/函数声明。 */
+/**
+ * 类 C 语言的方法/函数声明；支持以下常见写法：
+ * - 普通声明 `void f();`、空体 `void f() {}`、单行带内容体 `void f() { return; }`
+ * - 函数体在下一行 `int main() {`（`}` 可缺省，逐行匹配）
+ * - C++ 限定符 `const` / `noexcept(...)` / `override` / `final`
+ * - C++ 构造函数初始化列表 `: name_(std::move(name))`
+ * - `= default` / `= delete` / `= 0`（纯虚）
+ * - Java `throws`、注解 `@Override`；C# 表达式体 `=> expr;`
+ * 控制流关键字与注释/字符串仍由 codeOutline 统一过滤。
+ */
 const C_METHOD =
-  /^(?:[\w:<>,*&[\]\s]+?\s+)?([~A-Za-z_]\w*)\s*\([^;{}]*\)\s*(?:const\s*)?(?:noexcept(?:\([^)]*\))?\s*)?(?:override\s*)?(?:final\s*)?(?:;|\{\s*\}| \{)?\s*$/;
+  /^(?:[\w:<>,*&@[\]\s]+?\s+)?([~A-Za-z_]\w*)\s*\([^;{}]*\)(?:\s*const)?(?:\s*noexcept(?:\([^)]*\))?)?(?:\s*override)?(?:\s*final)?(?:\s*throws\s+[\w.,<>[\]]+)?(?:\s*:\s*[^;{}]+)?(?:\s*=>\s*[^;{}]+)?(?:\s*\{[^}]*\}?)?(?:\s*=\s*(?:default|delete|0))?\s*;?\s*$/;
 const JAVA_TYPE =
   /^(?:(?:public|protected|private|abstract|final|static|sealed|non-sealed|strictfp|default)\s+)*(class|interface|enum|record|@interface)\s+(\w+)/;
 const CSHARP_TYPE =
@@ -399,13 +408,13 @@ const CODE_SPECS: Record<string, CodeSpec> = {
         symbol: "函数",
       },
       {
-        pattern: /^(?:export\s+)?(?:const|let|var)\s+([\w$]+)\s*=\s*(?:async\s*)?(?:\([^)]*\)|[\w$]+)\s*=>/,
+        pattern: /^(?:export\s+)?(?:(?:const|let|var)\s+)?([\w$]+)\s*(?::\s*[\w<>[\]|&,\s]+)?\s*=\s*(?:async\s*)?(?:\([^)]*\)|[\w$]+)\s*(?::\s*[\w<>[\]|&,\s]+)?\s*=>/,
         level: 2,
         symbol: "函数",
       },
       {
         pattern:
-          /^(?:(?:public|private|protected|static|readonly|async|get|set|declare|override|abstract)\s+)*([\w$]+)\s*\??\s*\([^)]*\)\s*(?::\s*[\w<>[\]|&,\s]+)?\s*\{/,
+          /^(?:(?:public|private|protected|static|readonly|async|get|set|declare|override|abstract)\s+|\*\s*)*([\w$]+)\s*\??\s*\([^)]*\)\s*(?::\s*[\w<>[\]|&,\s]+)?\s*\{/,
         level: (_m, indent) => (indent > 0 ? 2 : 1),
         symbol: (_m, indent) => (indent > 0 ? "方法" : "函数"),
       },
@@ -541,7 +550,7 @@ const CODE_SPECS: Record<string, CodeSpec> = {
         name: (m) => m[2] ?? "",
       },
       {
-        pattern: /^(?:static\s+)?(?:final\s+)?(?:[\w<>,\s?]+?\s+)?(\w+)\s*\([^)]*\)\s*(?:async\s*)?\{/,
+        pattern: /^(?:static\s+)?(?:final\s+)?(?:[\w<>,\s?]+?\s+)?(\w+)\s*\([^)]*\)\s*(?:async\s*)?(?:\{|=>)/,
         level: 2,
         symbol: "方法",
       },
