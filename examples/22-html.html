@@ -3,32 +3,433 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Panda Live 示例</title>
+    <title>Panda Live · HTML 预览验证</title>
     <style>
-      .page {
-        max-width: 720px;
-        margin: 0 auto;
-        padding: 24px;
+      /* CSS 自定义属性 + 双主题：验证预览内样式完全自包含、不污染应用界面。 */
+      :root {
+        --bg: #f6f8fb;
+        --surface: #ffffff;
+        --surface-2: #eef2f8;
+        --text: #1b2430;
+        --muted: #5b6879;
+        --line: #dfe5ee;
+        --accent: #3b6ef6;
+        --accent-soft: #e8efff;
+        --ok: #1a8a5a;
+        --ok-soft: #e4f7ed;
+        --warn: #b26a00;
+        --radius: 14px;
+        --shadow: 0 8px 28px rgba(28, 45, 80, 0.08);
       }
-      .list li + li {
-        margin-top: 4px;
+      body[data-theme="dark"] {
+        --bg: #12161d;
+        --surface: #1c222c;
+        --surface-2: #262e3a;
+        --text: #e8edf5;
+        --muted: #9aa8bb;
+        --line: #343d4b;
+        --accent: #6d9bff;
+        --accent-soft: #25345a;
+        --ok: #5fd39a;
+        --ok-soft: #1d3a2e;
+        --warn: #f0b95c;
+        --shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+      }
+
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        font: 15px/1.65 "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(1000px 380px at 8% -8%, var(--accent-soft), transparent 70%),
+          var(--bg);
+        min-height: 100vh;
+        transition: background 0.25s ease, color 0.25s ease;
+      }
+
+      .wrap { max-width: 880px; margin: 0 auto; padding: 32px 28px 72px; }
+
+      /* 头部：标题 + 沙箱徽章 */
+      header.hero { margin-bottom: 28px; }
+      .eyebrow {
+        display: inline-block; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase;
+        color: var(--accent); font-weight: 700; margin-bottom: 8px;
+      }
+      h1 { font-size: 30px; line-height: 1.25; margin: 0 0 8px; letter-spacing: -0.01em; }
+      h1 .spark {
+        display: inline-block; width: 12px; height: 12px; border-radius: 50%;
+        background: var(--ok); box-shadow: 0 0 0 5px var(--ok-soft); margin-right: 10px;
+        animation: pulse 2s ease-in-out infinite;
+      }
+      @keyframes pulse {
+        0%, 100% { box-shadow: 0 0 0 5px var(--ok-soft); }
+        50% { box-shadow: 0 0 0 10px transparent; }
+      }
+      .subtitle { color: var(--muted); margin: 0; max-width: 640px; }
+      .badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+      .badge {
+        font-size: 12px; padding: 4px 11px; border-radius: 999px;
+        border: 1px solid var(--line); background: var(--surface); color: var(--muted);
+      }
+      .badge b { color: var(--text); font-weight: 600; }
+
+      /* 卡片网格：验证 CSS Grid 布局 */
+      .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+      .card {
+        background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+        padding: 20px 22px; box-shadow: var(--shadow);
+      }
+      .card.wide { grid-column: 1 / -1; }
+      .card h2 { font-size: 16px; margin: 0 0 4px; display: flex; align-items: center; gap: 8px; }
+      .card h2 .n {
+        font-size: 11px; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 7px;
+        display: inline-flex; align-items: center; justify-content: center;
+        background: var(--accent-soft); color: var(--accent); font-weight: 700;
+      }
+      .card p.hint { color: var(--muted); font-size: 13px; margin: 0 0 14px; }
+
+      /* 自检清单 */
+      .checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+      .checks li {
+        display: flex; align-items: flex-start; gap: 10px; padding: 9px 12px;
+        border-radius: 10px; background: var(--surface-2); font-size: 14px;
+      }
+      .checks .mark {
+        flex: 0 0 20px; height: 20px; border-radius: 50%; display: grid; place-items: center;
+        font-size: 12px; font-weight: 800; color: #fff; background: var(--warn);
+      }
+      .checks li.pass .mark { background: var(--ok); }
+      .checks .label { flex: 1; }
+      .checks .detail { display: block; color: var(--muted); font-size: 12px; }
+
+      /* 交互控件 */
+      .row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+      button {
+        font: inherit; cursor: pointer; border: 1px solid transparent; border-radius: 9px;
+        padding: 8px 14px; background: var(--accent); color: #fff; font-weight: 600;
+        transition: transform 0.08s ease, filter 0.15s ease;
+      }
+      button:hover { filter: brightness(1.08); }
+      button:active { transform: translateY(1px); }
+      button.ghost { background: var(--surface-2); color: var(--text); border-color: var(--line); }
+      .counter { font-variant-numeric: tabular-nums; font-weight: 700; font-size: 20px; min-width: 42px; text-align: center; }
+      input[type="text"], select {
+        font: inherit; padding: 8px 11px; border-radius: 9px;
+        border: 1px solid var(--line); background: var(--surface); color: var(--text);
+      }
+      input[type="range"] { accent-color: var(--accent); }
+      .echo {
+        margin-top: 12px; padding: 12px 14px; border-radius: 10px;
+        background: var(--accent-soft); color: var(--accent); font-weight: 600;
+        min-height: 44px; word-break: break-word;
+      }
+
+      /* 表单元素 */
+      fieldset { border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; margin: 0 0 12px; }
+      legend { color: var(--muted); font-size: 12px; padding: 0 6px; }
+      label.inline { display: inline-flex; align-items: center; gap: 6px; margin-right: 14px; }
+      .meter-row { display: flex; align-items: center; gap: 12px; margin: 6px 0; }
+      progress, meter { width: 100%; height: 12px; accent-color: var(--accent); }
+
+      /* 表格 */
+      table { width: 100%; border-collapse: collapse; font-size: 14px; }
+      th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); }
+      th { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+      tbody tr:hover { background: var(--surface-2); }
+      td .pill {
+        font-size: 11px; padding: 2px 8px; border-radius: 999px;
+        background: var(--accent-soft); color: var(--accent); font-weight: 600;
+      }
+
+      /* details 原生折叠 */
+      details { border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; margin-top: 10px; }
+      details summary { cursor: pointer; font-weight: 600; }
+      details p { color: var(--muted); margin: 10px 0 2px; font-size: 13px; }
+
+      /* 动态列表 */
+      .todo { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 6px; }
+      .todo li {
+        display: flex; align-items: center; gap: 10px; padding: 8px 11px;
+        border-radius: 9px; background: var(--surface-2); cursor: pointer;
+      }
+      .todo li.done span { text-decoration: line-through; color: var(--muted); }
+      .todo .x { margin-left: auto; color: var(--muted); font-weight: 700; }
+
+      /* canvas + 内联 SVG */
+      .visual { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; }
+      canvas { background: var(--surface-2); border-radius: 10px; border: 1px solid var(--line); }
+      .spin {
+        width: 46px; height: 46px; border: 5px solid var(--accent-soft);
+        border-top-color: var(--accent); border-radius: 50%; animation: spin 1.1s linear infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+
+      footer { color: var(--muted); font-size: 12px; text-align: center; margin-top: 32px; }
+
+      @media (max-width: 640px) {
+        .grid { grid-template-columns: 1fr; }
+        h1 { font-size: 24px; }
+        .wrap { padding: 22px 18px 56px; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after { animation: none !important; transition: none !important; }
       }
     </style>
   </head>
-  <body>
-    <main class="page">
-      <h1 id="title">支持的格式</h1>
-      <ul class="list">
-        <li data-kind="code">代码</li>
-        <li data-kind="data">数据</li>
-        <li data-kind="doc">文档</li>
-      </ul>
-      <button type="button" id="greet">问候</button>
-    </main>
+  <body data-theme="light">
+    <div class="wrap">
+      <header class="hero">
+        <span class="eyebrow">Panda Live · Preview Check</span>
+        <h1><span class="spark"></span>HTML 预览验证</h1>
+        <p class="subtitle">
+          本页完整自包含（样式、脚本、图形全部内联），用于在 sandbox iframe 预览中验证渲染、
+          交互与隔离。下方「预览自检」会实时检测各项能力——若全部通过，说明 HTML 预览工作正常。
+        </p>
+        <div class="badges" id="badges">
+          <span class="badge">渲染模式 · <b>srcDoc</b></span>
+          <span class="badge">沙箱 · <b>allow-scripts</b></span>
+          <span class="badge">来源 · <b id="originBadge">检测中…</b></span>
+        </div>
+      </header>
+
+      <div class="grid">
+        <section class="card wide">
+          <h2><span class="n">01</span>预览自检</h2>
+          <p class="hint">这些状态由页面脚本在加载时写入，全部为绿勾即表示预览环境符合预期。</p>
+          <ul class="checks" id="checks">
+            <li><span class="mark">…</span><span class="label">正在检测…</span></li>
+          </ul>
+        </section>
+
+        <section class="card">
+          <h2><span class="n">02</span>交互演示</h2>
+          <p class="hint">按钮、计数器、输入与主题切换，验证脚本事件是否正常绑定。</p>
+          <div class="row">
+            <button type="button" class="ghost" id="dec">−</button>
+            <span class="counter" id="count">0</span>
+            <button type="button" id="inc">+</button>
+            <button type="button" class="ghost" id="theme">切换主题</button>
+          </div>
+          <div class="row" style="margin-top: 16px;">
+            <input type="text" id="echoInput" placeholder="输入点什么…" value="你好，Panda!" />
+            <select id="echoCase">
+              <option value="plain">原样</option>
+              <option value="upper">大写</option>
+              <option value="reverse">反转</option>
+            </select>
+          </div>
+          <div class="echo" id="echo">你好，Panda!</div>
+        </section>
+
+        <section class="card">
+          <h2><span class="n">03</span>表单与控件</h2>
+          <p class="hint">复选框、单选、下拉与滑块，验证各类原生控件样式与交互。</p>
+          <fieldset>
+            <legend>兴趣</legend>
+            <label class="inline"><input type="checkbox" checked /> 阅读</label>
+            <label class="inline"><input type="checkbox" /> 旅行</label>
+            <label class="inline"><input type="checkbox" checked /> 编码</label>
+          </fieldset>
+          <fieldset>
+            <legend>尺寸</legend>
+            <label class="inline"><input type="radio" name="size" checked /> 小</label>
+            <label class="inline"><input type="radio" name="size" /> 中</label>
+            <label class="inline"><input type="radio" name="size" /> 大</label>
+          </fieldset>
+          <div class="meter-row">
+            <span>音量</span>
+            <input type="range" id="volume" min="0" max="100" value="60" />
+            <span id="volumeVal">60</span>
+          </div>
+          <div class="meter-row"><span>进度</span><progress id="progress" max="100" value="60"></progress></div>
+          <div class="meter-row"><span>评分</span><meter min="0" max="10" low="3" high="8" optimum="9" value="8.5"></meter></div>
+        </section>
+
+        <section class="card">
+          <h2><span class="n">04</span>语义结构与数据</h2>
+          <p class="hint">表格、原生折叠面板，验证语义化 HTML 与细节样式。</p>
+          <table>
+            <thead>
+              <tr><th>项目</th><th>类型</th><th>状态</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>文档编辑</td><td><span class="pill">核心</span></td><td>已就绪</td></tr>
+              <tr><td>大纲跳转</td><td><span class="pill">导航</span></td><td>已就绪</td></tr>
+              <tr><td>HTML 预览</td><td><span class="pill">新增</span></td><td id="statusCell">验证中</td></tr>
+            </tbody>
+          </table>
+          <details>
+            <summary>关于沙箱隔离</summary>
+            <p>预览 iframe 只被授予 allow-scripts，没有 allow-same-origin。因此它是 opaque origin，
+               脚本可以运行，但访问不到父窗口、应用数据或本地文件。</p>
+          </details>
+        </section>
+
+        <section class="card">
+          <h2><span class="n">05</span>动态列表</h2>
+          <p class="hint">点击条目切换完成状态，点击右侧 × 删除；按钮可新增。</p>
+          <ul class="todo" id="todo">
+            <li><span>✓</span><span class="txt">打开 HTML 预览</span><span class="x">×</span></li>
+            <li><span>✓</span><span class="txt">验证脚本执行</span><span class="x">×</span></li>
+            <li><span>✓</span><span class="txt">验证沙箱隔离</span><span class="x">×</span></li>
+          </ul>
+          <button type="button" id="addTodo">+ 添加一项</button>
+        </section>
+
+        <section class="card">
+          <h2><span class="n">06</span>图形与动画</h2>
+          <p class="hint">Canvas 绘图与内联 SVG，验证图形 API 在沙箱中可用。</p>
+          <div class="visual">
+            <canvas id="canvas" width="180" height="120"></canvas>
+            <svg width="120" height="120" viewBox="0 0 120 120" role="img" aria-label="内联 SVG 示例">
+              <circle cx="60" cy="60" r="52" fill="var(--accent-soft)" />
+              <path d="M60 22 L60 60 L92 76" stroke="var(--accent)" stroke-width="8"
+                    fill="none" stroke-linecap="round" />
+              <circle cx="60" cy="60" r="7" fill="var(--accent)" />
+            </svg>
+            <div class="spin" title="CSS 动画"></div>
+          </div>
+        </section>
+      </div>
+
+      <footer>22-html.html · 自包含示例 · 用于验证 Panda Live 的 HTML 预览功能</footer>
+    </div>
+
     <script>
-      document.getElementById("greet").addEventListener("click", () => {
-        document.getElementById("title").textContent = "你好，Panda!";
-      });
+      (function () {
+        "use strict";
+
+        var checks = document.getElementById("checks");
+        var results = [];
+        function check(label, ok, detail) {
+          results.push({ label: label, ok: !!ok, detail: detail || "" });
+        }
+
+        // 1. 脚本执行：能走到这里本身就说明 allow-scripts 生效。
+        check("JavaScript 执行", true, "allow-scripts 已生效");
+
+        // 2. DOM 操作：写入既有节点。
+        var statusCell = document.getElementById("statusCell");
+        var domOk = false;
+        try {
+          statusCell.textContent = "通过 ✓";
+          domOk = statusCell.textContent.indexOf("通过") !== -1;
+        } catch (e) { domOk = false; }
+        check("DOM 操作", domOk, domOk ? "节点内容已被脚本改写" : "写入失败");
+
+        // 3. CSS 生效：自定义属性应被解析出具体颜色值。
+        var cssVal = getComputedStyle(document.body).getPropertyValue("--accent").trim();
+        check("CSS 自定义属性与样式", cssVal.length > 0, "读到 --accent = " + (cssVal || "空"));
+
+        // 4. Canvas 图形 API：绘制后读取像素，验证非空白。
+        var canvasOk = false;
+        try {
+          var ctx = document.getElementById("canvas").getContext("2d");
+          var grad = ctx.createLinearGradient(0, 0, 180, 0);
+          grad.addColorStop(0, "#3b6ef6");
+          grad.addColorStop(1, "#22c1a6");
+          ctx.fillStyle = grad;
+          ctx.fillRect(0, 0, 180, 120);
+          ctx.fillStyle = "rgba(255,255,255,.92)";
+          ctx.font = "bold 20px sans-serif";
+          ctx.fillText("Canvas OK", 34, 66);
+          canvasOk = ctx.getImageData(90, 60, 1, 1).data[3] > 0;
+        } catch (e) { canvasOk = false; }
+        check("Canvas 绘图", canvasOk, canvasOk ? "渐变与文本绘制成功" : "绘制失败");
+
+        // 5. 沙箱隔离：preload 不注入，window.panda 不存在。
+        var noPanda = typeof window.panda === "undefined";
+        check("沙箱隔离（无 window.panda）", noPanda,
+          noPanda ? "拿不到应用注入的 API" : "意外注入了应用 API");
+
+        // 6. opaque origin：origin 为 "null"，localStorage 不可用（符合预期）。
+        var origin = window.origin;
+        var storageBlocked = false;
+        try { window.localStorage.setItem("__probe", "1"); }
+        catch (e) { storageBlocked = true; }
+        check("opaque origin 隔离", origin === "null" && storageBlocked,
+          "origin = " + origin + "，localStorage " + (storageBlocked ? "被阻止" : "可用"));
+
+        // 渲染自检结果。
+        checks.innerHTML = "";
+        results.forEach(function (r) {
+          var li = document.createElement("li");
+          if (r.ok) li.className = "pass";
+          var mark = document.createElement("span");
+          mark.className = "mark";
+          mark.textContent = r.ok ? "✓" : "!";
+          var label = document.createElement("span");
+          label.className = "label";
+          label.appendChild(document.createTextNode(r.label + " · " + (r.ok ? "通过" : "未通过")));
+          var detail = document.createElement("span");
+          detail.className = "detail";
+          detail.textContent = r.detail;
+          label.appendChild(detail);
+          li.appendChild(mark);
+          li.appendChild(label);
+          checks.appendChild(li);
+        });
+        document.getElementById("originBadge").textContent = origin;
+
+        // —— 交互：计数器 ——
+        var count = 0;
+        var countEl = document.getElementById("count");
+        document.getElementById("inc").addEventListener("click", function () {
+          countEl.textContent = String(++count);
+        });
+        document.getElementById("dec").addEventListener("click", function () {
+          countEl.textContent = String(--count);
+        });
+
+        // —— 交互：主题切换 ——
+        document.getElementById("theme").addEventListener("click", function () {
+          var dark = document.body.getAttribute("data-theme") === "dark";
+          document.body.setAttribute("data-theme", dark ? "light" : "dark");
+        });
+
+        // —— 交互：文本回显（原样 / 大写 / 反转）——
+        var echoInput = document.getElementById("echoInput");
+        var echoCase = document.getElementById("echoCase");
+        var echoEl = document.getElementById("echo");
+        function updateEcho() {
+          var value = echoInput.value;
+          if (echoCase.value === "upper") value = value.toUpperCase();
+          else if (echoCase.value === "reverse") value = value.split("").reverse().join("");
+          echoEl.textContent = value || "（空）";
+        }
+        echoInput.addEventListener("input", updateEcho);
+        echoCase.addEventListener("change", updateEcho);
+
+        // —— 交互：滑块联动进度条 ——
+        var volume = document.getElementById("volume");
+        var progress = document.getElementById("progress");
+        volume.addEventListener("input", function () {
+          document.getElementById("volumeVal").textContent = volume.value;
+          progress.value = volume.value;
+        });
+
+        // —— 交互：待办列表 ——
+        var todo = document.getElementById("todo");
+        function bindTodoItem(li) {
+          li.addEventListener("click", function (event) {
+            if (event.target.classList.contains("x")) {
+              li.remove();
+              return;
+            }
+            li.classList.toggle("done");
+          });
+        }
+        Array.prototype.forEach.call(todo.querySelectorAll("li"), bindTodoItem);
+        var seq = 1;
+        document.getElementById("addTodo").addEventListener("click", function () {
+          var li = document.createElement("li");
+          li.innerHTML = "<span>✓</span><span class=\"txt\">新任务 " + (seq++) +
+            "</span><span class=\"x\">×</span>";
+          bindTodoItem(li);
+          todo.appendChild(li);
+        });
+      })();
     </script>
   </body>
 </html>

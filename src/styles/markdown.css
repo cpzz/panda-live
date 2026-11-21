@@ -683,6 +683,21 @@
   padding: 24px 40px;
 }
 
+/* HTML 文档预览：iframe 撑满面板，滚动与页面样式由 iframe 内部文档负责。 */
+.preview-pane.html-preview-pane {
+  display: flex;
+  padding: 0;
+  overflow: hidden;
+}
+
+.html-preview-frame {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  border: 0;
+  background: #fff;
+}
+
 .diagram-viewer-toolbar {
   flex-shrink: 0;
   display: flex;

@@ -297,7 +297,7 @@ export class DocumentManager {
   }
 
   /** 打开文件时的默认视图：支持渲染预览的格式（Markdown、PlantUML、Mermaid、LaTeX、
-   * SVG、扩展格式）与 PDF/图片进入预览，其余进入源码；`preferSource` 用于大文件降级，
+   * SVG、HTML、扩展格式）与 PDF/图片进入预览，其余进入源码；`preferSource` 用于大文件降级，
    * 但二进制文档只能预览。 */
   private defaultModeFor(formatId: string, preferSource = false): EditorMode {
     if (formatId === "pdf" || formatId === "image") return "preview";

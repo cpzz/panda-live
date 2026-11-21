@@ -38,7 +38,8 @@ const BUILTIN_CAPABILITIES: Record<BuiltinDocumentFormat, FormatCapabilities> = 
   javascript: CODE_CAPABILITIES,
   json: CODE_CAPABILITIES,
   yaml: CODE_CAPABILITIES,
-  html: CODE_CAPABILITIES,
+  // HTML：文本格式，源码按 HTML 编辑，预览在 sandbox iframe 中渲染完整文档
+  html: { source: true, wysiwyg: false, preview: "inline", outline: true, exportHtml: false },
   css: CODE_CAPABILITIES,
   python: CODE_CAPABILITIES,
   sql: CODE_CAPABILITIES,

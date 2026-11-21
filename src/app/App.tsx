@@ -7,6 +7,17 @@ import { EMPTY_PROBLEMS, problemStore, type Problem } from "../services/problem-
 import { mathOptionsSignature } from "../services/math-settings";
 import { formatHasPreview, getFormatEntry, refreshExtensionFormats } from "../extensions/registry";
 import { sanitizeHtml } from "../render/html";
+import {
+  buildHtmlPreviewDoc,
+  clampHtmlZoom,
+  HTML_ZOOM_DEFAULT,
+  HTML_ZOOM_MAX,
+  HTML_ZOOM_MIN,
+  HTML_ZOOM_STEP,
+  MSG_ZOOM_APPLY,
+  MSG_ZOOM_GESTURE,
+  MSG_ZOOM_READY,
+} from "../render/html-preview";
 import { RenderedMarkdown } from "./RenderedMarkdown";
 import {
   DocumentManager,
@@ -616,6 +627,120 @@ function SvgPreviewPane({ document, enabled }: { document: DocumentState; enable
   );
 }
 
+/**
+ * HTML 文档预览：完整 HTML 在 sandbox iframe 中渲染，不注入应用 DOM。
+ * 只给 allow-scripts（JS 驱动的页面可用），不给 allow-same-origin —— iframe 为 opaque origin，
+ * 其中脚本无法访问应用数据、父窗口或本地文件（preload 不注入，无 window.panda）。
+ *
+ * 缩放：父窗口持有百分比单一数据源，父侧与 iframe 内的快捷键/滚轮都汇聚到这里，
+ * 再经 postMessage 下发给注入脚本作用到 iframe 文档。见 doc/design.md §3.3、
+ * src/render/html-preview.ts。
+ */
+function HtmlPreviewPane({ document, enabled }: { document: DocumentState; enabled: boolean }) {
+  const [srcDoc, setSrcDoc] = useState("");
+  const [zoom, setZoom] = useState(HTML_ZOOM_DEFAULT);
+  const frameRef = useRef<HTMLIFrameElement>(null);
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
+
+  useEffect(() => {
+    if (!enabled) return;
+    const timer = setTimeout(() => setSrcDoc(buildHtmlPreviewDoc(document.content)), 150);
+    return () => clearTimeout(timer);
+  }, [document.content, enabled]);
+
+  // 父 → 子：缩放值变化时下发；iframe 每次加载后也会发 READY，再由这里回推当前值。
+  const applyZoom = useCallback((value: number): void => {
+    try {
+      frameRef.current?.contentWindow?.postMessage(
+        { type: MSG_ZOOM_APPLY, zoom: value },
+        "*",
+      );
+    } catch {
+      // opaque origin 下 postMessage 一般可用；失败时仅跳过本次同步。
+    }
+  }, []);
+
+  useEffect(() => {
+    applyZoom(zoom);
+  }, [zoom, srcDoc, applyZoom]);
+
+  // 子 → 父：接收 iframe 内注入脚本转发的缩放手势与就绪通知。严格校验来源与消息类型。
+  useEffect(() => {
+    const onMessage = (event: MessageEvent): void => {
+      if (event.source !== frameRef.current?.contentWindow) return;
+      const data = event.data as { type?: string; action?: string } | null;
+      if (!data || typeof data !== "object") return;
+      if (data.type === MSG_ZOOM_READY) {
+        applyZoom(zoomRef.current);
+      } else if (data.type === MSG_ZOOM_GESTURE) {
+        if (data.action === "reset") setZoom(HTML_ZOOM_DEFAULT);
+        else if (data.action === "in") setZoom((value) => clampHtmlZoom(value + HTML_ZOOM_STEP));
+        else if (data.action === "out") setZoom((value) => clampHtmlZoom(value - HTML_ZOOM_STEP));
+      }
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [applyZoom]);
+
+  // 父侧快捷键：焦点/指针不在 iframe 内时（如刚打开、切到预览栏）同样能缩放。
+  // 带 enabled 门控：源码/分栏的源码栏等隐藏预览时不拦截全局快捷键。
+  useEffect(() => {
+    if (!enabled) return;
+    const stepBy = (delta: number): void => {
+      setZoom((value) => clampHtmlZoom(value + delta));
+    };
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      const key = event.key;
+      if (key === "=" || key === "+") {
+        event.preventDefault();
+        stepBy(HTML_ZOOM_STEP);
+      } else if (key === "-" || key === "_") {
+        event.preventDefault();
+        stepBy(-HTML_ZOOM_STEP);
+      } else if (key === "0") {
+        event.preventDefault();
+        setZoom(HTML_ZOOM_DEFAULT);
+      }
+    };
+    const onWheel = (event: WheelEvent): void => {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      event.preventDefault();
+      stepBy(event.deltaY < 0 ? HTML_ZOOM_STEP : -HTML_ZOOM_STEP);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("wheel", onWheel);
+    };
+  }, [enabled]);
+
+  return (
+    <div className="preview-pane html-preview-pane">
+      <div className="diagram-viewer">
+        <DiagramZoomToolbar
+          zoom={zoom}
+          onZoomChange={setZoom}
+          onFit={() => setZoom(HTML_ZOOM_DEFAULT)}
+          min={HTML_ZOOM_MIN}
+          max={HTML_ZOOM_MAX}
+          step={HTML_ZOOM_STEP}
+          label={t("HTML 缩放")}
+        />
+        <iframe
+          ref={frameRef}
+          className="html-preview-frame"
+          title={t("HTML 预览")}
+          sandbox="allow-scripts"
+          srcDoc={srcDoc}
+        />
+      </div>
+    </div>
+  );
+}
+
 /** 图片文件预览：readBase64 读取磁盘字节，缩放/适配与图表视图共用同一工具栏。 */
 function ImagePreviewPane({ document }: { document: DocumentState }) {
   const [src, setSrc] = useState("");
@@ -984,6 +1109,9 @@ function PreviewPane({
   }
   if (document.format === "svg") {
     return <SvgPreviewPane key={document.id} document={document} enabled={enabled} />;
+  }
+  if (document.format === "html") {
+    return <HtmlPreviewPane key={document.id} document={document} enabled={enabled} />;
   }
   if (!supported) {
     return (

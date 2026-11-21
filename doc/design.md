@@ -129,11 +129,12 @@ Panda Live 是本地优先的桌面文档编辑器，核心特征是**编辑区�
 | `.mmd` `.mermaid` | Mermaid | 源码 / 分栏 / 预览（SVG） |
 | `.png` `.apng` `.jpg` `.jpeg` `.jfif` `.gif` `.webp` `.bmp` `.ico` `.avif` | Image | 只读图片预览 |
 | `.svg` | SVG | 源码 / 分栏 / 预览（隔离渲染） |
+| `.html` `.htm` `.xhtml` | HTML | 源码 / 分栏 / 预览（sandbox iframe 渲染） |
 | `.pdf` | PDF | 只读 PDF 预览 |
 | 扩展提供的格式 | Extension Provider | 按 `capabilities`：源码或 WYSIWYG + 预览 |
 | 其他文本与代码 | Text / 代码 | 源码 |
 
-`.mdx` 按 Markdown 处理，JSX 片段作为原始块保留，不执行。`.myst` / `.mst` 同样按 Markdown 处理，额外支持官方冒号围栏写法（`:::{tab-set}`）。`.puml` / `.plantuml` / `.mmd` / `.mermaid` 作为单图表文档打开：源码可写，预览为 SVG，不套用 Markdown schema。`.svg` 作为独立文本格式打开：源码按 XML 编辑，预览以 data URL 放入 `<img>` 隔离渲染，SVG 内脚本不执行、样式不影响应用界面。
+`.mdx` 按 Markdown 处理，JSX 片段作为原始块保留，不执行。`.myst` / `.mst` 同样按 Markdown 处理，额外支持官方冒号围栏写法（`:::{tab-set}`）。`.puml` / `.plantuml` / `.mmd` / `.mermaid` 作为单图表文档打开：源码可写，预览为 SVG，不套用 Markdown schema。`.svg` 作为独立文本格式打开：源码按 XML 编辑，预览以 data URL 放入 `<img>` 隔离渲染，SVG 内脚本不执行、样式不影响应用界面。`.html` / `.htm` / `.xhtml` 作为文本格式打开：源码按 HTML 编辑，预览把完整文档作为 `srcDoc` 放进 `<iframe sandbox="allow-scripts">` 渲染；只给脚本权限、不给 `allow-same-origin`，iframe 是 opaque origin，其中脚本无法访问父窗口、应用数据或本地文件（无 `window.panda`），页面样式不污染应用界面。
 
 ---
 

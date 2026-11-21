@@ -137,6 +137,8 @@
   "图表缩放": "Diagram zoom",
   "图表查看": "Diagram viewer",
   "图片预览": "Image preview",
+  "HTML 预览": "HTML preview",
+  "HTML 缩放": "HTML zoom",
   "图片加载失败：{0}": "Failed to load image: {0}",
   "文档大纲": "Outline",
   "分类": "Groups",

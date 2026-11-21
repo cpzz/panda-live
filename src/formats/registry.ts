@@ -159,16 +159,17 @@ export const PREVIEW_FORMATS: ReadonlySet<string> = new Set([
   "plantuml",
   "mermaid",
   "svg",
+  "html",
 ]);
 
-/** 纯代码格式：只有源码编辑、没有渲染预览，但提供符号大纲（见 formats/outline.ts）。 */
+/** 纯代码格式：只有源码编辑、没有渲染预览，但提供符号大纲（见 formats/outline.ts）。
+ * HTML 不在此列——它是文本格式并提供 sandbox 渲染预览。 */
 export const CODE_FORMATS: ReadonlySet<BuiltinDocumentFormat> = new Set([
   "cpp",
   "java",
   "javascript",
   "json",
   "yaml",
-  "html",
   "css",
   "python",
   "sql",
