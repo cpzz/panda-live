@@ -4,7 +4,7 @@
 |---|---|
 | 文档版本 | 0.1 |
 | 状态 | 评审中 |
-| 更新日期 | 2026-11-08 |
+| 更新日期 | 2026-11-22 |
 | 适用版本 | v1.0 |
 | 参考实现 | `workspace/markdown-viewer`（渲染能力与 Electron 集成参考） |
 
@@ -33,7 +33,7 @@ Panda Live 是本地优先的桌面文档编辑器，核心特征是**编辑区�
 | MyST 指令（`tab-set` / `tab-item` / `grid` / `grid-item`） | WYSIWYG 容器节点 | 自定义 NodeView |
 | `.tex` 文档 | 源码编辑（完整代码编辑器） | 外部引擎编译 PDF（可选能力） |
 | 工作区、多标签、会话恢复、查找替换、导出 HTML/PDF | — | — |
-| 扩展系统（新增文件格式、语言、渲染器、命令） | 清单声明 + 扩展宿主 | 内置格式与第三方扩展共用注册路径 |
+| 扩展系统（新增文件格式、语言、渲染器、命令） | 第三方：清单 + 扩展宿主；内置：常量内建 | 内置格式与第三方扩展汇入同一格式注册表，内置优先 |
 
 ### 1.3 非目标
 
@@ -131,8 +131,10 @@ Panda Live 是本地优先的桌面文档编辑器，核心特征是**编辑区�
 | `.svg` | SVG | 源码 / 分栏 / 预览（隔离渲染） |
 | `.html` `.htm` `.xhtml` | HTML | 源码 / 分栏 / 预览（sandbox iframe 渲染） |
 | `.pdf` | PDF | 只读 PDF 预览 |
+| 代码语言：C/C++（`.c`/`.cc`/`.cpp`/`.hpp`…）、Java（`.java`）、JS/TS（`.js`/`.jsx`/`.mjs`/`.ts`/`.tsx`…）、Python（`.py`/`.pyi`）、Go（`.go`）、Rust（`.rs`）、C#（`.cs`）、Ruby（`.rb`）、Kotlin（`.kt`/`.kts`）、Swift（`.swift`）、Scala（`.scala`/`.sc`）、PHP（`.php`/`.phtml`）、Dart（`.dart`）、Lua（`.lua`）、Perl（`.pl`/`.pm`）、Objective-C（`.m`/`.mm`）、R（`.r`）、Shell（`.sh`/`.bash`/`.zsh`）、SQL（`.sql`） | 各语言独立格式（`CODE_FORMATS`） | 源码 + 符号大纲 |
+| 数据 / 标记 / 配置：JSON（`.json`/`.jsonc`/`.json5`）、YAML（`.yaml`/`.yml`）、CSS（`.css`/`.scss`/`.less`/`.sass`）、XML（`.xml`/`.xsd`/`.xsl`/`.xslt`/`.plist`）、INI（`.ini`/`.cfg`/`.properties`）、TOML（`.toml`） | 各语言独立格式（`CODE_FORMATS`） | 源码 + 符号大纲 |
 | 扩展提供的格式 | Extension Provider | 按 `capabilities`：源码或 WYSIWYG + 预览 |
-| 其他文本与代码 | Text / 代码 | 源码 |
+| 其他未知扩展 | Text | 源码（纯文本兜底） |
 
 `.mdx` 按 Markdown 处理，JSX 片段作为原始块保留，不执行。`.myst` / `.mst` 同样按 Markdown 处理，额外支持官方冒号围栏写法（`:::{tab-set}`）。`.puml` / `.plantuml` / `.mmd` / `.mermaid` 作为单图表文档打开：源码可写，预览为 SVG，不套用 Markdown schema。`.svg` 作为独立文本格式打开：源码按 XML 编辑，预览以 data URL 放入 `<img>` 隔离渲染，SVG 内脚本不执行、样式不影响应用界面。`.html` / `.htm` / `.xhtml` 作为文本格式打开：源码按 HTML 编辑，预览把完整文档作为 `srcDoc` 放进 `<iframe sandbox="allow-scripts">` 渲染；只给脚本权限、不给 `allow-same-origin`，iframe 是 opaque origin，其中脚本无法访问父窗口、应用数据或本地文件（无 `window.panda`），页面样式不污染应用界面。iframe 是独立 browsing context，内部点击不会冒泡到父文档；注入脚本在捕获阶段监听 `pointerdown` 并经 `postMessage` 通知父窗口，父窗口在 iframe 元素上补发 `mousedown`，使工作区菜单等「点击外部关闭」浮层照常关闭。
 
@@ -221,7 +223,7 @@ Panda Live 是本地优先的桌面文档编辑器，核心特征是**编辑区�
 | 应用服务层 | 文档管理、工作区、设置、会话、导出、编译任务 | 通过 `PlatformPort` 访问平台，不直接 import Electron |
 | 编辑器核心层 | Schema、事务、命令、历史、NodeView 生命周期 | 不依赖 UI 框架与 Electron |
 | 格式适配层 | 解析、序列化、格式检测、诊断 | 纯函数，便于单测 |
-| 扩展层 | 清单校验、权限、注册表、宿主 RPC | 只通过应用服务层访问平台；第三方扩展代码不在 Renderer 执行，内置扩展的特权 UI 作为应用代码随包构建 |
+| 扩展层 | 清单校验、权限、注册表、宿主 RPC | 只通过应用服务层访问平台；第三方扩展代码不在 Renderer 执行，内置格式的特权 UI 作为应用代码随包构建 |
 | 渲染层 | 数学、图表、代码高亮、图片、PDF 预览 | 可依赖浏览器 API，不依赖 Node |
 | UI 层 | 布局、标签页、工具栏、对话框、状态栏 | 只调用应用服务层 |
 
@@ -402,8 +404,20 @@ import type { Node as PMNode } from "prosemirror-model";
 import type { EditorState as CMEditorState } from "@codemirror/state";
 
 type BuiltinDocumentFormat =
+  // 文档 / 标记 / 数学
   | "markdown" | "latex" | "mathml"
-  | "plantuml" | "mermaid" | "text";
+  // 图表
+  | "plantuml" | "mermaid"
+  // 二进制与只读预览
+  | "pdf" | "image"
+  // 标记 / 样式 / 数据（含大纲）
+  | "svg" | "html" | "css" | "xml" | "json" | "yaml" | "ini" | "toml"
+  // 主流代码语言（各自独立格式，含大纲）
+  | "cpp" | "java" | "javascript" | "python" | "sql" | "php"
+  | "csharp" | "go" | "rust" | "ruby" | "kotlin" | "swift"
+  | "scala" | "dart" | "lua" | "perl" | "objectivec" | "shell" | "r"
+  // 纯文本兜底
+  | "text";
 
 // 扩展格式的 id 由清单声明；内置格式固定为 BuiltinDocumentFormat
 type DocumentFormat = BuiltinDocumentFormat | (string & {});
@@ -535,19 +549,19 @@ interface FormatAdapter {
 
 ### 7.6 扩展模型与格式插件
 
-目标：新增文件格式不改应用主干，只新增扩展包；内置格式与第三方扩展走同一注册路径。
+目标：新增文件格式不改应用主干。内置格式以 TypeScript 常量内建（`src/formats/registry.ts` 定义格式与扩展名，`src/extensions/registry.ts` 的 `BUILTIN_CAPABILITIES` / `BUILTIN_EXTENSIONS` / `BUILTIN_SYNTAX` 登记能力、扩展名与高亮语法），标记 `builtin: true`、无清单、不经扩展宿主；第三方扩展经 `extension.json` 清单 + 独立宿主注册。两类格式最终汇入同一 `FormatEntry` 注册表，检测时内置优先（§7.6.4）。
 
 #### 7.6.1 扩展类型
 
 | 类型 | 位置 | 信任级别 | 能力 |
 |---|---|---|---|
-| 内置扩展 | `extensions/builtin/`，随应用打包 | 完全信任 | 可注册 Schema、NodeView、格式、语言、渲染器 |
+| 内置格式 | 源码内建（`src/formats/registry.ts` + `src/extensions/registry.ts` 常量），随应用编译 | 完全信任 | 格式、语言、渲染器、Schema、NodeView |
 | 本地扩展 | `userData/extensions/<publisher>.<name>/` | 显式启用 + 权限声明 | v1 仅格式、语言、渲染器、命令、设置；不可注册 Schema/NodeView |
 | 市场扩展 | 后续版本 | 本地扩展 + 签名校验 | 同本地扩展 |
 
-Markdown、LaTeX、MathML、图表以内置扩展实现，确保公开 API 覆盖真实需求；特权 API `pandaInternal` 仅内置扩展可用。内置扩展清单位于 `extensions/builtin/<format>/`，解析/序列化实现可放在 `src/formats/<format>/` 并由扩展入口重新导出。
+Markdown、LaTeX、MathML、图表等内置格式以 TypeScript 常量直接内建（见 `src/extensions/registry.ts` 的 `BUILTIN_CAPABILITIES` / `BUILTIN_EXTENSIONS` / `BUILTIN_SYNTAX`），标记 `builtin: true`，确保公开 API 覆盖真实需求；特权 API `pandaInternal` 仅内置代码可用。内置格式的解析/序列化实现放在 `src/formats/<format>/`，无 `extension.json` 清单、不经过扩展宿主，启动即就绪、零运行时开销。
 
-宿主侧入口只负责 `detect`/`parse`/`serialize`；Schema 与 NodeView 属于渲染进程代码，由应用通过 `pandaInternal` 注册，内置扩展同样不把 UI 代码放入宿主。格式的最终注册表统一由 `src/formats/registry.ts` 维护；`src/extensions/registry.ts` 只管理扩展元数据、启用状态与激活。
+第三方扩展入口（宿主内）只负责 `detect`/`parse`/`serialize`；Schema 与 NodeView 属于渲染进程代码，由应用通过 `pandaInternal` 注册，扩展（含内置）都不把 UI 代码放入宿主。格式检测统一由 `src/extensions/registry.ts` 的 `detectFormatEntry()` 完成——内置格式优先（`builtinFormatFor()`），未命中再查扩展贡献（`matchExtension()`）；内置格式的类型与能力集合（`PREVIEW_FORMATS` / `CODE_FORMATS`）维护在 `src/formats/registry.ts`。
 
 #### 7.6.2 清单
 
@@ -712,9 +726,9 @@ interface Logger {
 
 #### 7.6.4 生命周期与冲突
 
-1. 启动扫描内置与用户扩展目录，校验清单、`engines.panda`、权限、重复 `id`，以及 `contributes.formats[].language` 是否引用已声明语言。
+1. 内置格式在启动时以常量静态注册（无清单、无需扫描）；同时扫描 `userData/extensions/` 下的用户扩展目录，校验清单、`engines.panda`、权限、重复 `id`，以及 `contributes.formats[].language` 是否引用已声明语言。
 2. 按 `activationEvents` 懒激活（`onFormat:<id>`、`onCommand:<id>`、`onStartup`）；激活超时 5 s。
-3. 每次注册表变更生成不可变快照；同一快照内重复格式 `id` 拒绝注册。同一扩展名有多个 provider 时按 `detect` 分数排序；同分时内置扩展优先，其次按启用顺序；仍冲突则让用户选择并记住。
+3. 每次注册表变更生成不可变快照；同一快照内重复格式 `id` 拒绝注册。同一扩展名有多个 provider 时按 `detect` 分数排序；同分时内置格式优先，其次按启用顺序；仍冲突则让用户选择并记住。
 4. 启用/禁用扩展立即重建快照：已打开文档持有加载时的快照直至关闭，新打开文档使用新快照；`ext:reload` 仅用于开发期重新加载扩展代码。禁用/卸载时若存在使用该格式的未保存文档，提示先保存或另存；宿主重启后此类文档回退纯文本。
 5. 扩展宿主崩溃时重启并退避；同一扩展连续 3 次失败自动禁用并提示。
 6. 开发调试：扩展目录可直接放入 `userData/extensions/`，通过 `ext:reload` 重新加载，无需重新打包。
@@ -736,7 +750,7 @@ interface Logger {
 3. 实现 `parse`/`serialize`，返回与接收 `PMJson`；仅使用内置 Schema 节点，非结构化内容映射为 `code_block` 或 `raw_markdown`。
 4. 如需渲染，实现 `renderPreview` 返回消毒前 HTML；如需图表能力，注册 `RendererDefinition`。
 5. 打包为 `.panda`，在设置中安装并启用；无需修改主程序、Schema 或构建配置。
-6. 若为内置格式，将清单放入 `extensions/builtin/<format>/`，实现放在 `src/formats/<format>/`，经同一 `activate` 路径注册，并纳入契约测试。
+6. 若为内置格式，不写清单：在 `src/formats/registry.ts` 的 `BuiltinDocumentFormat` 与 `EXTENSION_MAP` 登记格式与扩展名，在 `src/extensions/registry.ts` 的 `BUILTIN_CAPABILITIES` / `BUILTIN_EXTENSIONS` / `BUILTIN_SYNTAX` 登记能力、扩展名与语法，实现放在 `src/formats/<format>/`，并纳入契约测试。
 
 验收：禁用该扩展后，同一文件按纯文本打开，应用其余功能不受影响。
 
@@ -1633,7 +1647,7 @@ AST(parse(s1)) 语义等价于 AST(parse(s2))
 - 渲染进程：Vite `build.target = "esnext"`（只面向 Electron Chromium），`sourcemap` 开发开启、发布隐藏。
 - 主进程/预加载：`vite-plugin-electron` 分别构建到 `dist-electron/`。
 - 代码分割：`mathlive`、`pdfjs-dist`、`mermaid`、`@plantuml/core`、Shiki 语法包独立 chunk，按需加载。
-- 内置扩展单独构建为 CommonJS，清单与入口随 `extensions/builtin/` 进入安装包；本地扩展不参与构建。
+- 内置格式随主包编译，无独立构建、无清单；第三方扩展按 `.panda` 包安装到用户数据目录，不参与应用构建。
 - `asar: true`；TeX 引擎随 extraResources 携带当前平台的 Tectonic（`scripts/prepare-tectonic.cjs`）。
 - `npm run package` 前置 `scripts/ensure-electron.cjs`：postinstall 下载失败时会静默跳过，而 electron-builder 缺少 `electron .` 的自动补齐兜底，故打包前检测 `node_modules/electron/dist` 缺失即调 `install.js` 补齐（支持 `ELECTRON_MIRROR` 镜像）。
 - NSIS 安装包为向导式安装（`oneClick: false`）：可选安装目录、桌面与开始菜单快捷方式默认创建；按用户安装（`perMachine: false`）。
@@ -1673,12 +1687,6 @@ AST(parse(s1)) 语义等价于 AST(parse(s2))
 panda-live/
 ├─ doc/
 │  └─ design.md
-├─ extensions/
-│  └─ builtin/
-│     ├─ markdown/
-│     ├─ latex/
-│     ├─ mathml/
-│     └─ diagram/
 ├─ electron/
 │  ├─ main.ts
 │  ├─ preload.ts
@@ -1686,76 +1694,132 @@ panda-live/
 │  │  ├─ router.ts
 │  │  ├─ files.ts
 │  │  ├─ workspace.ts
-│  │  ├─ settings.ts
+│  │  ├─ storage.ts
+│  │  ├─ export.ts
+│  │  ├─ git.ts
 │  │  ├─ latex.ts
 │  │  └─ extensions.ts
 │  ├─ services/
 │  │  ├─ file-service.ts
 │  │  ├─ protocol-service.ts
 │  │  ├─ session-service.ts
+│  │  ├─ workspace-service.ts
+│  │  ├─ settings-service.ts
+│  │  ├─ draft-service.ts
+│  │  ├─ atomic-write.ts
+│  │  ├─ text-codec.ts
+│  │  ├─ git-service.ts
+│  │  ├─ git-parse.ts
+│  │  ├─ export-service.ts
 │  │  ├─ update-service.ts
 │  │  └─ extension-service.ts
 │  ├─ extensions/
 │  │  ├─ host.ts
+│  │  ├─ host-runner.cjs
 │  │  ├─ manifest.ts
 │  │  └─ installer.ts
 │  └─ tex/
 │     ├─ compiler.ts
-│     └─ log-parser.ts
+│     ├─ engine.ts
+│     ├─ log-parser.ts
+│     └─ pdf-cache.ts
 ├─ src/
 │  ├─ main.tsx
-│  ├─ app/                    # 布局、标签页、工具栏、设置
+│  ├─ app/                    # 布局、标签页、工具栏、大纲、Git、工作区、设置
 │  ├─ editor/
 │  │  ├─ schema.ts
+│  │  ├─ editor.ts
+│  │  ├─ state.ts
+│  │  ├─ paste.ts
+│  │  ├─ marks.ts
+│  │  ├─ block-toolbar.ts
+│  │  ├─ slash-menu.ts
+│  │  ├─ search.ts
+│  │  ├─ input-popover.ts
+│  │  ├─ toolbar-icons.ts
 │  │  ├─ plugins/
-│  │  ├─ commands/
+│  │  │  ├─ anchor.ts
+│  │  │  ├─ diff.ts
+│  │  │  └─ node-id.ts
 │  │  └─ nodeviews/
+│  │     ├─ math.ts
+│  │     ├─ mathml.ts
+│  │     ├─ diagram.ts
+│  │     ├─ code-block.ts
+│  │     ├─ image.ts
+│  │     └─ directive.ts
 │  ├─ source/
 │  │  ├─ codemirror.ts
-│  │  ├─ extensions.ts
-│  │  ├─ keymap.ts
-│  │  ├─ search-panel.tsx
-│  │  └─ goto-line.tsx
+│  │  ├─ language.ts
+│  │  ├─ ini-mode.ts
+│  │  └─ search-panel.ts
 │  ├─ formats/
 │  │  ├─ registry.ts
-│  │  ├─ markdown/
-│  │  │  ├─ parse.ts
-│  │  │  ├─ serialize.ts
-│  │  │  ├─ mapping.ts
-│  │  │  └─ myst.ts
-│  │  ├─ mathml/
-│  │  ├─ latex/
-│  │  └─ diagram/
+│  │  ├─ types.ts
+│  │  ├─ outline.ts
+│  │  └─ markdown/
+│  │     ├─ parse.ts
+│  │     ├─ serialize.ts
+│  │     ├─ mapping.ts
+│  │     ├─ preview.ts
+│  │     └─ myst.ts
 │  ├─ render/
+│  │  ├─ html.ts
+│  │  ├─ html-preview.ts
+│  │  ├─ code-highlight.ts
+│  │  ├─ export-fonts.ts
 │  │  ├─ math/
-│  │  ├─ code/
+│  │  │  ├─ katex.ts
+│  │  │  └─ mathml.ts
 │  │  ├─ diagram/
-│  │  ├─ pdf/
-│  │  └─ sanitize.ts
+│  │  └─ markdown/
+│  ├─ diff/
+│  │  ├─ compute.ts
+│  │  ├─ markers.ts
+│  │  ├─ preview.ts
+│  │  └─ wysiwyg.ts
 │  ├─ render-sandbox/
 │  ├─ services/
 │  │  ├─ document-manager.ts
-│  │  ├─ search-controller.ts
-│  │  └─ export-service.ts
+│  │  ├─ search.ts
+│  │  ├─ export-service.ts
+│  │  ├─ git-store.ts
+│  │  ├─ workspace-store.ts
+│  │  ├─ problem-store.ts
+│  │  ├─ settings-store.ts
+│  │  ├─ theme.ts
+│  │  ├─ math-settings.ts
+│  │  └─ open-policy.ts
 │  ├─ extensions/
-│  │  ├─ registry.ts
-│  │  └─ activation.ts
+│  │  └─ registry.ts
 │  ├─ shared/
 │  │  ├─ ipc.ts
 │  │  ├─ extensions.ts
-│  │  ├─ types.ts
-│  │  └─ errors.ts
+│  │  ├─ events.ts
+│  │  ├─ git.ts
+│  │  ├─ diff.ts
+│  │  ├─ scroll.ts
+│  │  ├─ menu.ts
+│  │  ├─ settings.ts
+│  │  ├─ slug.ts
+│  │  ├─ errors.ts
+│  │  └─ global.d.ts
+│  ├─ utils/
+│  │  ├─ clipboard.ts
+│  │  └─ paths.ts
+│  ├─ types/
 │  ├─ styles/
 │  └─ i18n/
 ├─ test/
 │  ├─ unit/
-│  ├─ integration/
 │  ├─ e2e/
-│  ├─ extensions/
 │  └─ fixtures/
 ├─ vite.config.ts
 ├─ vite.config.electron.ts
+├─ vitest.config.ts
+├─ playwright.config.ts
 ├─ electron-builder.json
+├─ eslint.config.js
 ├─ tsconfig.json
 └─ package.json
 ```
@@ -1806,7 +1870,7 @@ M1 是风险最高阶段；若往返指标不达标，优先收敛语法子集�
 6. 是否需要在 v2 引入 CRDT 协作；当前模型已避免将 React 状态作为文档真相，便于后续替换。
 7. 是否需要 GB18030/GBK 读写（v1 仅 UTF-8 可写，其余编码只读打开）。
 8. 是否需要 WYSIWYG 与源码同屏（v1 双栏仅源码 + 预览）。
-9. 是否开放第三方 Schema/NodeView 扩展（v1 仅内置扩展可注册）。
+9. 是否开放第三方 Schema/NodeView 扩展（v1 仅内置格式可注册）。
 10. 扩展分发方式：本地 zip、私有市场或签名机制；是否引入在线市场。
 11. 是否为每个扩展独立宿主进程（当前共享宿主，单个扩展崩溃会影响其余扩展）。
 
@@ -2294,19 +2358,19 @@ interface GitSnapshot {
 | Tectonic（可选） | TeX 编译 | MIT |
 | Vitest / Playwright / fast-check（dev） | 单元、E2E、性质测试 | MIT / Apache-2.0 |
 
-### D. 待实现代码入口
+### D. 关键代码入口
 
 | 入口 | 说明 |
 |---|---|
 | `src/editor/schema.ts` | 节点与 Mark 定义，所有扩展的单一来源 |
 | `src/formats/registry.ts` | 格式适配器注册与检测 |
-| `src/formats/markdown/serialize.ts` | 往返正确性的核心，优先建立测试 |
+| `src/formats/outline.ts` | 多语言符号大纲解析 |
+| `src/formats/markdown/serialize.ts` | 往返正确性的核心（测试见 `test/unit/markdown-roundtrip.test.ts`） |
 | `src/services/document-manager.ts` | 模式切换、脏标记、保存、恢复 |
 | `electron/ipc/router.ts` | 通道注册与 zod 校验 |
 | `electron/services/protocol-service.ts` | `panda-res` / `panda-pdf` / `panda-sandbox` / `panda-ext` 路径校验 |
 | `electron/extensions/host.ts` | 扩展宿主 RPC 与生命周期 |
 | `src/extensions/registry.ts` | 格式/语言/渲染器注册与冲突解析 |
-| `extensions/builtin/markdown/` | 内置 Markdown 扩展清单与入口；实现见 `src/formats/markdown/` |
 | `src/render-sandbox/sandbox.ts` | 图表引擎与消息协议 |
 
 ---
