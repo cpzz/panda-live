@@ -374,15 +374,6 @@ button {
   background: var(--border);
 }
 
-.sidebar-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 28px;
-  padding: 0;
-}
-
 .mode-switch {
   display: flex;
   flex: 0 0 auto;
@@ -2642,9 +2633,39 @@ body.resizing * {
 .sidebar-tabs {
   flex: 0 0 auto;
   display: flex;
+  align-items: stretch;
   height: 34px;
   border-bottom: 1px solid var(--border);
   background: var(--sidebar-bg);
+}
+
+/* 标签自身占据可伸缩区域，折叠按钮固定在其右侧。 */
+.sidebar-tabs-scroll {
+  flex: 1 1 auto;
+  display: flex;
+  min-width: 0;
+}
+
+.sidebar-collapse-button {
+  flex: 0 0 auto;
+  align-self: stretch;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  padding: 0;
+  border: 0;
+  border-left: 1px solid var(--border);
+  border-radius: 0;
+  color: var(--muted);
+}
+
+/* 折叠按钮的 tooltip 靠右显示，避免超出侧栏。 */
+.sidebar-collapse-button[data-tip]::after {
+  top: calc(100% + 7px);
+  left: auto;
+  right: 0;
+  transform: none;
 }
 
 .sidebar-tab {
@@ -2690,6 +2711,80 @@ body.resizing * {
   padding: 18px 16px;
   color: var(--muted);
   font-size: 12px;
+  text-align: center;
+}
+
+/* 侧栏折叠后的竖列图标栏（activity bar）。 */
+.sidebar-rail {
+  flex: 0 0 36px;
+  width: 36px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 1px;
+  padding-top: 2px;
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--border);
+}
+
+.sidebar-rail-button {
+  position: relative;
+  flex: 0 0 auto;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-left: 2px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.sidebar-rail-button:hover {
+  color: var(--fg);
+  background: var(--surface-hover);
+}
+
+.sidebar-rail-button.active {
+  color: var(--accent);
+  border-left-color: var(--accent);
+}
+
+/* 顶部「展开边栏」按钮与视图切换图标分隔。 */
+.sidebar-rail-expand {
+  margin-bottom: 5px;
+}
+
+.sidebar-rail-expand::before {
+  position: absolute;
+  bottom: -3px;
+  left: 5px;
+  right: 5px;
+  height: 1px;
+  background: var(--border);
+  content: "";
+}
+
+/* 竖列按钮的 tooltip 在右侧展开。 */
+.sidebar-rail-button[data-tip]::after {
+  top: 50%;
+  left: calc(100% + 7px);
+  transform: translateY(-50%);
+}
+
+.sidebar-rail-badge {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  min-width: 13px;
+  height: 13px;
+  padding: 0 3px;
+  border-radius: 7px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: 8px;
+  line-height: 13px;
   text-align: center;
 }
 

@@ -67,7 +67,7 @@ import { DIAGRAM_OPEN_EVENT } from "../render/markdown/diagram-preview";
 import { PerformanceOverlay } from "./PerformanceOverlay";
 import { ProblemPanel } from "./ProblemPanel";
 import { SettingsDialog } from "./SettingsDialog";
-import { WorkspacePanel } from "./WorkspacePanel";
+import { SidebarRail, WorkspacePanel, type SidebarTab } from "./WorkspacePanel";
 import { GitPanel } from "./GitPanel";
 import { WysiwygPane } from "./WysiwygPane";
 import { GitPane } from "./GitPane";
@@ -1362,11 +1362,8 @@ export function App() {
     }));
   }, [state.mode, state.activeId, manager]);
   const openSourceControl = useCallback((): void => {
+    setSidebarTab("source-control");
     workspaces.setVisible(true);
-    setSidebarTabRequest((current) => ({
-      tab: "source-control",
-      token: (current?.token ?? 0) + 1,
-    }));
   }, [workspaces]);
   const [compileSignal, setCompileSignal] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -1398,10 +1395,9 @@ export function App() {
   const [tabContextMenu, setTabContextMenu] = useState<{ top: number; left: number; docId: string } | null>(
     null,
   );
-  const [sidebarTabRequest, setSidebarTabRequest] = useState<{
-    tab: "source-control";
-    token: number;
-  } | null>(null);
+  const [sidebarTab, setSidebarTab] = useState<SidebarTab>(() =>
+    workspaces.getState().roots.length > 0 ? "files" : "outline",
+  );
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const stored = Number(localStorage.getItem("panda.sidebarWidth"));
     return Number.isFinite(stored) && stored >= 120 ? Math.min(480, stored) : 260;
@@ -2562,16 +2558,6 @@ export function App() {
           <PandaMark size={19} />
         </div>
         <span className="toolbar-divider" aria-hidden="true" />
-        <button
-          type="button"
-          className={workspace.visible ? "icon-button sidebar-toggle active" : "icon-button sidebar-toggle"}
-          aria-pressed={workspace.visible}
-          aria-label={workspace.visible ? t("折叠工作区") : t("展开工作区")}
-          data-tip={workspace.visible ? t("折叠工作区") : t("展开工作区")}
-          onClick={() => workspaces.setVisible(!workspace.visible)}
-        >
-          <Icon name={workspace.visible ? "sidebar-close" : "sidebar-open"} />
-        </button>
         <div className="toolbar-spacer" />
         <div className={active?.dirty ? "toolbar-doc dirty" : "toolbar-doc"}>
           <span className="toolbar-doc-dot" aria-hidden="true" />
@@ -2637,7 +2623,7 @@ export function App() {
       </header>
 
       <div className="main-row">
-        {workspace.visible && (
+        {workspace.visible ? (
           <>
             <WorkspacePanel
               store={workspaces}
@@ -2675,7 +2661,9 @@ export function App() {
                 />
               }
               sourceControlCount={gitState.snapshot?.changes.length ?? 0}
-              tabRequest={sidebarTabRequest}
+              tab={sidebarTab}
+              onTabChange={setSidebarTab}
+              onCollapse={() => workspaces.setVisible(false)}
             />
             <div
               className="resizer sidebar-resizer"
@@ -2685,6 +2673,17 @@ export function App() {
               onPointerDown={beginSidebarResize}
             />
           </>
+        ) : (
+          <SidebarRail
+            activeTab={sidebarTab}
+            showSourceControl
+            sourceControlCount={gitState.snapshot?.changes.length ?? 0}
+            onExpand={() => workspaces.setVisible(true)}
+            onSelect={(next) => {
+              setSidebarTab(next);
+              workspaces.setVisible(true);
+            }}
+          />
         )}
 
         <div className="editor-area">

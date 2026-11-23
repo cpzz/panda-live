@@ -30,13 +30,24 @@ interface WorkspacePanelProps {
   sourceControl?: ReactNode;
   /** 源代码管理标签上的变更数量。 */
   sourceControlCount?: number;
-  /** 外部请求切换侧栏标签（如点击状态栏分支）。 */
-  tabRequest?: { tab: SidebarTab; token: number } | null;
+  /** 当前激活的侧栏标签（由 App 层持有，折叠后仍可保留）。 */
+  tab: SidebarTab;
+  /** 请求切换侧栏标签。 */
+  onTabChange(tab: SidebarTab): void;
+  /** 点击 tab 栏右端的折叠按钮。 */
+  onCollapse(): void;
   /** 复制路径等操作的成功/失败提示。 */
   onNotice(kind: "info" | "error", message: string): void;
 }
 
-type SidebarTab = "files" | "outline" | "source-control";
+export type SidebarTab = "files" | "outline" | "source-control";
+
+/** 每个侧栏标签对应的图标，供展开的 tab 栏与折叠后的竖列 rail 共用。 */
+export const SIDEBAR_TAB_ICON: Record<SidebarTab, IconName> = {
+  files: "folder-open",
+  outline: "list",
+  "source-control": "git",
+};
 
 interface PromptState {
   title: string;
@@ -325,7 +336,9 @@ export function WorkspacePanel({
   outline,
   sourceControl,
   sourceControlCount,
-  tabRequest,
+  tab,
+  onTabChange,
+  onCollapse,
   onNotice,
 }: WorkspacePanelProps) {
   const state = useSyncExternalStore(store.subscribe, store.getState);
@@ -334,9 +347,6 @@ export function WorkspacePanel({
   const [dragging, setDragging] = useState(false);
   const dragDepth = useRef(0);
   const [collapsedRoots, setCollapsedRoots] = useState<Set<string>>(() => new Set());
-  const [tab, setTab] = useState<SidebarTab>(() =>
-    store.getState().roots.length > 0 ? "files" : "outline",
-  );
   const [menuPath, setMenuPath] = useState<string | null>(null);
   const previousRoot = useRef(state.roots[0]?.root.path ?? null);
   const filesRef = useRef<HTMLDivElement>(null);
@@ -368,17 +378,12 @@ export function WorkspacePanel({
     };
   }, [menuPath]);
 
-  // 外部请求（例如点击状态栏分支）切换到指定标签。
-  useEffect(() => {
-    if (tabRequest) setTab(tabRequest.tab);
-  }, [tabRequest]);
-
   // 打开文件夹后自动切回文件视图；未打开工作区时默认显示大纲。
   useEffect(() => {
     const root = state.roots[0]?.root.path ?? null;
-    if (root && root !== previousRoot.current) setTab("files");
+    if (root && root !== previousRoot.current) onTabChange("files");
     previousRoot.current = root;
-  }, [state.roots]);
+  }, [state.roots, onTabChange]);
 
   // 把活动文件行滚动到文件栏视口中部。仅在切换文档/切换标签的路径上调用，
   // 用户手动展开/折叠不应改变视口。
@@ -575,41 +580,52 @@ export function WorkspacePanel({
           </div>
         )}
         <div className="sidebar-tabs" role="tablist" aria-label={t("侧栏视图")}>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === "files"}
-            className={tab === "files" ? "sidebar-tab active" : "sidebar-tab"}
-            onClick={() => setTab("files")}
-          >
-            <Icon name="folder-open" size={14} />
-            {t("工作区")}
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === "outline"}
-            className={tab === "outline" ? "sidebar-tab active" : "sidebar-tab"}
-            onClick={() => setTab("outline")}
-          >
-            <Icon name="list" size={14} />
-            {t("大纲")}
-          </button>
-          {sourceControl && (
+          <div className="sidebar-tabs-scroll">
             <button
               type="button"
               role="tab"
-              aria-selected={tab === "source-control"}
-              className={tab === "source-control" ? "sidebar-tab active" : "sidebar-tab"}
-              onClick={() => setTab("source-control")}
+              aria-selected={tab === "files"}
+              className={tab === "files" ? "sidebar-tab active" : "sidebar-tab"}
+              onClick={() => onTabChange("files")}
             >
-              <Icon name="git" size={14} />
-              {t("Git")}
-              {(sourceControlCount ?? 0) > 0 && (
-                <span className="sidebar-tab-badge">{sourceControlCount}</span>
-              )}
+              <Icon name={SIDEBAR_TAB_ICON.files} size={14} />
+              {t("工作区")}
             </button>
-          )}
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === "outline"}
+              className={tab === "outline" ? "sidebar-tab active" : "sidebar-tab"}
+              onClick={() => onTabChange("outline")}
+            >
+              <Icon name={SIDEBAR_TAB_ICON.outline} size={14} />
+              {t("大纲")}
+            </button>
+            {sourceControl && (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tab === "source-control"}
+                className={tab === "source-control" ? "sidebar-tab active" : "sidebar-tab"}
+                onClick={() => onTabChange("source-control")}
+              >
+                <Icon name={SIDEBAR_TAB_ICON["source-control"]} size={14} />
+                {t("Git")}
+                {(sourceControlCount ?? 0) > 0 && (
+                  <span className="sidebar-tab-badge">{sourceControlCount}</span>
+                )}
+              </button>
+            )}
+          </div>
+          <button
+            type="button"
+            className="icon-button sidebar-collapse-button"
+            aria-label={t("折叠工作区")}
+            data-tip={t("折叠工作区")}
+            onClick={onCollapse}
+          >
+            <Icon name="sidebar-close" size={14} />
+          </button>
         </div>
 
         {tab === "files" ? (
@@ -814,5 +830,56 @@ export function WorkspacePanel({
         </div>
       )}
     </>
+  );
+}
+
+/** 侧栏折叠时显示的竖列图标栏：顶部按钮展开侧栏，其余图标展开并切换到对应标签。 */
+export function SidebarRail({
+  activeTab,
+  showSourceControl,
+  sourceControlCount = 0,
+  onExpand,
+  onSelect,
+}: {
+  activeTab: SidebarTab;
+  showSourceControl: boolean;
+  sourceControlCount?: number;
+  onExpand(): void;
+  onSelect(tab: SidebarTab): void;
+}) {
+  const tabs: { key: SidebarTab; label: string }[] = [
+    { key: "files", label: t("工作区") },
+    { key: "outline", label: t("大纲") },
+  ];
+  if (showSourceControl) tabs.push({ key: "source-control", label: t("Git") });
+
+  return (
+    <nav className="sidebar-rail" aria-label={t("侧栏视图")}>
+      <button
+        type="button"
+        className="sidebar-rail-button sidebar-rail-expand"
+        aria-label={t("展开工作区")}
+        data-tip={t("展开工作区")}
+        onClick={onExpand}
+      >
+        <Icon name="sidebar-open" size={15} />
+      </button>
+      {tabs.map(({ key, label }) => (
+        <button
+          key={key}
+          type="button"
+          className={activeTab === key ? "sidebar-rail-button active" : "sidebar-rail-button"}
+          aria-label={label}
+          aria-pressed={activeTab === key}
+          data-tip={label}
+          onClick={() => onSelect(key)}
+        >
+          <Icon name={SIDEBAR_TAB_ICON[key]} size={15} />
+          {key === "source-control" && sourceControlCount > 0 && (
+            <span className="sidebar-rail-badge">{sourceControlCount}</span>
+          )}
+        </button>
+      ))}
+    </nav>
   );
 }
