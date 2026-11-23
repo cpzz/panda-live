@@ -2205,12 +2205,14 @@ export function App() {
     tabScrollRef.current?.scrollBy({ left: direction * 240, behavior: "smooth" });
   };
 
-  // 活动标签滚动到可视区：溢出菜单、命令面板或搜索跳转激活文档时同样生效。
+  // 活动标签滚动到可视区：溢出菜单或搜索跳转激活文档时同样生效。
+  // 依赖含 tabsOverflow：溢出按钮出现/消失会挤占（或释放）滚动区宽度，
+  // 刚滚到位的活动标签可能被再次挤出可视区，需再校正一次。
   useEffect(() => {
     tabItemsRef.current
       ?.querySelector<HTMLElement>(".tab-item.active")
       ?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [state.activeId, state.documents.length]);
+  }, [state.activeId, state.documents.length, tabsOverflow]);
 
   /** 关闭全部文档：固定标签保留；dirty 时弹四选一（全部保存 / 全部丢弃 / 逐个询问 / 取消）。 */
   const closeAllDocuments = async (): Promise<void> => {
