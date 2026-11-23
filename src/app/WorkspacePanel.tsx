@@ -665,7 +665,7 @@ export function WorkspacePanel({
                 aria-label={t("打开文件")}
                 onClick={onOpenFiles}
               >
-                <Icon name="file" />
+                <Icon name="file" size={14} />
               </button>
               <button
                 type="button"
@@ -674,7 +674,7 @@ export function WorkspacePanel({
                 aria-label={t("打开文件夹")}
                 onClick={() => void store.openPicker()}
               >
-                <Icon name="folder-open" />
+                <Icon name="folder-open" size={14} />
               </button>
               <span className="toolbar-divider" aria-hidden="true" />
               <button
@@ -685,7 +685,7 @@ export function WorkspacePanel({
                 disabled={state.roots.length === 0}
                 onClick={() => void store.refresh()}
               >
-                <Icon name="refresh" />
+                <Icon name="refresh" size={14} />
               </button>
             </div>
             {state.error && <div className="sidebar-error">{state.error}</div>}

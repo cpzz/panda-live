@@ -2558,7 +2558,6 @@ export function App() {
           <PandaMark size={19} />
           <span className="brand-name">{t("Panda Live")}</span>
         </div>
-        <span className="toolbar-divider" aria-hidden="true" />
         <div className="toolbar-spacer" />
         <div className={active?.dirty ? "toolbar-doc dirty" : "toolbar-doc"}>
           <span className="toolbar-doc-dot" aria-hidden="true" />
