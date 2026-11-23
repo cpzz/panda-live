@@ -41,7 +41,7 @@ import {
 import type { DraftEntry, RecentEntry, SessionState } from "../shared/ipc";
 import type { CompileResult, EngineStatus } from "../shared/ipc";
 import type { Settings } from "../shared/settings";
-import { describeError, getErrorCode } from "../shared/errors";
+import { describeError } from "../shared/errors";
 import { pathKey } from "../utils/paths";
 import { getLocale, localeTag, resolveLocale, setLocale, t } from "../i18n";
 import { RecoveryDialog } from "./RecoveryDialog";
@@ -1933,10 +1933,13 @@ export function App() {
       return;
     }
     try {
-      const { buildDocumentHtml, saveHtml } = await import("../services/export-service");
+      // 先弹另存为窗口确认，用户选定位置后再构建 HTML 并写盘，避免导出期间干等。
+      const { buildDocumentHtml, chooseHtmlSavePath, writeHtmlFile } = await import("../services/export-service");
+      const savedPath = await chooseHtmlSavePath(doc);
+      if (!savedPath) return; // 用户取消另存
       const html = await buildDocumentHtml(doc, { theme: exportTheme() });
-      const savedPath = await saveHtml(doc, html);
-      if (savedPath) manager.showNotice("info", t("已导出 HTML：{0}", savedPath));
+      await writeHtmlFile(savedPath, html);
+      manager.showNotice("info", t("已导出 HTML：{0}", savedPath));
     } catch (reason) {
       manager.showNotice("error", describeError(reason));
     }
@@ -1950,15 +1953,17 @@ export function App() {
       return;
     }
     try {
+      // 先弹另存为窗口确认，用户选定位置后再构建 HTML 交给主进程打印，避免导出期间干等。
+      const ref = await window.panda.dialog.saveAs({
+        suggestedName: `${doc.name.replace(/\.[^.]+$/, "")}.pdf`,
+        filters: [{ name: "PDF", extensions: ["pdf"] }],
+      });
+      if (!ref) return; // 用户取消另存
       const { buildDocumentHtml } = await import("../services/export-service");
       const html = await buildDocumentHtml(doc, { theme: exportTheme() });
-      const result = await window.panda.export.pdf({
-        html,
-        suggestedName: `${doc.name.replace(/\.[^.]+$/, "")}.pdf`,
-      });
+      const result = await window.panda.export.pdf({ html, path: ref.path });
       manager.showNotice("info", t("已导出 PDF：{0}", result.path));
     } catch (reason) {
-      if (getErrorCode(reason) === "E_CANCELLED") return;
       manager.showNotice("error", describeError(reason));
     }
   };
@@ -1975,8 +1980,30 @@ export function App() {
       const savedPath = await exportDiagramSvg(doc);
       if (savedPath) manager.showNotice("info", t("已导出 SVG：{0}", savedPath));
     } catch (reason) {
-      if (getErrorCode(reason) === "E_CANCELLED") return;
       manager.showNotice("error", describeError(reason));
+    }
+  };
+
+  /** 把当前 PDF 的文本层提取为 Markdown，另存为新文档并打开。 */
+  const convertPdfToMarkdown = async (data: Uint8Array): Promise<void> => {
+    const doc = activeRef.current;
+    if (!doc || doc.format !== "pdf" || !doc.path) {
+      manager.showNotice("error", t("当前文档不是 PDF"));
+      return;
+    }
+    try {
+      // 先弹另存为窗口确认保存位置，用户选定后再转换并写盘，避免点击后先干等转换。
+      const { chooseMarkdownSavePath, writeMarkdownFile } = await import("../services/export-service");
+      const savedPath = await chooseMarkdownSavePath(doc);
+      if (!savedPath) return; // 用户取消另存
+      const { extractPdfMarkdown } = await import("../services/pdf-to-markdown");
+      const markdown = await extractPdfMarkdown(data);
+      await writeMarkdownFile(savedPath, markdown);
+      manager.showNotice("info", t("已转换为 Markdown：{0}", savedPath));
+      await manager.openPath(savedPath);
+    } catch (reason) {
+      // 文案经 t() 以便英文模式翻译；未知错误 key 会原样回退。
+      manager.showNotice("error", t(describeError(reason)));
     }
   };
 
@@ -3320,7 +3347,11 @@ export function App() {
               aria-label={t("PDF 预览")}
             >
               {activeIsPdf && active?.path ? (
-                <PdfDocumentPreview path={active.path} mtimeMs={active.mtimeMs} />
+                <PdfDocumentPreview
+                  path={active.path}
+                  mtimeMs={active.mtimeMs}
+                  onConvert={(data) => void convertPdfToMarkdown(data)}
+                />
               ) : null}
             </section>
             <section

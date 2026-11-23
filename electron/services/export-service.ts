@@ -1,4 +1,4 @@
-import { BrowserWindow, dialog } from "electron";
+import { BrowserWindow } from "electron";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -8,28 +8,13 @@ import type { PdfExportResult } from "../../src/shared/ipc";
 
 /**
  * PDF 导出：隐藏 BrowserWindow 执行 printToPDF，禁用 JavaScript。
+ * 另存为窗口由渲染进程先行确认（dialog:saveAs），这里只负责打印与写盘。
  * 见 doc/design.md §12.8。
  */
 export class ExportService {
-  constructor(
-    private readonly getWindow: () => BrowserWindow | null,
-    private readonly userDataDir: string,
-  ) {}
+  constructor(private readonly userDataDir: string) {}
 
-  async exportPdf(html: string, suggestedName: string): Promise<PdfExportResult> {
-    const window = this.getWindow();
-    const options = {
-      defaultPath: suggestedName,
-      filters: [{ name: "PDF", extensions: ["pdf"] }],
-    };
-    const result = window
-      ? await dialog.showSaveDialog(window, options)
-      : await dialog.showSaveDialog(options);
-    if (result.canceled || !result.filePath) {
-      throw new PandaError("E_CANCELLED", t("已取消导出"));
-    }
-    const target = result.filePath;
-
+  async exportPdf(html: string, target: string): Promise<PdfExportResult> {
     const tempDir = path.join(this.userDataDir, "cache", "export");
     await fs.mkdir(tempDir, { recursive: true });
     const tempHtml = path.join(tempDir, `${randomUUID()}.html`);

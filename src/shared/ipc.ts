@@ -263,9 +263,10 @@ export interface StatResult {
   isFile: boolean;
 }
 
+/** 渲染进程先弹另存为确认路径，主进程只负责打印与写盘。 */
 export interface PdfExportRequest {
   html: string;
-  suggestedName: string;
+  path: string;
 }
 
 export interface PdfExportResult {
@@ -513,7 +514,7 @@ export const ipcRequestSchemas = {
   "git:abort": z.object({ root: z.string().min(1) }),
   "git:continue": z.object({ root: z.string().min(1) }),
   "fs:trash": z.object({ path: z.string().min(1) }),
-  "export:pdf": z.object({ html: z.string(), suggestedName: z.string().min(1) }),
+  "export:pdf": z.object({ html: z.string(), path: z.string().min(1) }),
   "latex:detect": z.undefined(),
   "latex:compile": z.object({ jobId: z.string().min(1), rootPath: z.string().min(1) }),
   "app:pendingOpenPaths": z.undefined(),

@@ -4011,6 +4011,15 @@ body.resizing * {
   background: var(--chrome-bg);
 }
 
+/* PDF 工具栏分隔栏：把「转 Markdown」图标按钮和缩放控件隔开。 */
+.pdf-toolbar-divider {
+  flex: 0 0 auto;
+  width: 1px;
+  height: 16px;
+  margin: 0 2px;
+  background: var(--border);
+}
+
 .pdf-page-jump {
   display: inline-flex;
   align-items: center;

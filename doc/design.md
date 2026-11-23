@@ -1345,7 +1345,7 @@ IME：组合输入期间禁用 input rules 与自定义 keymap；`compositionend
 | `recent:list` / `recent:add` | R→M | — / `{ path }` | `RecentEntry[]` |
 | `latex:compile` | R→M | `CompileRequest` | `CompileResult`（事件回传日志） |
 | `latex:cancel` | R→M | `{ jobId }` | `void` |
-| `export:pdf` | R→M | `{ html, pageSize, margins }` | `{ path }` |
+| `export:pdf` | R→M | `{ html, path }`（路径由渲染进程先经 `dialog:saveAs` 确认） | `{ path }` |
 | `ext:list` | R→M | — | `ExtensionInfo[]`（含启用状态、权限、版本） |
 | `ext:install` | R→M | — | `ExtensionInfo` |
 | `ext:enable` / `ext:disable` | R→M | `{ id }` | `void` |

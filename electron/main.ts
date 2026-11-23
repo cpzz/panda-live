@@ -274,7 +274,7 @@ async function bootstrap(): Promise<void> {
   handle("update:check", () =>
     new UpdateService(app.getVersion(), process.env["PANDA_UPDATE_FEED"]).check(),
   );
-  registerExportHandlers({ exports: new ExportService(() => mainWindow, userDataDir), getWindow: () => mainWindow });
+  registerExportHandlers({ exports: new ExportService(userDataDir) });
   registerLatexHandlers({
     compiler: new TexCompiler(files, userDataDir, () => settings.get().latex),
     engineCommand: () => settings.get().latex.engineCommand,

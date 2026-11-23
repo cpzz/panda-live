@@ -1,6 +1,7 @@
 import {
+  BrowserWindow,
   dialog,
-  type BrowserWindow,
+  screen,
   type MessageBoxOptions,
   type OpenDialogOptions,
   type SaveDialogOptions,
@@ -125,6 +126,53 @@ export interface FileHandlerOptions {
   getWindow: () => BrowserWindow | null;
 }
 
+/**
+ * 屏幕居中的隐藏锚点窗口：Windows 上文件对话框默认居中于父窗口，主窗口非最大化/
+ * 偏置时对话框会跟着偏移。改用主窗口所在屏幕中央的 1×1 隐藏窗口作父窗口，
+ * 对话框即落在屏幕中央，且对锚点保持模态。惰性创建、复用、每次按主窗口位置重定位。
+ */
+let dialogAnchor: BrowserWindow | null = null;
+
+function getDialogAnchor(getWindow: () => BrowserWindow | null): BrowserWindow | null {
+  const owner = getWindow();
+  if (!owner || owner.isDestroyed()) return null;
+  try {
+    if (!dialogAnchor || dialogAnchor.isDestroyed()) {
+      dialogAnchor = new BrowserWindow({
+        show: false,
+        frame: false,
+        transparent: true,
+        resizable: false,
+        movable: false,
+        minimizable: false,
+        maximizable: false,
+        focusable: false,
+        skipTaskbar: true,
+        webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
+      });
+      dialogAnchor.on("closed", () => {
+        dialogAnchor = null;
+      });
+    }
+    const bounds = owner.getBounds();
+    const display = screen.getDisplayNearestPoint({
+      x: bounds.x + bounds.width / 2,
+      y: bounds.y + bounds.height / 2,
+    });
+    const area = display.workArea;
+    dialogAnchor.setPosition(
+      Math.round(area.x + area.width / 2),
+      Math.round(area.y + area.height / 2),
+    );
+    return dialogAnchor;
+  } catch {
+    // 锚点创建失败（如平台不支持透明窗口）不影响保存流程，回退主窗口父级。
+    dialogAnchor?.destroy();
+    dialogAnchor = null;
+    return null;
+  }
+}
+
 /** 注册文件与对话框通道。见 doc/design.md §13.1。 */
 export function registerFileHandlers({ files, getWindow }: FileHandlerOptions): void {
   handle("dialog:openFiles", async (request) => {
@@ -145,9 +193,10 @@ export function registerFileHandlers({ files, getWindow }: FileHandlerOptions): 
       defaultPath: request.suggestedName,
       filters: request.filters ?? markdownFilters(),
     };
-    const window = getWindow();
-    const result = window
-      ? await dialog.showSaveDialog(window, options)
+    // 父窗口用屏幕居中的锚点窗口，让对话框落在屏幕中央；锚点不可用时回退主窗口。
+    const parent = getDialogAnchor(getWindow) ?? getWindow();
+    const result = parent
+      ? await dialog.showSaveDialog(parent, options)
       : await dialog.showSaveDialog(options);
     if (result.canceled || !result.filePath) return null;
     return files.registerPath(result.filePath);

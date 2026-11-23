@@ -104,22 +104,46 @@ ${body}
 </html>`;
 }
 
-/** 把导出 HTML 写入用户选择的位置。 */
-export async function saveHtml(document: DocumentState, html: string): Promise<string | null> {
+/** 让用户为导出 HTML 选择保存位置。取消返回 null。 */
+export async function chooseHtmlSavePath(document: DocumentState): Promise<string | null> {
   const suggestedName = `${document.name.replace(/\.(md|markdown|mdown|mkd|qmd|rmd|mdx|myst|mst)$/i, "")}.html`;
   const ref = await window.panda.dialog.saveAs({
     suggestedName,
     filters: [{ name: "HTML", extensions: ["html"] }],
   });
-  if (!ref) return null;
-  await window.panda.fs.writeText({ path: ref.path, content: html, baseHash: "" });
-  return ref.path;
+  return ref?.path ?? null;
 }
 
-/** 导出当前图表文档的 SVG（仅 .puml/.mmd）。 */
+/** 把导出 HTML 写入指定路径（配合 chooseHtmlSavePath 使用）。 */
+export async function writeHtmlFile(path: string, html: string): Promise<void> {
+  await window.panda.fs.writeText({ path, content: html, baseHash: "" });
+}
+
+/** 让用户为转换得到的 Markdown 选择保存位置（用于 PDF→Markdown）。取消返回 null。 */
+export async function chooseMarkdownSavePath(document: DocumentState): Promise<string | null> {
+  const base = document.name.replace(/\.[^.]+$/, "");
+  const ref = await window.panda.dialog.saveAs({
+    suggestedName: `${base}.md`,
+    filters: [{ name: "Markdown", extensions: ["md"] }],
+  });
+  return ref?.path ?? null;
+}
+
+/** 把转换得到的 Markdown 写入指定路径（配合 chooseMarkdownSavePath 使用）。 */
+export async function writeMarkdownFile(path: string, content: string): Promise<void> {
+  await window.panda.fs.writeText({ path, content, baseHash: "" });
+}
+
+/** 导出当前图表文档的 SVG（仅 .puml/.mmd）。先确认保存位置，再渲染图表，避免渲染期间干等。 */
 export async function exportDiagramSvg(document: DocumentState): Promise<string | null> {
   if (!document.path || document.format === "markdown") return null;
   const kind = document.format === "mermaid" ? "mermaid" : "plantuml";
+  const base = document.name.replace(/\.\w+$/, "");
+  const ref = await window.panda.dialog.saveAs({
+    suggestedName: `${base}.svg`,
+    filters: [{ name: "SVG", extensions: ["svg"] }],
+  });
+  if (!ref) return null;
   const result = await getDiagramService().render({
     id: `export-svg:${document.id}`,
     kind,
@@ -127,12 +151,6 @@ export async function exportDiagramSvg(document: DocumentState): Promise<string 
     theme: "light",
   });
   if (!result.ok) throw new Error(result.error);
-  const base = document.name.replace(/\.\w+$/, "");
-  const ref = await window.panda.dialog.saveAs({
-    suggestedName: `${base}.svg`,
-    filters: [{ name: "SVG", extensions: ["svg"] }],
-  });
-  if (!ref) return null;
   await window.panda.fs.writeText({ path: ref.path, content: result.svg, baseHash: "" });
   return ref.path;
 }

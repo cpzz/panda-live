@@ -3,6 +3,7 @@ import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import { t } from "../i18n";
 import { onThemeChange, resolveTheme, type AppTheme } from "../services/theme";
 import { DiagramZoomToolbar, useDiagramZoomShortcuts } from "./DiagramViewerDialog";
+import { Icon } from "./icons";
 
 interface PageSlot {
   pageNumber: number;
@@ -28,7 +29,15 @@ function clampZoom(value: number): number {
  * worker 作为独立资源打包，切换文档或关闭预览时销毁文档实例以终止 worker。
  * 不渲染注释链接层，因此不存在外部链接自动跳转。见 doc/design.md §9.5、§13.4。
  */
-export function PdfPreview({ source }: { source: PdfSource }) {
+export function PdfPreview({
+  source,
+  onConvert,
+}: {
+  source: PdfSource;
+  /** 传入后才在工具栏显示「转 Markdown」按钮（磁盘 PDF 才提供，TeX 编译产物不提供）。 */
+  onConvert?: () => Promise<void> | void;
+}) {
+  const [converting, setConverting] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const pagesRef = useRef<HTMLDivElement>(null);
   const documentRef = useRef<PDFDocumentProxy | null>(null);
@@ -286,6 +295,24 @@ export function PdfPreview({ source }: { source: PdfSource }) {
             onZoomChange={(value) => setZoom(clampZoom(value / 100))}
             onFit={() => setZoom(1)}
           />
+          {onConvert && (
+            <>
+              <span className="pdf-toolbar-divider" aria-hidden="true" />
+              <button
+                type="button"
+                className="icon-button pdf-convert-button"
+                title={t("导出为 Markdown 文件")}
+                aria-label={t("转 Markdown")}
+                disabled={converting}
+                onClick={() => {
+                  setConverting(true);
+                  void Promise.resolve(onConvert()).finally(() => setConverting(false));
+                }}
+              >
+                <Icon name="file-markdown" />
+              </button>
+            </>
+          )}
         </div>
       )}
       <div className={`pdf-viewer${invert ? " pdf-invert" : ""}`} ref={scrollRef}>
@@ -314,7 +341,16 @@ export function PdfPreview({ source }: { source: PdfSource }) {
  * 打开的 PDF 文档：经 fs.readBase64 读取磁盘字节后交给 PdfPreview 渲染。
  * 路径或修改时间变化（含外部更新）时自动重新加载。
  */
-export function PdfDocumentPreview({ path, mtimeMs }: { path: string; mtimeMs: number }) {
+export function PdfDocumentPreview({
+  path,
+  mtimeMs,
+  onConvert,
+}: {
+  path: string;
+  mtimeMs: number;
+  /** 转换回调，接收已加载的 PDF 字节，避免重复读盘。 */
+  onConvert?: (data: Uint8Array) => Promise<void> | void;
+}) {
   const [state, setState] = useState<{ data: Uint8Array } | { error: string } | null>(null);
 
   useEffect(() => {
@@ -348,7 +384,10 @@ export function PdfDocumentPreview({ path, mtimeMs }: { path: string; mtimeMs: n
     [state],
   );
 
-  if (!source) {
+  // 与 source 同源的字节：供转换回调复用，避免重复读盘。
+  const data = state && "data" in state ? state.data : null;
+
+  if (!source || !data) {
     return (
       <div className="pdf-viewer">
         <p className="placeholder">
@@ -357,5 +396,7 @@ export function PdfDocumentPreview({ path, mtimeMs }: { path: string; mtimeMs: n
       </div>
     );
   }
-  return <PdfPreview source={source} />;
+  return (
+    <PdfPreview source={source} onConvert={onConvert ? () => onConvert(data) : undefined} />
+  );
 }
