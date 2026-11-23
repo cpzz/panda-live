@@ -18,6 +18,8 @@ import { Icon, fileIconForPath, type IconName } from "./icons";
 interface WorkspacePanelProps {
   store: WorkspaceStore;
   onOpenFile(node: WorkspaceNode, rootId: string): void;
+  /** 打开文件选择器，把文件打开为文档。 */
+  onOpenFiles(): void;
   /** 拖入的普通文件按路径打开为文档。 */
   onOpenPath(filePath: string, rootId: string | null): void;
   onRenamed(oldPath: string, ref: FileRef): void;
@@ -329,6 +331,7 @@ function NodeRow({
 export function WorkspacePanel({
   store,
   onOpenFile,
+  onOpenFiles,
   onOpenPath,
   onRenamed,
   onDeleted,
@@ -655,6 +658,15 @@ export function WorkspacePanel({
                   </option>
                 ))}
               </select>
+              <button
+                type="button"
+                className="icon-button"
+                title={t("打开文件（Ctrl+O）")}
+                aria-label={t("打开文件")}
+                onClick={onOpenFiles}
+              >
+                <Icon name="file" />
+              </button>
               <button
                 type="button"
                 className="icon-button"

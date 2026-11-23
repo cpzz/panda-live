@@ -32,8 +32,8 @@ async function openFolder(page: import("@playwright/test").Page, app: import("@p
   await app.evaluate(({ dialog }, target) => {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
   }, dir);
-  // 打开文件夹后工作区空态会出现同名按钮，限定工具栏避免 strict mode 冲突。
-  await page.locator(".toolbar").getByRole("button", { name: "打开文件夹", exact: true }).click();
+  // 用快捷键打开文件夹：入口已移入工作区工具栏，而侧栏可能处于其它标签或折叠状态。
+  await page.keyboard.press("Control+Shift+O");
 }
 
 /** M39：源代码管理面板的变更、暂存、提交、分支与历史。 */

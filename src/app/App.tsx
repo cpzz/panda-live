@@ -2556,6 +2556,7 @@ export function App() {
       <header className="toolbar">
         <div className="brand" title="Panda Live">
           <PandaMark size={19} />
+          <span className="brand-name">{t("Panda Live")}</span>
         </div>
         <span className="toolbar-divider" aria-hidden="true" />
         <div className="toolbar-spacer" />
@@ -2581,7 +2582,7 @@ export function App() {
         </div>
         <div className="toolbar-spacer" />
         {/* Git 显示模式入口已移到编辑区模式条最右侧的 git 按钮。见 §21.15。 */}
-        {/* 文档操作常驻顶层：新建/打开文件/打开文件夹/保存。 */}
+        {/* 文档操作常驻顶层：新建文件；打开文件的入口在工作区工具栏。 */}
         <button
           type="button"
           className="icon-button toolbar-icon tip-left"
@@ -2590,24 +2591,6 @@ export function App() {
           onClick={() => manager.newDocument()}
         >
           <Icon name="file-plus" />
-        </button>
-        <button
-          type="button"
-          className="icon-button toolbar-icon tip-left"
-          aria-label={t("打开文件")}
-          data-tip={t("打开文件（Ctrl+O）")}
-          onClick={() => void manager.openFiles()}
-        >
-          <Icon name="file" />
-        </button>
-        <button
-          type="button"
-          className="icon-button toolbar-icon tip-left"
-          aria-label={t("打开文件夹")}
-          data-tip={t("打开文件夹")}
-          onClick={() => void workspaces.openPicker()}
-        >
-          <Icon name="folder-open" />
         </button>
         <span className="toolbar-divider" aria-hidden="true" />
         <button
@@ -2632,6 +2615,7 @@ export function App() {
                 state.documents.find((doc) => doc.id === state.activeId)?.path ?? null
               }
               onOpenFile={(node, rootId) => void manager.openWorkspaceFile(node.path, rootId)}
+              onOpenFiles={() => void manager.openFiles()}
               onOpenPath={(filePath, rootId) => void manager.openPath(filePath, rootId)}
               onRenamed={(oldPath, ref) => void manager.repathDocument(oldPath, ref)}
               onDeleted={(filePath) => {

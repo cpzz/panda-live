@@ -29,7 +29,7 @@ test("M44：工作区复制路径与菜单焦点关闭", async () => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
     }, workspaceDir);
     await page.getByRole("tab", { name: "工作区", exact: true }).click();
-    await page.locator(".toolbar").getByRole("button", { name: "打开文件夹", exact: true }).click();
+    await page.locator(".files-toolbar").getByRole("button", { name: "打开文件夹", exact: true }).click();
     await expect(page.locator(".workspace-root")).toHaveCount(1);
 
     // clipboard.writeText 要求文档持有焦点；先把窗口带到前台，避免偶发拒绝。

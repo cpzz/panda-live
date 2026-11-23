@@ -39,13 +39,13 @@ test("M29：侧栏键盘导航与空工作区", async () => {
     await expect(page.locator(".sidebar-empty")).toContainText("未打开文件夹");
     await expect(page.locator(".sidebar-empty").getByRole("button")).toHaveCount(0);
     await expect(
-      page.locator(".toolbar").getByRole("button", { name: "打开文件夹" }),
+      page.locator(".files-toolbar").getByRole("button", { name: "打开文件夹" }),
     ).toBeVisible();
 
     await app.evaluate(({ dialog }, target) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
     }, workspaceDir);
-    const openButton = page.locator(".toolbar").getByRole("button", { name: "打开文件夹" });
+    const openButton = page.locator(".files-toolbar").getByRole("button", { name: "打开文件夹" });
     await openButton.click();
     const tree = page.locator(".tree");
     await expect(tree.locator(".tree-name", { hasText: "alpha.md" })).toBeVisible();

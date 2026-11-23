@@ -37,8 +37,8 @@ test("M0：打开、编辑、预览、保存并保留 BOM 与 CRLF", async () =>
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
   }, filePath);
 
-  // 顶部工具栏与欢迎页都有「打开文件」，限定顶部工具栏。
-  await page.locator(".toolbar").getByRole("button", { name: "打开文件", exact: true }).click();
+  // 欢迎页有「打开文件」按钮。
+  await page.locator(".empty-state").getByRole("button", { name: "打开文件", exact: true }).click();
   await expect(page.locator(".tab-name")).toHaveText("sample.md");
   // Markdown 默认以预览模式打开；本用例需要同时编辑源码并观察预览。
   await page.getByRole("button", { name: "分栏", exact: true }).click();

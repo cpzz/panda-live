@@ -81,10 +81,8 @@ test("M4：工作区树、查找面板与设置持久化", async () => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
     }, tempDir);
 
-    await page
-      .locator(".toolbar")
-      .getByRole("button", { name: "打开文件夹" })
-      .click();
+    // 打开文件夹入口已移入工作区工具栏；此处尚未切到工作区标签，用快捷键触发。
+    await page.keyboard.press("Control+Shift+O");
     const tree = page.locator(".tree");
     await expect(tree.locator(".tree-name", { hasText: "alpha.md" })).toBeVisible();
     await expect(tree.locator(".tree-name", { hasText: "beta.md" })).toBeVisible();
