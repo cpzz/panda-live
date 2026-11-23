@@ -322,7 +322,9 @@ export class DocumentManager {
   updateContent(id: string, content: string): void {
     this.patchDocument(id, (doc) => ({
       content,
-      dirty: doc.dirty || content !== doc.savedContent,
+      // 以当前内容与上次保存内容的比较为准，撤销回到保存点时立即清除脏标记。
+      // 原先用 `doc.dirty || ...` 会锁存脏状态，只有自动保存才碰巧清掉。
+      dirty: content !== doc.savedContent,
     }));
     this.scheduleAutosave(id);
     this.scheduleDraft(id);

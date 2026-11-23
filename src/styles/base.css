@@ -309,6 +309,15 @@ button {
   font-weight: 400;
 }
 
+/* 文件名后的保存按钮：仅在文档有改动时出现，尺寸紧凑。
+   用复合选择器压过后置的 .toolbar-icon（30×28）与 .icon-button（padding）。 */
+.toolbar-icon.toolbar-doc-save {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+}
+
 /* 自定义 tooltip：150ms 延迟出现，键盘 focus 也可触发；替代原生 title。 */
 [data-tip] {
   position: relative;

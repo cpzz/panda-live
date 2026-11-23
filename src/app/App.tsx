@@ -2567,6 +2567,17 @@ export function App() {
           >
             {active ? active.name : "Panda Live"}
           </span>
+          {active?.dirty && (
+            <button
+              type="button"
+              className="icon-button toolbar-icon toolbar-doc-save"
+              aria-label={t("保存文件")}
+              data-tip={t("保存文件（Ctrl+S）")}
+              onClick={() => void manager.saveDocument(state.activeId ?? "")}
+            >
+              <Icon name="save" />
+            </button>
+          )}
         </div>
         <div className="toolbar-spacer" />
         {/* Git 显示模式入口已移到编辑区模式条最右侧的 git 按钮。见 §21.15。 */}
@@ -2597,16 +2608,6 @@ export function App() {
           onClick={() => void workspaces.openPicker()}
         >
           <Icon name="folder-open" />
-        </button>
-        <button
-          type="button"
-          className="icon-button toolbar-icon tip-left"
-          aria-label={t("保存文件")}
-          data-tip={t("保存文件（Ctrl+S）")}
-          onClick={() => void manager.saveDocument(state.activeId ?? "")}
-          disabled={!active}
-        >
-          <Icon name="save" />
         </button>
         <span className="toolbar-divider" aria-hidden="true" />
         <button
