@@ -61,11 +61,6 @@ export interface ExtensionCommandContribution {
   title: string;
 }
 
-/** 命令面板中可执行的扩展命令。 */
-export interface ExtensionCommandInfo extends ExtensionCommandContribution {
-  extensionId: string;
-}
-
 export interface ExtensionManifest {
   id: string;
   version: string;

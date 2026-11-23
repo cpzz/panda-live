@@ -4,7 +4,6 @@ import { shell } from "electron";
 import { PandaError } from "../../src/shared/errors";
 import { t } from "../../src/i18n";
 import type {
-  ExtensionCommandInfo,
   ExtensionFormatInfo,
   ExtensionInfo,
   ExtensionManifest,
@@ -108,18 +107,6 @@ export class ExtensionService {
       }
     }
     return list;
-  }
-
-  /** 已启用扩展贡献的命令，供命令面板列出。 */
-  commands(): ExtensionCommandInfo[] {
-    const list: ExtensionCommandInfo[] = [];
-    for (const entry of this.entries.values()) {
-      if (!entry.manifest || !this.enabled.has(entry.id)) continue;
-      for (const command of entry.manifest.contributes.commands) {
-        list.push({ id: command.id, title: command.title, extensionId: entry.id });
-      }
-    }
-    return list.sort((a, b) => a.title.localeCompare(b.title));
   }
 
   async install(archivePath: string): Promise<ExtensionInfo> {

@@ -115,8 +115,6 @@
   "Panda 扩展": "Panda Extension",
   "已取消安装": "Installation cancelled",
   "IPC 响应格式无效": "Invalid IPC response format",
-  "未配置更新源（可通过环境变量 PANDA_UPDATE_FEED 指定版本清单地址）": "No update feed configured (set the PANDA_UPDATE_FEED environment variable to the version manifest URL)",
-  "更新源缺少合法 version 字段": "The update feed is missing a valid version field",
   "图表源码超过 {0} KB，已拒绝渲染": "Diagram source exceeds {0} KB; rendering refused",
   "第 {0} 行：不允许 !include / !import，请将依赖内容内联": "Line {0}: !include / !import is not allowed; inline the dependencies instead",
   "第 {0} 行：不允许远程 URL 引用": "Line {0}: remote URL references are not allowed",

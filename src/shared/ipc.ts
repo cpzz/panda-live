@@ -11,7 +11,6 @@ import type { PandaErrorPayload } from "./errors";
 import type { MenuCommand } from "./menu";
 import type { Settings } from "./settings";
 import type {
-  ExtensionCommandInfo,
   ExtensionFormatInfo,
   ExtensionInfo,
   ExtensionParseResult,
@@ -306,13 +305,6 @@ export interface CompileResult {
   diagnostics: TexDiagnostic[];
 }
 
-export interface UpdateStatus {
-  status: "not-configured" | "latest" | "available" | "error";
-  currentVersion: string;
-  latestVersion?: string;
-  message?: string;
-}
-
 export type IpcEnvelope<T> =
   | { ok: true; data: T }
   | { ok: false; error: PandaErrorPayload };
@@ -423,7 +415,6 @@ export const ipcRequestSchemas = {
   "shell:openExternal": z.object({ url: z.string().min(1) }),
   "ext:list": z.undefined(),
   "ext:formats": z.undefined(),
-  "ext:commands": z.undefined(),
   "ext:install": z.undefined(),
   "ext:enable": z.object({ id: z.string().min(1) }),
   "ext:disable": z.object({ id: z.string().min(1) }),
@@ -518,7 +509,6 @@ export const ipcRequestSchemas = {
   "latex:detect": z.undefined(),
   "latex:compile": z.object({ jobId: z.string().min(1), rootPath: z.string().min(1) }),
   "app:pendingOpenPaths": z.undefined(),
-  "update:check": z.undefined(),
   "app:getInfo": z.undefined(),
 } as const;
 
@@ -558,7 +548,6 @@ export interface IpcResponseMap {
   "shell:openExternal": void;
   "ext:list": ExtensionInfo[];
   "ext:formats": ExtensionFormatInfo[];
-  "ext:commands": ExtensionCommandInfo[];
   "ext:install": ExtensionInfo;
   "ext:enable": void;
   "ext:disable": void;
@@ -595,7 +584,6 @@ export interface IpcResponseMap {
   "latex:detect": EngineStatus;
   "latex:compile": CompileResult;
   "app:pendingOpenPaths": string[];
-  "update:check": UpdateStatus;
   "app:getInfo": AppInfo;
 }
 
@@ -679,7 +667,6 @@ export interface PandaApi {
   ext: {
     list(): Promise<ExtensionInfo[]>;
     formats(): Promise<ExtensionFormatInfo[]>;
-    commands(): Promise<ExtensionCommandInfo[]>;
     install(): Promise<ExtensionInfo>;
     enable(id: string): Promise<void>;
     disable(id: string): Promise<void>;
@@ -716,9 +703,6 @@ export interface PandaApi {
   latex: {
     detect(): Promise<EngineStatus>;
     compile(request: CompileRequest): Promise<CompileResult>;
-  };
-  update: {
-    check(): Promise<UpdateStatus>;
   };
   onMenuCommand(listener: (command: MenuCommand) => void): () => void;
   onFsChanged(listener: (event: FsChangedEvent) => void): () => void;

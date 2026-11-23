@@ -18,7 +18,6 @@ import { GitService } from "./services/git-service";
 import { handlePandaProtocols, registerPandaSchemes } from "./services/protocol-service";
 import { SessionService } from "./services/session-service";
 import { SettingsService } from "./services/settings-service";
-import { UpdateService } from "./services/update-service";
 import { WorkspaceService } from "./services/workspace-service";
 import { TexCompiler } from "./tex/compiler";
 import { cleanupCompileDirs } from "./tex/pdf-cache";
@@ -271,9 +270,6 @@ async function bootstrap(): Promise<void> {
   });
   registerExtensionHandlers({ extensions: extensionService, getWindow: () => mainWindow });
   handle("app:pendingOpenPaths", () => pendingOpenPaths.splice(0));
-  handle("update:check", () =>
-    new UpdateService(app.getVersion(), process.env["PANDA_UPDATE_FEED"]).check(),
-  );
   registerExportHandlers({ exports: new ExportService(userDataDir) });
   registerLatexHandlers({
     compiler: new TexCompiler(files, userDataDir, () => settings.get().latex),

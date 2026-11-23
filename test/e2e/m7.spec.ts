@@ -55,27 +55,6 @@ test("M7：源码模式 Ctrl+G 跳转行", async () => {
   }
 });
 
-test("M7：未配置更新源时给出可诊断状态", async () => {
-  test.setTimeout(120_000);
-  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "panda-m7-update-"));
-  const filePath = path.join(tempDir, "note.md");
-  await fs.writeFile(filePath, "# note\n", "utf8");
-
-  const { app, page, userDataDir } = await launchWithFile(filePath);
-  try {
-    const status = (await page.evaluate(() => window.panda.update.check())) as {
-      status: string;
-      currentVersion: string;
-    };
-    expect(status.status).toBe("not-configured");
-    expect(status.currentVersion.length).toBeGreaterThan(0);
-  } finally {
-    await app.close();
-    await fs.rm(tempDir, { recursive: true, force: true });
-    await fs.rm(userDataDir, { recursive: true, force: true });
-  }
-});
-
 test("M7：标签支持拖拽排序与中键关闭", async () => {
   test.setTimeout(120_000);
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "panda-m7-tabs-"));

@@ -45,7 +45,6 @@ import { describeError } from "../shared/errors";
 import { pathKey } from "../utils/paths";
 import { getLocale, localeTag, resolveLocale, setLocale, t } from "../i18n";
 import { RecoveryDialog } from "./RecoveryDialog";
-import { CommandPalette, type CommandItem } from "./CommandPalette";
 import { DiffControls, type DiffListItem } from "./DiffControls";
 import { diffLineMarkers, describeHunk, useDocumentDiff } from "./useDocumentDiff";
 import { hunkAnchorLine, type DiffHunk } from "../diff/compute";
@@ -97,7 +96,7 @@ const NOTICE_LEVEL_LABELS = {
   high: { zh: "高", en: "High" },
 } as const;
 
-/** macOS 使用 Cmd+F；系统占用 Cmd+H，替换只通过面板与命令面板进入。 */
+/** macOS 使用 Cmd+F；系统占用 Cmd+H，替换只通过搜索面板进入。 */
 const IS_MAC = typeof navigator !== "undefined" && navigator.platform.startsWith("Mac");
 
 const ENCODING_LABELS: Record<string, string> = {
@@ -1379,12 +1378,10 @@ export function App() {
   const [recent, setRecent] = useState<RecentEntry[]>([]);
   const [perfVisible, setPerfVisible] = useState(false);
   const [problemsOpen, setProblemsOpen] = useState(false);
-  const [paletteOpen, setPaletteOpen] = useState(false);
   /** 模式条导出下拉（仅 Markdown：HTML / PDF）。 */
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   /** 状态栏通知历史浮层。 */
   const [noticesOpen, setNoticesOpen] = useState(false);
-  const [extensionCommands, setExtensionCommands] = useState<CommandItem[]>([]);
   const [tabsOverflow, setTabsOverflow] = useState(false);
   const [canScrollTabs, setCanScrollTabs] = useState<{ left: boolean; right: boolean }>({
     left: false,
@@ -2007,34 +2004,6 @@ export function App() {
     }
   };
 
-  const checkUpdate = async (): Promise<void> => {
-    try {
-      const result = await window.panda.update.check();
-      switch (result.status) {
-        case "not-configured":
-          manager.showNotice("info", result.message ?? t("未配置更新源"));
-          return;
-        case "available":
-          manager.showNotice(
-            "info",
-            t(
-              "发现新版本 {0}（当前 {1}）",
-              result.latestVersion ?? "",
-              result.currentVersion,
-            ),
-          );
-          return;
-        case "latest":
-          manager.showNotice("info", t("当前已是最新版本（{0}）", result.currentVersion));
-          return;
-        default:
-          manager.showNotice("error", t("更新检查失败：{0}", result.message ?? ""));
-      }
-    } catch (reason) {
-      manager.showNotice("error", describeError(reason));
-    }
-  };
-
   useEffect(() => {
     manager.onSessionTick = saveSession;
     manager.openWorkspaceFolder = () => workspaces.openPicker();
@@ -2114,46 +2083,6 @@ export function App() {
       void manager.openPath(filePath);
     });
   }, [manager]);
-
-  // 命令面板：Ctrl/Cmd+Shift+P 切换；打开时拉取扩展命令。见 doc/design.md §15.1。
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "p") {
-        event.preventDefault();
-        setPaletteOpen((open) => !open);
-      }
-    };
-    window.addEventListener("keydown", onKeyDown, true);
-    return () => {
-      window.removeEventListener("keydown", onKeyDown, true);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!paletteOpen) return;
-    let cancelled = false;
-    void window.panda.ext
-      .commands()
-      .then((list) => {
-        if (cancelled) return;
-        setExtensionCommands(
-          list.map((item) => ({
-            id: `ext:${item.id}`,
-            title: item.title,
-            run: async () => {
-              await window.panda.ext.command(item.id);
-              manager.showNotice("info", t("已执行：{0}", item.title));
-            },
-          })),
-        );
-      })
-      .catch(() => {
-        if (!cancelled) setExtensionCommands([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [paletteOpen, manager]);
 
   // 导出下拉：点击外部或按 Esc 关闭；切换文档 / 显示模式时自动收起。
   useEffect(() => {
@@ -2282,14 +2211,8 @@ export function App() {
         case "file.exportSvg":
           void exportSvgActive();
           return;
-        case "update.check":
-          void checkUpdate();
-          return;
         case "view.performance":
           setPerfVisible((visible) => !visible);
-          return;
-        case "view.commandPalette":
-          setPaletteOpen(true);
           return;
         default:
           void manager.runMenuCommand(command);
@@ -2365,168 +2288,6 @@ export function App() {
     if (!element || state.mode !== "split") return;
     element.style.setProperty("--split-ratio", `${splitRatio}%`);
   }, [splitRatio, state.mode, state.activeId]);
-
-  const paletteCommands: CommandItem[] = [
-    { id: "file.new", title: t("新建文档"), shortcut: "Ctrl+N", run: () => manager.newDocument() },
-    {
-      id: "file.open",
-      title: t("打开文件…"),
-      shortcut: "Ctrl+O",
-      run: () => void manager.openFiles(),
-    },
-    {
-      id: "workspace.open",
-      title: t("打开文件夹…"),
-      shortcut: "Ctrl+Shift+O",
-      run: () => void workspaces.openPicker(),
-    },
-    {
-      id: "file.save",
-      title: t("保存"),
-      shortcut: "Ctrl+S",
-      run: () => {
-        if (state.activeId) void manager.saveDocument(state.activeId);
-      },
-    },
-    {
-      id: "file.saveAs",
-      title: t("另存为…"),
-      shortcut: "Ctrl+Shift+S",
-      run: () => {
-        if (active) void manager.saveDocumentAs(active.id);
-      },
-    },
-    {
-      id: "file.close",
-      title: t("关闭当前标签"),
-      shortcut: "Ctrl+W",
-      run: () => {
-        // 固定标签不允许单独关闭（含快捷键），需先取消固定；与 × / 中键行为一致。
-        if (active && !active.pinned) void manager.closeDocument(active.id);
-      },
-    },
-    {
-      id: "view.find",
-      title: t("查找"),
-      shortcut: IS_MAC ? "⌘F" : "Ctrl+F",
-      run: () => requestSearch("find"),
-    },
-    {
-      id: "view.replace",
-      title: t("替换"),
-      shortcut: IS_MAC ? "" : "Ctrl+H",
-      run: () => requestSearch("replace"),
-    },
-    {
-      id: "git.open",
-      title: t("打开 Git"),
-      run: openSourceControl,
-    },
-    {
-      id: "git.refresh",
-      title: t("刷新 Git"),
-      run: () => void git.refresh(),
-    },
-    {
-      id: "git.stageAll",
-      title: t("暂存全部更改"),
-      run: () => {
-        const paths = [
-          ...new Set(
-            (git.getState().snapshot?.changes ?? [])
-              .filter((change) => !change.staged && !change.conflicted)
-              .flatMap((change) =>
-                change.origPath ? [change.origPath, change.path] : [change.path],
-              ),
-          ),
-        ];
-        if (paths.length > 0) void git.stage(paths).catch(() => undefined);
-      },
-    },
-    {
-      id: "git.fetch",
-      title: t("获取（Git fetch）"),
-      run: () => void git.fetch().catch(() => undefined),
-    },
-    {
-      id: "git.pull",
-      title: t("拉取（Git pull）"),
-      run: () => void git.pull().catch(() => undefined),
-    },
-    {
-      id: "git.push",
-      title: t("推送（Git push）"),
-      run: () => {
-        const snapshot = git.getState().snapshot;
-        // 无上游且设置为自动时直接 `push -u`；否则保持原行为（Git 报错或面板询问）。
-        const setUpstream = Boolean(
-          snapshot && !snapshot.upstream && settingsRef.current.git.autoSetUpstream,
-        );
-        void git.push(setUpstream).catch(() => undefined);
-      },
-    },
-    {
-      id: "diff.toggle",
-      title: diffEnabled ? t("隐藏改动") : t("显示改动"),
-      shortcut: "Ctrl+Shift+D",
-      run: () => updateDiffOption(activeId, { enabled: !diffEnabled }),
-    },
-    {
-      id: "diff.mode.full",
-      title: t("差异视图：全文显示"),
-      run: () => updateDiffOption(activeId, { mode: "full" }),
-    },
-    {
-      id: "diff.mode.collapse",
-      title: t("差异视图：折叠未改动"),
-      run: () => updateDiffOption(activeId, { mode: "collapse" }),
-    },
-    {
-      id: "diff.mode.fragments",
-      title: t("差异视图：仅改动片段"),
-      run: () => updateDiffOption(activeId, { mode: "fragments" }),
-    },
-    {
-      id: "view.settings",
-      title: t("打开设置…"),
-      shortcut: "Ctrl+,",
-      run: () => setSettingsOpen(true),
-    },
-    {
-      id: "latex.compile",
-      title: t("编译 LaTeX"),
-      shortcut: "Ctrl+B",
-      run: () => setCompileSignal((value) => value + 1),
-    },
-    { id: "update.check", title: t("检查更新"), run: () => void checkUpdate() },
-    {
-      id: "view.mode.wysiwyg",
-      title: t("视图模式：所见即所得"),
-      run: () => manager.setMode("wysiwyg"),
-    },
-    { id: "view.mode.source", title: t("视图模式：源码"), run: () => manager.setMode("source") },
-    { id: "view.mode.split", title: t("视图模式：分栏"), run: () => manager.setMode("split") },
-    {
-      id: "view.mode.preview",
-      title: t("视图模式：预览"),
-      run: () => manager.setMode("preview"),
-    },
-    {
-      id: "view.mode.git",
-      title: t("打开 Git 差异视图"),
-      run: () => enterGitView(),
-    },
-    ...(import.meta.env.DEV
-      ? [
-          {
-            id: "view.performance",
-            title: t("切换性能浮层"),
-            run: () => setPerfVisible((visible) => !visible),
-          },
-        ]
-      : []),
-    ...extensionCommands,
-  ];
 
   /** 拖拽侧栏分隔条调整宽度，并记住用户选择。 */
   const beginSidebarResize = (event: ReactPointerEvent<HTMLDivElement>): void => {
@@ -3382,10 +3143,6 @@ export function App() {
             </div>
             <div className="welcome-shortcuts">
               <div className="welcome-shortcut">
-                <kbd>Ctrl+Shift+P</kbd>
-                <span>{t("命令面板")}</span>
-              </div>
-              <div className="welcome-shortcut">
                 <kbd>Ctrl+O</kbd>
                 <span>{t("打开文件")}</span>
               </div>
@@ -3585,19 +3342,6 @@ export function App() {
           </>
         )}
       </footer>
-
-      <CommandPalette
-        open={paletteOpen}
-        commands={paletteCommands}
-        onClose={() => setPaletteOpen(false)}
-        onRun={async (command) => {
-          try {
-            await command.run();
-          } catch (reason) {
-            manager.showNotice("error", describeError(reason));
-          }
-        }}
-      />
 
       <SettingsDialog
         open={settingsOpen}

@@ -644,9 +644,7 @@ test("M39：对比基线选择器与文件历史分页", async () => {
 
     // 干净文件：只显示提交历史，不显示「与当前文件比较」。
     await page.locator(".tree-name", { hasText: "history.md" }).click();
-    await page.keyboard.press("Control+Shift+P");
-    await page.keyboard.type("打开 Git 差异视图");
-    await page.keyboard.press("Enter");
+    await page.getByRole("button", { name: "Git 差异", exact: true }).click();
     await expect(page.locator(".git-diff-chip")).toBeVisible({ timeout: 20_000 });
     await page.locator(".git-diff-chip").click();
     const popover = page.locator(".git-chip-popover");
@@ -666,10 +664,7 @@ test("M39：对比基线选择器与文件历史分页", async () => {
     await page.locator(".cm-content").click();
     await page.keyboard.press("Control+A");
     await page.keyboard.type("# dirty\n\n编辑器未保存内容\n");
-    await page.keyboard.press("Control+Shift+P");
-    await page.keyboard.press("Control+A");
-    await page.keyboard.type("打开 Git 差异视图");
-    await page.keyboard.press("Enter");
+    await page.getByRole("button", { name: "Git 差异", exact: true }).click();
     await expect(page.locator(".git-diff-chip")).toBeVisible({ timeout: 20_000 });
     await page.locator(".git-diff-chip").click();
     const dirtyPopover = page.locator(".git-chip-popover");
