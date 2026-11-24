@@ -52,6 +52,9 @@ export function PdfPreview({
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
+  // 基准页宽（固定 px）= min(视口可用宽, 820)。必须用固定宽度而非 min(100%,820px)：
+  // 百分比宽度与 CSS zoom 相乘时，超过页宽后视觉宽度会被视口封顶，继续放大不再变化。
+  const [baseWidth, setBaseWidth] = useState<number>(PAGE_MAX_WIDTH);
   const { mode, markDefault, markFitWidth, markManual } = usePreviewZoomMode(source);
   const [pageInput, setPageInput] = useState("1");
   const [theme, setTheme] = useState<AppTheme>(resolveTheme);
@@ -120,8 +123,28 @@ export function PdfPreview({
     };
   }, [source]);
 
+  // 测量基准页宽 = min(视口可用宽, 820)，固定为 px 供 CSS zoom 连续缩放；
+  // 分栏拖动 / 窗口变化时重新测量。视口宽度不随 zoom 改变，故无需监听 zoom。
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const measure = (): void => {
+      const style = getComputedStyle(el);
+      const available =
+        el.clientWidth -
+        Number.parseFloat(style.paddingLeft) -
+        Number.parseFloat(style.paddingRight);
+      const base = Math.round(available > 0 ? Math.min(available, PAGE_MAX_WIDTH) : PAGE_MAX_WIDTH);
+      setBaseWidth((prev) => (prev === base ? prev : base));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   // 占位元素渲染完成后再观察可见性；否则首帧 children 为空，页面永远不会绘制。
-  // zoom 变化时重跑：清除已渲染标记并按新宽度重绘（zoom 参与依赖）。
+  // zoom 或基准宽变化时重跑：清除已渲染标记并按新宽度重绘（两者均参与依赖）。
   useEffect(() => {
     const host = pagesRef.current;
     const pdf = documentRef.current;
@@ -239,7 +262,7 @@ export function PdfPreview({
       for (const task of tasks) task.cancel();
       tasks.clear();
     };
-  }, [slots, zoom]);
+  }, [slots, zoom, baseWidth]);
 
   const changeZoom = (value: number): void => {
     setZoom(clampZoom(value / 100));
@@ -250,7 +273,7 @@ export function PdfPreview({
   const applyDefault = (): void => {
     const percent = zoomToContain(
       scrollRef.current,
-      PAGE_MAX_WIDTH,
+      baseWidth,
       Math.round(ZOOM_MIN * 100),
       Math.round(ZOOM_MAX * 100),
     );
@@ -274,7 +297,7 @@ export function PdfPreview({
   const applyFitWidth = (): void => {
     const percent = zoomToFitWidth(
       scrollRef.current,
-      PAGE_MAX_WIDTH,
+      baseWidth,
       Math.round(ZOOM_MIN * 100),
       Math.round(ZOOM_MAX * 100),
     );
@@ -359,7 +382,7 @@ export function PdfPreview({
       )}
       <div className={`pdf-viewer${invert ? " pdf-invert" : ""}`} ref={scrollRef}>
         {progress === 0 && <p className="placeholder">{t("正在加载 PDF…")}</p>}
-        <div className="pdf-pages" ref={pagesRef} style={{ zoom }}>
+        <div className="pdf-pages" ref={pagesRef} style={{ width: baseWidth, zoom }}>
           {slots.map((slot) => (
             <div
               key={slot.pageNumber}

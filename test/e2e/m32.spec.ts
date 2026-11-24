@@ -114,3 +114,59 @@ test("M32：打开 PDF 文档显示只读预览", async () => {
     await fs.rm(userDataDir, { recursive: true, force: true });
   }
 });
+
+test("M32b：PDF 预览放大到超过页宽后页面仍随缩放增大", async () => {
+  test.setTimeout(120_000);
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "panda-m32b-"));
+  const userDataDir = await fs.mkdtemp(path.join(os.tmpdir(), "panda-m32b-ud-"));
+  const filePath = path.join(tempDir, "sample.pdf");
+  await fs.writeFile(filePath, buildSamplePdf());
+
+  const app = await electron.launch({
+    args: ["."],
+    cwd: CWD,
+    env: { ...process.env, PANDA_USER_DATA_DIR: userDataDir },
+  });
+  try {
+    const page = await app.firstWindow();
+    await app.evaluate(({ dialog }, target) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
+    }, filePath);
+    await page.locator(".app").waitFor();
+    await page.keyboard.press("Control+O");
+    await expect(page.locator(".tab-name")).toHaveText("sample.pdf");
+
+    const viewer = page.locator(".pdf-viewer");
+    const pageEl = viewer.locator(".pdf-page");
+    await expect(pageEl).toHaveCount(1, { timeout: 30_000 });
+    await expect(viewer.locator("canvas")).toBeVisible({ timeout: 30_000 });
+
+    // 100% 时页面视觉宽 = 基准页宽（min(视口可用宽, 820)）。
+    await expect.poll(async () => (await pageEl.boundingBox())?.width ?? 0).toBeGreaterThan(0);
+    const widthAt100 = (await pageEl.boundingBox())!.width;
+
+    // 放大到 200%：视觉宽应随之约翻倍，而不是被视口可用宽封顶后不再变化。
+    const zoomInput = page.locator(".pdf-zoom-controls .diagram-zoom-input");
+    await zoomInput.fill("200");
+    await zoomInput.press("Enter");
+    await expect(zoomInput).toHaveValue("200");
+
+    await expect
+      .poll(async () => (await pageEl.boundingBox())?.width ?? 0)
+      .toBeGreaterThan(widthAt100 * 1.5);
+    const widthAt200 = (await pageEl.boundingBox())!.width;
+
+    const ratio = widthAt200 / widthAt100;
+    expect(ratio).toBeGreaterThan(1.8);
+    expect(ratio).toBeLessThan(2.2);
+
+    // 超过页宽后出现横向滚动，证明缩放真实生效（旧实现会卡在视口宽不滚动）。
+    await expect
+      .poll(() => viewer.evaluate((el) => el.scrollWidth - el.clientWidth))
+      .toBeGreaterThan(1);
+  } finally {
+    await app.close();
+    await fs.rm(tempDir, { recursive: true, force: true });
+    await fs.rm(userDataDir, { recursive: true, force: true });
+  }
+});

@@ -3875,11 +3875,17 @@ body.resizing * {
   gap: 4px;
 }
 
-/* TeX 预览 */
+/* TeX 预览：与独立 PDF 预览一样通栏，工具栏紧贴模式条，不留普通预览的内边距。 */
 .tex-preview {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0;
+  padding: 0;
+}
+
+.tex-preview > .placeholder,
+.tex-preview > .tex-diagnostics {
+  margin: 8px 12px 0;
 }
 
 .tex-placeholder {
@@ -3980,9 +3986,9 @@ body.resizing * {
 }
 
 .pdf-pages {
-  /* 基准页宽固定 820px，整体居中；CSS zoom 缩放不改变这个基准，
-     使「默认显示 / 页宽显示」都能用同一套基准宽度计算。 */
-  width: min(100%, 820px);
+  /* 基准页宽由内联 style 以固定 px 给出（= min(视口可用宽, 820)），整体居中。
+     必须用固定宽度而非 min(100%,820px)：百分比宽度与 CSS zoom 相乘时，
+     超过页宽后视觉宽度会被视口封顶，继续放大将不再变化。 */
   margin-inline: auto;
   display: flex;
   flex-direction: column;
@@ -4016,6 +4022,19 @@ body.resizing * {
   right: 8px;
   color: var(--muted);
   font-size: 10.5px;
+}
+
+/* TeX 编译产物不需要独立 PDF 的外框/底色/阴影，页面直接与预览背景衔接。 */
+.tex-preview .pdf-viewer {
+  border: 0;
+  border-radius: 0;
+  background: var(--surface);
+  padding: 0;
+}
+
+.tex-preview .pdf-page {
+  border: 0;
+  box-shadow: none;
 }
 
 /* Office 文档（Word/Excel/PowerPoint）只读预览 */
@@ -4140,12 +4159,13 @@ body.resizing * {
   color: var(--muted);
 }
 
-/* Office 工具栏：复用 .zoom-toolbar（边框/底色/左右分组），仅追加吸顶行为。 */
+/* Office 工具栏：复用 .zoom-toolbar（边框/底色/左右分组），仅追加吸顶行为。
+   负 margin 抵消 .office-viewer 的 12px 内边距，使工具栏通栏到面板两端不留侧边空白（对齐图片预览）。 */
 .office-toolbar {
   position: sticky;
   top: -12px;
   z-index: 3;
-  margin-top: -12px;
+  margin: -12px -12px 0;
 }
 
 .office-toolbar-title {

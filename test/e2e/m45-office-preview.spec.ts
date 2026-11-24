@@ -172,6 +172,15 @@ test("M45：Word 只读预览（连续流式、缩放与大纲）", async () => 
     // 缩放工具栏：主控件靠左、复位与页宽显示靠右；初始 100%。
     const toolbar = page.locator(".office-toolbar");
     await expect(toolbar).toBeVisible();
+    // 工具栏通栏到面板两端：左右缘与 .office-viewer 对齐（负 margin 抵消 12px 内边距，无侧边留白）。
+    const viewerBox = await page.locator(".office-viewer").boundingBox();
+    const toolbarBox = await toolbar.boundingBox();
+    expect(viewerBox).not.toBeNull();
+    expect(toolbarBox).not.toBeNull();
+    expect(Math.abs(toolbarBox!.x - viewerBox!.x)).toBeLessThan(1);
+    expect(
+      Math.abs(toolbarBox!.x + toolbarBox!.width - (viewerBox!.x + viewerBox!.width)),
+    ).toBeLessThan(1);
     await expect(toolbar.locator(".diagram-zoom-primary .diagram-zoom-input")).toBeVisible();
     const defaultView = toolbar.getByRole("button", { name: "默认显示" });
     const fitWidth = toolbar.getByRole("button", { name: "页宽显示" });
