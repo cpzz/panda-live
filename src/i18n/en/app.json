@@ -11,6 +11,8 @@
   "幻灯片 {0} 页": "Slides: {0}",
   "幻灯片缩放": "Slide zoom",
   "文档缩放": "Document zoom",
+  "默认宽度": "Default width",
+  "页宽显示": "Fit to width",
   "Sheet {0}": "Sheet {0}",
   "Word 渲染失败：{0}": "Word rendering failed: {0}",
   "表格过大，仅显示前 {0} 行 × {1} 列。": "Table too large; showing only the first {0} rows × {1} columns.",

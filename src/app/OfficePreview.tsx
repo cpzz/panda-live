@@ -1,10 +1,10 @@
 /** Microsoft Office 只读预览：docx（docx-preview 渲染 DOM）、xlsx（SheetJS 解析 → HTML 表格）、
  * pptx（pptx-to-html → 幻灯片 HTML）。与 PDF/图片同属二进制只读族：readBase64 读盘，
  * 路径或修改时间变化（含外部更新）时自动重新加载。渲染库动态 import，保持初始包体。 */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../i18n";
 import { sanitizeHtml } from "../render/html";
-import { DiagramZoomToolbar, useDiagramZoomShortcuts } from "./DiagramViewerDialog";
+import { DiagramZoomToolbar, useDiagramZoomShortcuts, zoomToFitWidth } from "./DiagramViewerDialog";
 import {
   buildDocxOutlineFromDom,
   readDocxDocumentXml,
@@ -19,10 +19,12 @@ import type { WorkBook } from "xlsx";
 
 type OfficeFormat = "docx" | "xlsx" | "pptx";
 
-/** 幻灯片缩放范围，与 PDF 预览一致。 */
+/** 幻灯片/Word 缩放范围，与 PDF 预览一致。 */
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 3;
 const ZOOM_STEP = 0.1;
+/** 页宽显示的基准宽度：与 CSS `.office-pptx-slide` / PDF `.pdf-page` 的 max-width 一致。 */
+const PAGE_BASE_WIDTH = 820;
 
 function clampZoom(value: number): number {
   return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(value * 10) / 10));
@@ -87,6 +89,22 @@ function DocxBody({
     step: Math.round(ZOOM_STEP * 100),
   });
 
+  /** 页宽显示：以 docx-preview 渲染出的页面宽度为基准铺满视口（一次性动作）。 */
+  const applyFitWidth = useCallback((): void => {
+    const viewer = bodyRef.current?.closest<HTMLElement>(".office-viewer") ?? null;
+    const section = bodyRef.current?.querySelector<HTMLElement>(
+      ".office-docx-wrapper > section.office-docx",
+    );
+    const baseWidth = Number.parseFloat(section?.style.width ?? "") || PAGE_BASE_WIDTH;
+    const percent = zoomToFitWidth(
+      viewer,
+      baseWidth,
+      Math.round(ZOOM_MIN * 100),
+      Math.round(ZOOM_MAX * 100),
+    );
+    if (percent !== null) setZoom(clampZoom(percent / 100));
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     const body = bodyRef.current;
@@ -131,7 +149,7 @@ function DocxBody({
   // docx-preview 的样式经独立容器注入，避免污染全局（见 README）。
   return (
     <>
-      {/* 连续流式无页码，工具栏只放缩放控件（与 PDF 的缩放区同构，右对齐）。 */}
+      {/* 连续流式无页码，工具栏只放缩放控件（与 PDF 的缩放区同构：主控件靠左、动作靠右）。 */}
       <div className="office-toolbar">
         <DiagramZoomToolbar
           className="office-zoom-controls"
@@ -142,6 +160,7 @@ function DocxBody({
           step={Math.round(ZOOM_STEP * 100)}
           onZoomChange={(value) => setZoom(clampZoom(value / 100))}
           onFit={() => setZoom(1)}
+          onFitWidth={applyFitWidth}
         />
       </div>
       {/* CSS zoom 同步缩放版面（Chromium 布局级缩放，与 PPT/HTML 预览同机制）。 */}
@@ -192,11 +211,24 @@ function XlsxBody({ sheets }: { sheets: OfficeSheetInfo[] }) {
 /** pptx 分支：幻灯片竖排 + 页码标签，缩放工具栏与 PDF/图表/图片预览一致。 */
 function PptxBody({ slides }: { slides: string[] }) {
   const [zoom, setZoom] = useState(1);
+  const pagesRef = useRef<HTMLDivElement>(null);
   useDiagramZoomShortcuts(Math.round(zoom * 100), (value) => setZoom(clampZoom(value / 100)), {
     min: Math.round(ZOOM_MIN * 100),
     max: Math.round(ZOOM_MAX * 100),
     step: Math.round(ZOOM_STEP * 100),
   });
+
+  /** 页宽显示：按幻灯片基准宽度铺满视口（一次性动作）。 */
+  const applyFitWidth = useCallback((): void => {
+    const percent = zoomToFitWidth(
+      pagesRef.current?.parentElement ?? null,
+      PAGE_BASE_WIDTH,
+      Math.round(ZOOM_MIN * 100),
+      Math.round(ZOOM_MAX * 100),
+    );
+    if (percent !== null) setZoom(clampZoom(percent / 100));
+  }, []);
+
   const htmls = useMemo(() => slides.map((slide) => sanitizeHtml(slide)), [slides]);
   if (slides.length === 0) return <p className="placeholder">{t("（无幻灯片）")}</p>;
   return (
@@ -212,10 +244,11 @@ function PptxBody({ slides }: { slides: string[] }) {
           step={Math.round(ZOOM_STEP * 100)}
           onZoomChange={(value) => setZoom(clampZoom(value / 100))}
           onFit={() => setZoom(1)}
+          onFitWidth={applyFitWidth}
         />
       </div>
       {/* CSS zoom 同步缩放版面（Chromium 布局级缩放，与 HTML 预览 iframe 的 zoom 同机制）。 */}
-      <div className="office-pptx-pages" style={{ zoom }}>
+      <div className="office-pptx-pages" ref={pagesRef} style={{ zoom }}>
         {htmls.map((html, index) => (
           <div key={index} className="office-pptx-slide">
             <span className="office-pptx-label">{index + 1}</span>

@@ -3955,20 +3955,23 @@ body.resizing * {
 }
 
 /* PDF 缩放控件：与图表/图片预览共用 DiagramZoomToolbar，右对齐在页码之后。
-   固定单行：缩放项较多，换行会把「适配宽度」挤到第二行。 */
+   内部主控件靠左、复位/页宽动作靠右；固定单行不换行。 */
 .pdf-zoom-controls {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: 8px;
+  flex: 0 1 360px;
+  min-width: 280px;
+  max-width: 100%;
   margin-left: auto;
   flex-wrap: nowrap;
 }
 
 .pdf-zoom-controls .diagram-zoom-range {
-  flex: 1 1 auto;
-  min-width: 60px;
-  max-width: 240px;
+  flex: 0 1 120px;
+  min-width: 64px;
+  max-width: 150px;
 }
 
 .pdf-pages {
@@ -4151,20 +4154,23 @@ body.resizing * {
   white-space: nowrap;
 }
 
-/* 缩放控件：与 PDF 预览同款（输入框 + 滑块 + ± + 复位，右对齐）。 */
+/* 缩放控件：与 PDF 预览同款（主控件靠左、复位/页宽动作靠右）。 */
 .office-zoom-controls {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: 8px;
-  margin-left: auto;
+  flex: 1 1 auto;
+  min-width: 280px;
+  max-width: 100%;
+  margin-left: 8px;
   flex-wrap: nowrap;
 }
 
 .office-zoom-controls .diagram-zoom-range {
-  flex: 1 1 auto;
-  min-width: 60px;
-  max-width: 240px;
+  flex: 0 1 120px;
+  min-width: 64px;
+  max-width: 150px;
 }
 
 /* PowerPoint：幻灯片竖排，白底 16:9 页面；容器级 CSS zoom 缩放。 */

@@ -15,6 +15,26 @@ export function clampDiagramZoom(value: number): number {
 }
 
 /**
+ * 页宽显示：按视口可用宽度与内容基准宽度算出百分比（含内边距扣减），夹取到 [min, max]。
+ * 供 PDF/Office 等有固定基准页宽、以容器级缩放显示的视图复用；无法测量时返回 null。
+ */
+export function zoomToFitWidth(
+  viewport: HTMLElement | null,
+  baseWidth: number,
+  min: number,
+  max: number,
+): number | null {
+  if (!viewport || !(baseWidth > 0)) return null;
+  const style = getComputedStyle(viewport);
+  const available =
+    viewport.clientWidth -
+    Number.parseFloat(style.paddingLeft) -
+    Number.parseFloat(style.paddingRight);
+  if (!(available > 0)) return null;
+  return Math.min(max, Math.max(min, Math.round((available / baseWidth) * 100)));
+}
+
+/**
  * 图表/图片缩放快捷键：Ctrl+= 放大、Ctrl+- 缩小、Ctrl+0 重置为 100%、Ctrl+滚轮缩放。
  * 仅在调用方挂载期间生效；对话框传 capture=true 抢占事件，避免底层预览同时响应。
  */
@@ -87,8 +107,10 @@ export interface DiagramZoomControls {
   /** 缩放百分比；100 = 自然尺寸。 */
   zoom: number;
   onZoomChange(zoom: number): void;
-  /** 复位（一次性动作）：恢复自然宽度显示且不超过视口宽度，超宽图表按比例缩小。 */
+  /** 复位（一次性动作）：恢复默认宽度（100%；图表/图片为不超过视口的自然宽度）。 */
   onFit(): void;
+  /** 页宽显示（一次性动作）：按视口可用宽度计算缩放，内容铺满可视区域。 */
+  onFitWidth(): void;
   /** 缩放下限（百分比），默认 30。 */
   min?: number;
   /** 缩放上限（百分比），默认 1000。 */
@@ -102,13 +124,14 @@ export interface DiagramZoomControls {
 }
 
 /**
- * 缩放工具栏（右对齐）：百分比输入框、滑块、放大/缩小图标按钮与复位动作按钮。
- * 独立图表/图片预览、「放大查看」对话框与 PDF 预览共用。
+ * 缩放工具栏：左侧为主控件（百分比输入框、%、滑块、放大/缩小），右侧为动作（复位、页宽显示）。
+ * 独立图表/图片预览、「放大查看」对话框、PDF 与 Office 预览共用。
  */
 export function DiagramZoomToolbar({
   zoom,
   onZoomChange,
   onFit,
+  onFitWidth,
   min = DIAGRAM_ZOOM_MIN,
   max = DIAGRAM_ZOOM_MAX,
   step = ZOOM_STEP,
@@ -132,56 +155,77 @@ export function DiagramZoomToolbar({
 
   return (
     <div className={className}>
-      <input
-        type="number"
-        className="diagram-zoom-input"
-        min={min}
-        max={max}
-        value={input}
-        aria-label={label}
-        onChange={(event) => setInput(event.target.value)}
-        onBlur={commit}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") {
-            event.preventDefault();
-            commit();
-          }
-        }}
-      />
-      <span className="diagram-zoom-label">%</span>
-      <input
-        type="range"
-        className="diagram-zoom-range"
-        min={min}
-        max={max}
-        step={step}
-        value={zoom}
-        aria-label={label}
-        onChange={(event) => onZoomChange(clamp(Number(event.target.value)))}
-      />
-      <button
-        type="button"
-        className="icon-button"
-        aria-label={t("放大")}
-        title={t("放大")}
-        disabled={zoom >= max}
-        onClick={() => onZoomChange(clamp(zoom + step))}
-      >
-        <Icon name="zoom-in" />
-      </button>
-      <button
-        type="button"
-        className="icon-button"
-        aria-label={t("缩小")}
-        title={t("缩小")}
-        disabled={zoom <= min}
-        onClick={() => onZoomChange(clamp(zoom - step))}
-      >
-        <Icon name="zoom-out" />
-      </button>
-      <button type="button" className="icon-button" aria-label={t("复位")} title={t("复位")} onClick={onFit}>
-        <Icon name="reset" />
-      </button>
+      <div className="diagram-zoom-primary">
+        <span className="diagram-zoom-value">
+          <input
+            type="number"
+            className="diagram-zoom-input"
+            min={min}
+            max={max}
+            value={input}
+            aria-label={label}
+            onChange={(event) => setInput(event.target.value)}
+            onBlur={commit}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                commit();
+              }
+            }}
+          />
+          <span className="diagram-zoom-label">%</span>
+        </span>
+        <input
+          type="range"
+          className="diagram-zoom-range"
+          min={min}
+          max={max}
+          step={step}
+          value={zoom}
+          aria-label={label}
+          onChange={(event) => onZoomChange(clamp(Number(event.target.value)))}
+        />
+        <button
+          type="button"
+          className="icon-button zoom-step-button"
+          aria-label={t("放大")}
+          title={t("放大")}
+          disabled={zoom >= max}
+          onClick={() => onZoomChange(clamp(zoom + step))}
+        >
+          <Icon name="zoom-in" />
+        </button>
+        <button
+          type="button"
+          className="icon-button zoom-step-button"
+          aria-label={t("缩小")}
+          title={t("缩小")}
+          disabled={zoom <= min}
+          onClick={() => onZoomChange(clamp(zoom - step))}
+        >
+          <Icon name="zoom-out" />
+        </button>
+      </div>
+      <div className="diagram-zoom-actions">
+        <button
+          type="button"
+          className="icon-button zoom-action-button"
+          aria-label={t("复位")}
+          title={t("默认宽度")}
+          onClick={onFit}
+        >
+          <Icon name="reset" />
+        </button>
+        <button
+          type="button"
+          className="icon-button zoom-action-button"
+          aria-label={t("页宽显示")}
+          title={t("页宽显示")}
+          onClick={onFitWidth}
+        >
+          <Icon name="fit-width" />
+        </button>
+      </div>
     </div>
   );
 }
@@ -265,7 +309,12 @@ export function DiagramViewerDialog({ svg, title, onClose }: DiagramViewerDialog
             </button>
           </div>
         </header>
-        <DiagramZoomToolbar zoom={zoom} onZoomChange={setZoom} onFit={applyFit} />
+        <DiagramZoomToolbar
+          zoom={zoom}
+          onZoomChange={setZoom}
+          onFit={applyFit}
+          onFitWidth={applyFit}
+        />
         <div className="diagram-viewer-body" ref={bodyRef}>
           <div
             className="diagram-viewer-sizing"

@@ -536,7 +536,12 @@ function DiagramPreviewPane({ document, enabled }: { document: DocumentState; en
         <p className="placeholder">{t("图表诊断：{0}", error)}</p>
       ) : (
         <div className="diagram-viewer">
-          <DiagramZoomToolbar zoom={zoom} onZoomChange={setZoom} onFit={applyFit} />
+          <DiagramZoomToolbar
+            zoom={zoom}
+            onZoomChange={setZoom}
+            onFit={applyFit}
+            onFitWidth={applyFit}
+          />
           <div className="diagram-viewer-body" ref={bodyRef}>
             <div
               className="diagram-viewer-sizing"
@@ -615,7 +620,12 @@ function SvgPreviewPane({ document, enabled }: { document: DocumentState; enable
         <p className="placeholder">{t("图表诊断：{0}", error)}</p>
       ) : (
         <div className="diagram-viewer">
-          <DiagramZoomToolbar zoom={zoom} onZoomChange={setZoom} onFit={applyFit} />
+          <DiagramZoomToolbar
+            zoom={zoom}
+            onZoomChange={setZoom}
+            onFit={applyFit}
+            onFitWidth={applyFit}
+          />
           <div className="diagram-viewer-body" ref={bodyRef}>
             <div className="diagram-viewer-sizing" style={width ? { width } : undefined}>
               {src ? (
@@ -731,6 +741,7 @@ function HtmlPreviewPane({ document, enabled }: { document: DocumentState; enabl
           zoom={zoom}
           onZoomChange={setZoom}
           onFit={() => setZoom(HTML_ZOOM_DEFAULT)}
+          onFitWidth={() => setZoom(HTML_ZOOM_DEFAULT)}
           min={HTML_ZOOM_MIN}
           max={HTML_ZOOM_MAX}
           step={HTML_ZOOM_STEP}
@@ -806,7 +817,12 @@ function ImagePreviewPane({ document }: { document: DocumentState }) {
         <p className="placeholder">{t("图片加载失败：{0}", error)}</p>
       ) : (
         <div className="diagram-viewer">
-          <DiagramZoomToolbar zoom={zoom} onZoomChange={setZoom} onFit={applyFit} />
+          <DiagramZoomToolbar
+            zoom={zoom}
+            onZoomChange={setZoom}
+            onFit={applyFit}
+            onFitWidth={applyFit}
+          />
           <div className="diagram-viewer-body" ref={bodyRef}>
             <div className="diagram-viewer-sizing" style={width ? { width } : undefined}>
               <img

@@ -169,9 +169,12 @@ test("M45：Word 只读预览（连续流式、缩放与大纲）", async () => 
     await expect(body).toContainText("Hello Panda Word", { timeout: 30_000 });
     await expect(body.locator(".office-docx-page")).toHaveCount(0);
 
-    // 缩放工具栏：初始 100%，点「放大」到 110%，复位回 100%（与 PPT/PDF 同款）。
+    // 缩放工具栏：主控件靠左、复位与页宽显示靠右；初始 100%。
     const toolbar = page.locator(".office-toolbar");
     await expect(toolbar).toBeVisible();
+    await expect(toolbar.locator(".diagram-zoom-primary .diagram-zoom-input")).toBeVisible();
+    await expect(toolbar.getByRole("button", { name: "复位" })).toBeVisible();
+    await expect(toolbar.getByRole("button", { name: "页宽显示" })).toBeVisible();
     const zoomInput = toolbar.locator(".diagram-zoom-input");
     await expect(zoomInput).toHaveValue("100");
     const pagesZoom = (): Promise<string> =>

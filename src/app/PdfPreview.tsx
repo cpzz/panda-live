@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import { t } from "../i18n";
 import { onThemeChange, resolveTheme, type AppTheme } from "../services/theme";
-import { DiagramZoomToolbar, useDiagramZoomShortcuts } from "./DiagramViewerDialog";
+import { DiagramZoomToolbar, useDiagramZoomShortcuts, zoomToFitWidth } from "./DiagramViewerDialog";
 import { Icon } from "./icons";
 
 interface PageSlot {
@@ -244,6 +244,17 @@ export function PdfPreview({
     },
   );
 
+  /** 页宽显示：按 PDF 视口可用宽度与基准页宽计算缩放（一次性动作）。 */
+  const applyFitWidth = (): void => {
+    const percent = zoomToFitWidth(
+      scrollRef.current,
+      PAGE_MAX_WIDTH,
+      Math.round(ZOOM_MIN * 100),
+      Math.round(ZOOM_MAX * 100),
+    );
+    if (percent !== null) setZoom(clampZoom(percent / 100));
+  };
+
   /** 跳转到指定页（表单提交；越界夹取）。 */
   const goToPage = (raw: string): void => {
     const target = Number.parseInt(raw, 10);
@@ -284,7 +295,7 @@ export function PdfPreview({
             />
             <span className="pdf-page-total">/ {total}</span>
           </form>
-          {/* 缩放控件与图表/图片预览保持一致：输入框、滑块、±图标与复位动作。 */}
+          {/* 缩放控件与图表/图片预览保持一致：主控件紧凑靠左，复位/页宽动作靠右。 */}
           <DiagramZoomToolbar
             className="pdf-zoom-controls"
             label={t("页面缩放")}
@@ -294,6 +305,7 @@ export function PdfPreview({
             step={Math.round(ZOOM_STEP * 100)}
             onZoomChange={(value) => setZoom(clampZoom(value / 100))}
             onFit={() => setZoom(1)}
+            onFitWidth={applyFitWidth}
           />
           {onConvert && (
             <>
