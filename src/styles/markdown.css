@@ -729,6 +729,7 @@
   justify-content: safe center;
   padding: 24px;
   overflow: auto;
+  scrollbar-gutter: stable;
 }
 
 .diagram-viewer-body svg,

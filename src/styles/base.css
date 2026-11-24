@@ -3901,6 +3901,8 @@ body.resizing * {
   border-radius: var(--radius-sm);
   background: var(--surface-muted);
   overflow: auto;
+  /* 预留垂直滚动条宽度，缩放前后可用宽度一致，页宽显示不会溢出成横向滚动条。 */
+  scrollbar-gutter: stable;
   padding: 12px;
 }
 
@@ -3978,6 +3980,10 @@ body.resizing * {
 }
 
 .pdf-pages {
+  /* 基准页宽固定 820px，整体居中；CSS zoom 缩放不改变这个基准，
+     使「默认显示 / 页宽显示」都能用同一套基准宽度计算。 */
+  width: min(100%, 820px);
+  margin-inline: auto;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -3987,7 +3993,6 @@ body.resizing * {
 .pdf-page {
   position: relative;
   width: 100%;
-  max-width: 820px;
   background: #ffffff;
   border: 1px solid var(--border);
   border-radius: 2px;
@@ -4030,6 +4035,7 @@ body.resizing * {
   width: 100%;
   min-height: 480px;
   overflow: auto;
+  scrollbar-gutter: stable;
   padding: 12px;
   background: var(--surface-muted);
 }
@@ -4156,9 +4162,10 @@ body.resizing * {
 }
 
 .office-pptx-slide {
+  /* 固定基准宽度：100% = 820px，缩放由容器 CSS zoom 承担，
+     避免窄视口下 width:100% 自动收缩导致「默认显示」与「页宽显示」基准不一致。 */
   position: relative;
-  width: 100%;
-  max-width: 820px;
+  width: 820px;
 }
 
 .office-pptx-body {

@@ -4,7 +4,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../i18n";
 import { sanitizeHtml } from "../render/html";
-import { DiagramZoomToolbar, useDiagramZoomShortcuts, zoomToFitWidth } from "./DiagramViewerDialog";
+import {
+  DiagramZoomToolbar,
+  useDiagramZoomShortcuts,
+  zoomToContain,
+  zoomToFitWidth,
+} from "./DiagramViewerDialog";
 import {
   buildDocxOutlineFromDom,
   readDocxDocumentXml,
@@ -83,27 +88,36 @@ function DocxBody({
   const styleRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
+
+  /** 缩放动作共用同一套视口测量与基准页宽（优先取 docx-preview 渲染页面的实际宽度）。 */
+  const applyZoomMode = useCallback(
+    (mode: typeof zoomToContain | typeof zoomToFitWidth): void => {
+      const viewer = bodyRef.current?.closest<HTMLElement>(".office-viewer") ?? null;
+      const section = bodyRef.current?.querySelector<HTMLElement>(
+        ".office-docx-wrapper > section.office-docx",
+      );
+      const baseWidth = Number.parseFloat(section?.style.width ?? "") || PAGE_BASE_WIDTH;
+      const percent = mode(
+        viewer,
+        baseWidth,
+        Math.round(ZOOM_MIN * 100),
+        Math.round(ZOOM_MAX * 100),
+      );
+      if (percent !== null) setZoom(clampZoom(percent / 100));
+    },
+    [],
+  );
+
+  /** 默认显示：页面宽度容纳在视口内（超过才缩小，不放大）。 */
+  const applyDefault = useCallback((): void => applyZoomMode(zoomToContain), [applyZoomMode]);
+  /** 页宽显示：页面宽度铺满视口（一次性动作）。 */
+  const applyFitWidth = useCallback((): void => applyZoomMode(zoomToFitWidth), [applyZoomMode]);
   useDiagramZoomShortcuts(Math.round(zoom * 100), (value) => setZoom(clampZoom(value / 100)), {
     min: Math.round(ZOOM_MIN * 100),
     max: Math.round(ZOOM_MAX * 100),
     step: Math.round(ZOOM_STEP * 100),
+    onReset: applyDefault,
   });
-
-  /** 页宽显示：以 docx-preview 渲染出的页面宽度为基准铺满视口（一次性动作）。 */
-  const applyFitWidth = useCallback((): void => {
-    const viewer = bodyRef.current?.closest<HTMLElement>(".office-viewer") ?? null;
-    const section = bodyRef.current?.querySelector<HTMLElement>(
-      ".office-docx-wrapper > section.office-docx",
-    );
-    const baseWidth = Number.parseFloat(section?.style.width ?? "") || PAGE_BASE_WIDTH;
-    const percent = zoomToFitWidth(
-      viewer,
-      baseWidth,
-      Math.round(ZOOM_MIN * 100),
-      Math.round(ZOOM_MAX * 100),
-    );
-    if (percent !== null) setZoom(clampZoom(percent / 100));
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -158,7 +172,7 @@ function DocxBody({
         max={Math.round(ZOOM_MAX * 100)}
         step={Math.round(ZOOM_STEP * 100)}
         onZoomChange={(value) => setZoom(clampZoom(value / 100))}
-        onFit={() => setZoom(1)}
+        onFit={applyDefault}
         onFitWidth={applyFitWidth}
       />
       {/* CSS zoom 同步缩放版面（Chromium 布局级缩放，与 PPT/HTML 预览同机制）。 */}
@@ -210,22 +224,30 @@ function XlsxBody({ sheets }: { sheets: OfficeSheetInfo[] }) {
 function PptxBody({ slides }: { slides: string[] }) {
   const [zoom, setZoom] = useState(1);
   const pagesRef = useRef<HTMLDivElement>(null);
+
+  /** 默认显示与页宽显示共用同一视口测量和基准页宽。 */
+  const applyZoomMode = useCallback(
+    (mode: typeof zoomToContain | typeof zoomToFitWidth): void => {
+      const percent = mode(
+        pagesRef.current?.parentElement ?? null,
+        PAGE_BASE_WIDTH,
+        Math.round(ZOOM_MIN * 100),
+        Math.round(ZOOM_MAX * 100),
+      );
+      if (percent !== null) setZoom(clampZoom(percent / 100));
+    },
+    [],
+  );
+  /** 默认显示：基准页宽容纳在视口内（超过才缩小，不放大）。 */
+  const applyDefault = useCallback((): void => applyZoomMode(zoomToContain), [applyZoomMode]);
+  /** 页宽显示：基准页宽铺满视口。 */
+  const applyFitWidth = useCallback((): void => applyZoomMode(zoomToFitWidth), [applyZoomMode]);
   useDiagramZoomShortcuts(Math.round(zoom * 100), (value) => setZoom(clampZoom(value / 100)), {
     min: Math.round(ZOOM_MIN * 100),
     max: Math.round(ZOOM_MAX * 100),
     step: Math.round(ZOOM_STEP * 100),
+    onReset: applyDefault,
   });
-
-  /** 页宽显示：按幻灯片基准宽度铺满视口（一次性动作）。 */
-  const applyFitWidth = useCallback((): void => {
-    const percent = zoomToFitWidth(
-      pagesRef.current?.parentElement ?? null,
-      PAGE_BASE_WIDTH,
-      Math.round(ZOOM_MIN * 100),
-      Math.round(ZOOM_MAX * 100),
-    );
-    if (percent !== null) setZoom(clampZoom(percent / 100));
-  }, []);
 
   const htmls = useMemo(() => slides.map((slide) => sanitizeHtml(slide)), [slides]);
   if (slides.length === 0) return <p className="placeholder">{t("（无幻灯片）")}</p>;
@@ -240,7 +262,7 @@ function PptxBody({ slides }: { slides: string[] }) {
         max={Math.round(ZOOM_MAX * 100)}
         step={Math.round(ZOOM_STEP * 100)}
         onZoomChange={(value) => setZoom(clampZoom(value / 100))}
-        onFit={() => setZoom(1)}
+        onFit={applyDefault}
         onFitWidth={applyFitWidth}
       />
       {/* CSS zoom 同步缩放版面（Chromium 布局级缩放，与 HTML 预览 iframe 的 zoom 同机制）。 */}

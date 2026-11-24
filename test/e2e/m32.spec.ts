@@ -77,6 +77,13 @@ test("M32：打开 PDF 文档显示只读预览", async () => {
     await expect(zoomInput).toHaveValue("110");
     await page.keyboard.press("Control+0");
     await expect(zoomInput).toHaveValue("100");
+    // 页宽显示：页面恰好铺满视口，不应产生横向滚动条。
+    await zoomControls.getByRole("button", { name: "页宽显示" }).click();
+    await expect
+      .poll(() =>
+        page.locator(".pdf-viewer").evaluate((el) => el.scrollWidth <= el.clientWidth + 1),
+      )
+      .toBe(true);
     const pageJumpBox = await page.locator(".pdf-page-jump").boundingBox();
     const toolbarBox = await page.locator(".pdf-toolbar").boundingBox();
     expect(pageJumpBox).not.toBeNull();

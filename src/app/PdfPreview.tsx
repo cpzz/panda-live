@@ -2,7 +2,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import { t } from "../i18n";
 import { onThemeChange, resolveTheme, type AppTheme } from "../services/theme";
-import { DiagramZoomToolbar, useDiagramZoomShortcuts, zoomToFitWidth } from "./DiagramViewerDialog";
+import {
+  DiagramZoomToolbar,
+  useDiagramZoomShortcuts,
+  zoomToContain,
+  zoomToFitWidth,
+} from "./DiagramViewerDialog";
 import { Icon } from "./icons";
 
 interface PageSlot {
@@ -130,7 +135,8 @@ export function PdfPreview({
       target.dataset.rendered = "1";
       const page = await pdf.getPage(pageNumber);
       if (cancelled) return;
-      const width = target.clientWidth || 600;
+      // 版面宽度固定 820px，CSS zoom 负责显示缩放；位图按缩放后的实际宽度渲染以保持清晰。
+      const width = Math.round((target.clientWidth || PAGE_MAX_WIDTH) * zoom);
       // 至少 2 倍超采样：PDF 内容为位图，按 CSS 像素 1:1 渲染后再放大会发虚。
       const pixelRatio = Math.max(window.devicePixelRatio || 1, 2);
       const scale = (width / page.getViewport({ scale: 1 }).width) * pixelRatio;
@@ -233,7 +239,18 @@ export function PdfPreview({
     };
   }, [slots, zoom]);
 
-  // 缩放快捷键与工具栏一致：Ctrl += 放大、Ctrl -= 缩小、Ctrl+0 复位、Ctrl+滚轮缩放。
+  /** 默认显示：基准页宽容纳在视口内（超过才缩小，不放大）。 */
+  const applyDefault = (): void => {
+    const percent = zoomToContain(
+      scrollRef.current,
+      PAGE_MAX_WIDTH,
+      Math.round(ZOOM_MIN * 100),
+      Math.round(ZOOM_MAX * 100),
+    );
+    if (percent !== null) setZoom(clampZoom(percent / 100));
+  };
+
+  // 缩放快捷键与工具栏一致：Ctrl += 放大、Ctrl -= 缩小、Ctrl+0 默认显示、Ctrl+滚轮缩放。
   useDiagramZoomShortcuts(
     Math.round(zoom * 100),
     (value) => setZoom(clampZoom(value / 100)),
@@ -241,6 +258,7 @@ export function PdfPreview({
       min: Math.round(ZOOM_MIN * 100),
       max: Math.round(ZOOM_MAX * 100),
       step: Math.round(ZOOM_STEP * 100),
+      onReset: applyDefault,
     },
   );
 
@@ -304,7 +322,7 @@ export function PdfPreview({
             max={Math.round(ZOOM_MAX * 100)}
             step={Math.round(ZOOM_STEP * 100)}
             onZoomChange={(value) => setZoom(clampZoom(value / 100))}
-            onFit={() => setZoom(1)}
+            onFit={applyDefault}
             onFitWidth={applyFitWidth}
           />
           {/* 转换入口暂不展示：保留回调接线，工具栏只留页码与缩放。 */}
@@ -331,16 +349,13 @@ export function PdfPreview({
       )}
       <div className={`pdf-viewer${invert ? " pdf-invert" : ""}`} ref={scrollRef}>
         {progress === 0 && <p className="placeholder">{t("正在加载 PDF…")}</p>}
-        <div className="pdf-pages" ref={pagesRef} style={{ width: `${zoom * 100}%` }}>
+        <div className="pdf-pages" ref={pagesRef} style={{ zoom }}>
           {slots.map((slot) => (
             <div
               key={slot.pageNumber}
               className="pdf-page"
               data-page={slot.pageNumber}
-              style={{
-                aspectRatio: `${1 / slot.ratio}`,
-                maxWidth: Math.round(PAGE_MAX_WIDTH * zoom),
-              }}
+              style={{ aspectRatio: `${1 / slot.ratio}` }}
             >
               <span className="pdf-page-label">{slot.pageNumber}</span>
             </div>

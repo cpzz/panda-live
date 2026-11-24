@@ -35,10 +35,27 @@ export function zoomToFitWidth(
 }
 
 /**
- * 图表/图片缩放快捷键：Ctrl+= 放大、Ctrl+- 缩小、Ctrl+0 重置为 100%、Ctrl+滚轮缩放。
+ * 默认显示：按基准宽度「容纳」在视口内——内容超过视口时缩小到刚好不溢出，
+ * 不超过时保持 100%（不放大）。与页宽显示共用同一套视口测量与夹取规则。
+ */
+export function zoomToContain(
+  viewport: HTMLElement | null,
+  baseWidth: number,
+  min: number,
+  max: number,
+): number | null {
+  const fit = zoomToFitWidth(viewport, baseWidth, min, max);
+  if (fit === null) return null;
+  return Math.min(max, Math.max(min, Math.min(100, fit)));
+}
+
+/**
+ * 图表/图片缩放快捷键：Ctrl+= 放大、Ctrl+- 缩小、Ctrl+0 默认显示、Ctrl+滚轮缩放。
  * 仅在调用方挂载期间生效；对话框传 capture=true 抢占事件，避免底层预览同时响应。
  */
 export interface DiagramZoomShortcutOptions {
+  /** Ctrl+0 的默认显示动作；未提供时回到 100%。 */
+  onReset?(): void;
   /** 抢占事件（对话框用），避免底层视图同时响应。 */
   capture?: boolean;
   /** 缩放下限（百分比），默认 30。 */
@@ -54,12 +71,19 @@ export function useDiagramZoomShortcuts(
   onZoomChange: (zoom: number) => void,
   options: DiagramZoomShortcutOptions = {},
 ): void {
-  const { capture = false, min = DIAGRAM_ZOOM_MIN, max = DIAGRAM_ZOOM_MAX, step = ZOOM_STEP } =
-    options;
+  const {
+    capture = false,
+    min = DIAGRAM_ZOOM_MIN,
+    max = DIAGRAM_ZOOM_MAX,
+    step = ZOOM_STEP,
+    onReset,
+  } = options;
   const zoomRef = useRef(zoom);
   zoomRef.current = zoom;
   const changeRef = useRef(onZoomChange);
   changeRef.current = onZoomChange;
+  const resetRef = useRef(onReset);
+  resetRef.current = onReset;
 
   useEffect(() => {
     const clamp = (value: number): number => Math.min(max, Math.max(min, Math.round(value)));
@@ -80,7 +104,8 @@ export function useDiagramZoomShortcuts(
       } else if (key === "0") {
         event.preventDefault();
         if (capture) event.stopPropagation();
-        changeRef.current(clamp(100));
+        if (resetRef.current) resetRef.current();
+        else changeRef.current(clamp(100));
       }
     };
     const onWheel = (event: WheelEvent): void => {
@@ -107,9 +132,9 @@ export interface DiagramZoomControls {
   /** 缩放百分比；100 = 自然尺寸。 */
   zoom: number;
   onZoomChange(zoom: number): void;
-  /** 默认显示（一次性动作）：恢复默认缩放（100%；图表/图片为不超过视口的自然宽度）。 */
+  /** 默认显示（一次性动作）：基准宽度不超过视口时 100%，超过时缩小到刚好不溢出（不放大）。 */
   onFit(): void;
-  /** 页宽显示（一次性动作）：按视口可用宽度计算缩放，内容铺满可视区域。 */
+  /** 页宽显示（一次性动作）：按视口可用宽度计算缩放，内容恰好铺满可视区域（可放大）。 */
   onFitWidth(): void;
   /** 缩放下限（百分比），默认 30。 */
   min?: number;
@@ -252,22 +277,16 @@ export function DiagramViewerDialog({ svg, title, onClose }: DiagramViewerDialog
   const [zoom, setZoom] = useState(100);
   const [maximized, setMaximized] = useState(false);
   const natural = useMemo(() => svgNaturalWidth(svg), [svg]);
-  // 对话框独占缩放快捷键，避免底层预览同时响应。
-  useDiagramZoomShortcuts(zoom, setZoom, { capture: true });
-
-  /** 打开对话框时的自动适配（设置项）：只缩小，不放大小图。 */
-  const applyAutoFit = useCallback((): void => {
-    const body = bodyRef.current;
-    if (!body || natural <= 0) return;
-    const style = getComputedStyle(body);
-    const available =
-      body.clientWidth - Number.parseFloat(style.paddingLeft) - Number.parseFloat(style.paddingRight);
-    if (!(available > 0)) return;
-    setZoom(clampDiagramZoom(Math.min(100, Math.round((available / natural) * 100))));
+  /** 默认显示：自然尺寸容纳在对话框视口内（超过才缩小，不放大）。 */
+  const applyDefault = useCallback((): void => {
+    const percent = zoomToContain(bodyRef.current, natural, DIAGRAM_ZOOM_MIN, DIAGRAM_ZOOM_MAX);
+    if (percent !== null) setZoom(percent);
   }, [natural]);
+  // 对话框独占缩放快捷键；Ctrl+0 与「默认显示」一致。
+  useDiagramZoomShortcuts(zoom, setZoom, { capture: true, onReset: applyDefault });
 
-  /** 默认显示：100% = 自然尺寸。 */
-  const resetZoom = useCallback((): void => setZoom(100), []);
+  /** 打开对话框时的自动适配（设置项）：与默认显示一致，只缩小不放宽。 */
+  const applyAutoFit = useCallback((): void => applyDefault(), [applyDefault]);
   /** 页宽显示：按视口可用宽度铺满内容（小图也会放大）。 */
   const applyFitWidth = useCallback((): void => {
     const percent = zoomToFitWidth(bodyRef.current, natural, DIAGRAM_ZOOM_MIN, DIAGRAM_ZOOM_MAX);
@@ -324,7 +343,7 @@ export function DiagramViewerDialog({ svg, title, onClose }: DiagramViewerDialog
         <DiagramZoomToolbar
           zoom={zoom}
           onZoomChange={setZoom}
-          onFit={resetZoom}
+          onFit={applyDefault}
           onFitWidth={applyFitWidth}
         />
         <div className="diagram-viewer-body" ref={bodyRef}>
