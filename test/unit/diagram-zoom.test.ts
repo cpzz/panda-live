@@ -1,6 +1,10 @@
 import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { zoomToContain, zoomToFitWidth } from "../../src/app/DiagramViewerDialog";
+import {
+  measuredBaseWidth,
+  zoomToContain,
+  zoomToFitWidth,
+} from "../../src/app/DiagramViewerDialog";
 
 const dom = new JSDOM("");
 const originalGetComputedStyle = globalThis.getComputedStyle;
@@ -45,6 +49,15 @@ describe("页宽显示缩放计算", () => {
     // 基准宽 2000 大于可用宽 960：两者都缩到 48%。
     expect(zoomToContain(viewport(1000), 2000, 30, 1000)).toBe(48);
     expect(zoomToFitWidth(viewport(1000), 2000, 30, 1000)).toBe(48);
+  });
+
+  it("从渲染外宽反推 100% 基准宽度（含页边距 padding）", () => {
+    const content = {
+      getBoundingClientRect: () => ({ width: 1191 }),
+    } as unknown as HTMLElement;
+    expect(measuredBaseWidth(content, 1.5)).toBe(794);
+    expect(measuredBaseWidth(content, 0)).toBeNull();
+    expect(measuredBaseWidth(null, 1)).toBeNull();
   });
 
   it("无法测量或基准宽度无效时返回 null", () => {

@@ -1,11 +1,12 @@
 /** Microsoft Office 只读预览：docx（docx-preview 渲染 DOM）、xlsx（SheetJS 解析 → HTML 表格）、
  * pptx（pptx-to-html → 幻灯片 HTML）。与 PDF/图片同属二进制只读族：readBase64 读盘，
  * 路径或修改时间变化（含外部更新）时自动重新加载。渲染库动态 import，保持初始包体。 */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { t } from "../i18n";
 import { sanitizeHtml } from "../render/html";
 import {
   DiagramZoomToolbar,
+  measuredBaseWidth,
   useDiagramZoomShortcuts,
   zoomToContain,
   zoomToFitWidth,
@@ -88,15 +89,19 @@ function DocxBody({
   const styleRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
+  /** 页宽显示后的实测校正标记：按真实渲染宽度修正测量误差，直到恰好铺满。 */
+  const fitWidthPendingRef = useRef(false);
 
   /** 缩放动作共用同一套视口测量与基准页宽（优先取 docx-preview 渲染页面的实际宽度）。 */
   const applyZoomMode = useCallback(
     (mode: typeof zoomToContain | typeof zoomToFitWidth): void => {
       const viewer = bodyRef.current?.closest<HTMLElement>(".office-viewer") ?? null;
-      const section = bodyRef.current?.querySelector<HTMLElement>(
-        ".office-docx-wrapper > section.office-docx",
-      );
-      const baseWidth = Number.parseFloat(section?.style.width ?? "") || PAGE_BASE_WIDTH;
+      const section =
+        bodyRef.current?.querySelector<HTMLElement>(
+          ".office-docx-wrapper > section.office-docx",
+        ) ?? null;
+      // docx-preview 的 style.width 不含页边距 padding，必须用渲染后的实际外宽反推基准。
+      const baseWidth = measuredBaseWidth(section, zoom) ?? PAGE_BASE_WIDTH;
       const percent = mode(
         viewer,
         baseWidth,
@@ -105,14 +110,25 @@ function DocxBody({
       );
       if (percent !== null) setZoom(clampZoom(percent / 100));
     },
-    [],
+    [zoom],
   );
 
   /** 默认显示：页面宽度容纳在视口内（超过才缩小，不放大）。 */
-  const applyDefault = useCallback((): void => applyZoomMode(zoomToContain), [applyZoomMode]);
+  const applyDefault = useCallback((): void => {
+    fitWidthPendingRef.current = false;
+    applyZoomMode(zoomToContain);
+  }, [applyZoomMode]);
   /** 页宽显示：页面宽度铺满视口（一次性动作）。 */
-  const applyFitWidth = useCallback((): void => applyZoomMode(zoomToFitWidth), [applyZoomMode]);
-  useDiagramZoomShortcuts(Math.round(zoom * 100), (value) => setZoom(clampZoom(value / 100)), {
+  const applyFitWidth = useCallback((): void => {
+    fitWidthPendingRef.current = true;
+    applyZoomMode(zoomToFitWidth);
+  }, [applyZoomMode]);
+  /** 手动缩放/快捷键取消页宽校正，避免覆盖用户选择的比例。 */
+  const changeZoom = useCallback((value: number): void => {
+    fitWidthPendingRef.current = false;
+    setZoom(clampZoom(value / 100));
+  }, []);
+  useDiagramZoomShortcuts(Math.round(zoom * 100), changeZoom, {
     min: Math.round(ZOOM_MIN * 100),
     max: Math.round(ZOOM_MAX * 100),
     step: Math.round(ZOOM_STEP * 100),
@@ -160,6 +176,29 @@ function DocxBody({
     };
   }, [bytes, onOutline]);
 
+  // 页宽显示应用后按真实渲染宽度校正：基准测量、CSS zoom 与滚动条预留都可能有偏差，
+  // 这里以实际外宽与视口可用宽度的比值再校准一次，保证恰好铺满且不横向溢出。
+  useLayoutEffect(() => {
+    if (!fitWidthPendingRef.current) return;
+    const viewer = bodyRef.current?.closest<HTMLElement>(".office-viewer") ?? null;
+    const section = bodyRef.current?.querySelector<HTMLElement>(
+      ".office-docx-wrapper > section.office-docx",
+    );
+    if (!viewer || !section) return;
+    const style = getComputedStyle(viewer);
+    const available =
+      viewer.clientWidth -
+      Number.parseFloat(style.paddingLeft) -
+      Number.parseFloat(style.paddingRight);
+    const visual = section.getBoundingClientRect().width;
+    if (!(available > 0) || !(visual > 0)) return;
+    if (Math.abs(visual - available) <= 1) {
+      fitWidthPendingRef.current = false;
+      return;
+    }
+    setZoom(clampZoom((zoom * available) / visual));
+  }, [zoom]);
+
   // docx-preview 的样式经独立容器注入，避免污染全局（见 README）。
   return (
     <>
@@ -171,7 +210,7 @@ function DocxBody({
         min={Math.round(ZOOM_MIN * 100)}
         max={Math.round(ZOOM_MAX * 100)}
         step={Math.round(ZOOM_STEP * 100)}
-        onZoomChange={(value) => setZoom(clampZoom(value / 100))}
+        onZoomChange={changeZoom}
         onFit={applyDefault}
         onFitWidth={applyFitWidth}
       />

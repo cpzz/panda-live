@@ -35,6 +35,18 @@ export function zoomToFitWidth(
 }
 
 /**
+ * 从渲染后的可视宽度反推 100% 基准宽度。CSS zoom 会缩放 getBoundingClientRect，
+ * 因此必须除以当前 zoom；行内 style.width 可能只含内容区（如 docx 页面不含页边距），
+ * 不能直接当基准宽度用。
+ */
+export function measuredBaseWidth(content: HTMLElement | null, currentZoom: number): number | null {
+  if (!content || !(currentZoom > 0)) return null;
+  const visual = content.getBoundingClientRect().width;
+  if (!(visual > 0)) return null;
+  return visual / currentZoom;
+}
+
+/**
  * 默认显示：按基准宽度「容纳」在视口内——内容超过视口时缩小到刚好不溢出，
  * 不超过时保持 100%（不放大）。与页宽显示共用同一套视口测量与夹取规则。
  */
