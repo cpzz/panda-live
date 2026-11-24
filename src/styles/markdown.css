@@ -698,18 +698,6 @@
   background: #fff;
 }
 
-.diagram-viewer-toolbar {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 5px 10px;
-  border-bottom: 1px solid var(--border);
-  background: var(--chrome-bg);
-  flex-wrap: nowrap;
-}
-
 /* 主控件紧凑排列；右侧动作组用细分隔线与主控件区分，整体左右两端对齐。 */
 .diagram-zoom-primary,
 .diagram-zoom-actions {
@@ -725,9 +713,7 @@
 
 .diagram-zoom-actions {
   gap: 2px;
-  margin-left: 6px;
-  padding-left: 6px;
-  border-left: 1px solid var(--border);
+  margin-left: 4px;
 }
 
 .diagram-zoom-value {

@@ -62,12 +62,15 @@ test("M32：打开 PDF 文档显示只读预览", async () => {
     await expect(page.locator(".statusbar")).toContainText("PDF");
     await expect(page.locator(".statusbar")).toContainText("只读");
 
-    // 缩放控件与图表预览一致（输入框、滑块、±、适配宽度），且与页码在同一行。
+    // 缩放控件与图表预览一致（输入框、滑块、±、默认显示/页宽显示），且与页码在同一行。
     const zoomControls = page.locator(".pdf-zoom-controls");
     await expect(zoomControls).toBeVisible();
     await expect(zoomControls.locator(".diagram-zoom-input")).toHaveValue("100");
     await expect(zoomControls.locator(".diagram-zoom-range")).toBeVisible();
-    await expect(zoomControls.getByRole("button", { name: "复位", exact: true })).toBeVisible();
+    await expect(zoomControls.getByRole("button", { name: "默认显示", exact: true })).toBeVisible();
+    await expect(zoomControls.getByRole("button", { name: "页宽显示" })).toBeVisible();
+    // 转 Markdown 按钮暂不展示。
+    await expect(page.getByRole("button", { name: "转 Markdown" })).toBeHidden();
     // 缩放快捷键：Ctrl+= 放大到 110%，Ctrl+0 复位到 100%。
     const zoomInput = zoomControls.locator(".diagram-zoom-input");
     await page.keyboard.press("Control+=");
@@ -78,7 +81,13 @@ test("M32：打开 PDF 文档显示只读预览", async () => {
     const toolbarBox = await page.locator(".pdf-toolbar").boundingBox();
     expect(pageJumpBox).not.toBeNull();
     expect(toolbarBox).not.toBeNull();
-    // 单行工具栏：高度约一行按钮，不会把适配宽度挤到第二行。
+    // 页码输入/总页数在工具栏水平居中。
+    expect(
+      Math.abs(
+        pageJumpBox!.x + pageJumpBox!.width / 2 - (toolbarBox!.x + toolbarBox!.width / 2),
+      ),
+    ).toBeLessThan(2);
+    // 单行工具栏：高度约一行按钮，不会把页宽显示挤到第二行。
     expect(toolbarBox!.height).toBeLessThan(44);
     expect(Math.abs(pageJumpBox!.y - toolbarBox!.y)).toBeLessThan(20);
   } finally {

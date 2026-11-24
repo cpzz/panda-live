@@ -295,7 +295,7 @@ export function PdfPreview({
             />
             <span className="pdf-page-total">/ {total}</span>
           </form>
-          {/* 缩放控件与图表/图片预览保持一致：主控件紧凑靠左，复位/页宽动作靠右。 */}
+          {/* 缩放控件与其他预览一致（共用 .zoom-toolbar），位于工具栏右列。 */}
           <DiagramZoomToolbar
             className="pdf-zoom-controls"
             label={t("页面缩放")}
@@ -307,15 +307,17 @@ export function PdfPreview({
             onFit={() => setZoom(1)}
             onFitWidth={applyFitWidth}
           />
+          {/* 转换入口暂不展示：保留回调接线，工具栏只留页码与缩放。 */}
           {onConvert && (
             <>
-              <span className="pdf-toolbar-divider" aria-hidden="true" />
+              <span className="pdf-toolbar-divider" aria-hidden="true" hidden />
               <button
                 type="button"
                 className="icon-button pdf-convert-button"
                 title={t("导出为 Markdown 文件")}
                 aria-label={t("转 Markdown")}
                 disabled={converting}
+                hidden
                 onClick={() => {
                   setConverting(true);
                   void Promise.resolve(onConvert()).finally(() => setConverting(false));

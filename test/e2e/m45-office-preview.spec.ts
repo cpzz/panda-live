@@ -173,7 +173,7 @@ test("M45：Word 只读预览（连续流式、缩放与大纲）", async () => 
     const toolbar = page.locator(".office-toolbar");
     await expect(toolbar).toBeVisible();
     await expect(toolbar.locator(".diagram-zoom-primary .diagram-zoom-input")).toBeVisible();
-    await expect(toolbar.getByRole("button", { name: "复位" })).toBeVisible();
+    await expect(toolbar.getByRole("button", { name: "默认显示" })).toBeVisible();
     await expect(toolbar.getByRole("button", { name: "页宽显示" })).toBeVisible();
     const zoomInput = toolbar.locator(".diagram-zoom-input");
     await expect(zoomInput).toHaveValue("100");
@@ -182,7 +182,7 @@ test("M45：Word 只读预览（连续流式、缩放与大纲）", async () => 
     await toolbar.getByRole("button", { name: "放大" }).click();
     await expect(zoomInput).toHaveValue("110");
     await expect.poll(pagesZoom).toBe("1.1");
-    await toolbar.getByRole("button", { name: "复位" }).click();
+    await toolbar.getByRole("button", { name: "默认显示" }).click();
     await expect(zoomInput).toHaveValue("100");
     await expect.poll(pagesZoom).toBe("1");
 
@@ -267,7 +267,7 @@ test("M45：PowerPoint 只读预览与缩放", async () => {
     await toolbar.getByRole("button", { name: "放大" }).click();
     await expect(zoomInput).toHaveValue("110");
     await expect.poll(pagesZoom).toBe("1.1");
-    await toolbar.getByRole("button", { name: "复位" }).click();
+    await toolbar.getByRole("button", { name: "默认显示" }).click();
     await expect(zoomInput).toHaveValue("100");
     await expect.poll(pagesZoom).toBe("1");
 

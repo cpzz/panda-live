@@ -72,7 +72,7 @@ test("M43：HTML 预览、沙箱隔离与源码切换", async () => {
     await toolbar.getByRole("button", { name: "放大" }).click();
     await expect(zoomInput).toHaveValue("110");
     await expect.poll(htmlZoom).toBe("1.1");
-    await toolbar.getByRole("button", { name: "复位" }).click();
+    await toolbar.getByRole("button", { name: "默认显示" }).click();
     await expect(zoomInput).toHaveValue("100");
     await expect.poll(htmlZoom).toBe("1");
 

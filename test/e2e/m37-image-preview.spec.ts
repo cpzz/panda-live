@@ -35,7 +35,7 @@ test("M37：图片预览与缩放快捷键", async () => {
     await expect(image).toBeVisible({ timeout: 30_000 });
     const zoomInput = page.locator(".diagram-zoom-input");
     await expect(zoomInput).toHaveValue("100");
-    await expect(page.getByRole("button", { name: "复位", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "默认显示", exact: true })).toBeVisible();
 
     // 只读图片：没有可切换的文本模式，顶部模式条整体隐藏。
     await expect(page.locator(".mode-bar")).toHaveCount(0);

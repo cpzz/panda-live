@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { svgNaturalWidth } from "../render/diagram/sanitize";
 import { settingsStore } from "../services/settings-store";
 import { t } from "../i18n";
@@ -107,7 +107,7 @@ export interface DiagramZoomControls {
   /** 缩放百分比；100 = 自然尺寸。 */
   zoom: number;
   onZoomChange(zoom: number): void;
-  /** 复位（一次性动作）：恢复默认宽度（100%；图表/图片为不超过视口的自然宽度）。 */
+  /** 默认显示（一次性动作）：恢复默认缩放（100%；图表/图片为不超过视口的自然宽度）。 */
   onFit(): void;
   /** 页宽显示（一次性动作）：按视口可用宽度计算缩放，内容铺满可视区域。 */
   onFitWidth(): void;
@@ -121,6 +121,8 @@ export interface DiagramZoomControls {
   className?: string;
   /** 缩放控件的无障碍标签（默认「图表缩放」）。 */
   label?: string;
+  /** 工具栏左侧附加内容（如 PPT 页数），与缩放主控件同组靠左。 */
+  leading?: ReactNode;
 }
 
 /**
@@ -137,6 +139,7 @@ export function DiagramZoomToolbar({
   step = ZOOM_STEP,
   className = "diagram-viewer-toolbar",
   label = t("图表缩放"),
+  leading,
 }: DiagramZoomControls) {
   const [input, setInput] = useState(String(zoom));
   // 外部 zoom 变化（滑块/±/适配）时同步输入框；输入过程中以本地文本为准。
@@ -154,8 +157,9 @@ export function DiagramZoomToolbar({
   };
 
   return (
-    <div className={className}>
+    <div className={`zoom-toolbar ${className}`}>
       <div className="diagram-zoom-primary">
+        {leading ? <span className="zoom-toolbar-leading">{leading}</span> : null}
         <span className="diagram-zoom-value">
           <input
             type="number"
@@ -210,11 +214,11 @@ export function DiagramZoomToolbar({
         <button
           type="button"
           className="icon-button zoom-action-button"
-          aria-label={t("复位")}
-          title={t("默认宽度")}
+          aria-label={t("默认显示")}
+          title={t("默认显示")}
           onClick={onFit}
         >
-          <Icon name="reset" />
+          <Icon name="default-view" />
         </button>
         <button
           type="button"

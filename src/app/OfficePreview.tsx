@@ -149,20 +149,18 @@ function DocxBody({
   // docx-preview 的样式经独立容器注入，避免污染全局（见 README）。
   return (
     <>
-      {/* 连续流式无页码，工具栏只放缩放控件（与 PDF 的缩放区同构：主控件靠左、动作靠右）。 */}
-      <div className="office-toolbar">
-        <DiagramZoomToolbar
-          className="office-zoom-controls"
-          label={t("文档缩放")}
-          zoom={Math.round(zoom * 100)}
-          min={Math.round(ZOOM_MIN * 100)}
-          max={Math.round(ZOOM_MAX * 100)}
-          step={Math.round(ZOOM_STEP * 100)}
-          onZoomChange={(value) => setZoom(clampZoom(value / 100))}
-          onFit={() => setZoom(1)}
-          onFitWidth={applyFitWidth}
-        />
-      </div>
+      {/* 连续流式无页码：直接复用共用缩放工具栏（含边框与吸顶），动作组靠右。 */}
+      <DiagramZoomToolbar
+        className="office-toolbar"
+        label={t("文档缩放")}
+        zoom={Math.round(zoom * 100)}
+        min={Math.round(ZOOM_MIN * 100)}
+        max={Math.round(ZOOM_MAX * 100)}
+        step={Math.round(ZOOM_STEP * 100)}
+        onZoomChange={(value) => setZoom(clampZoom(value / 100))}
+        onFit={() => setZoom(1)}
+        onFitWidth={applyFitWidth}
+      />
       {/* CSS zoom 同步缩放版面（Chromium 布局级缩放，与 PPT/HTML 预览同机制）。 */}
       <div className="office-docx-pages" style={{ zoom }}>
         <div ref={styleRef} className="office-style-host" aria-hidden="true" />
@@ -233,20 +231,18 @@ function PptxBody({ slides }: { slides: string[] }) {
   if (slides.length === 0) return <p className="placeholder">{t("（无幻灯片）")}</p>;
   return (
     <>
-      <div className="office-toolbar">
-        <span className="office-toolbar-title">{t("幻灯片 {0} 页", slides.length)}</span>
-        <DiagramZoomToolbar
-          className="office-zoom-controls"
-          label={t("幻灯片缩放")}
-          zoom={Math.round(zoom * 100)}
-          min={Math.round(ZOOM_MIN * 100)}
-          max={Math.round(ZOOM_MAX * 100)}
-          step={Math.round(ZOOM_STEP * 100)}
-          onZoomChange={(value) => setZoom(clampZoom(value / 100))}
-          onFit={() => setZoom(1)}
-          onFitWidth={applyFitWidth}
-        />
-      </div>
+      <DiagramZoomToolbar
+        className="office-toolbar"
+        label={t("幻灯片缩放")}
+        leading={<span className="office-toolbar-title">{t("幻灯片 {0} 页", slides.length)}</span>}
+        zoom={Math.round(zoom * 100)}
+        min={Math.round(ZOOM_MIN * 100)}
+        max={Math.round(ZOOM_MAX * 100)}
+        step={Math.round(ZOOM_STEP * 100)}
+        onZoomChange={(value) => setZoom(clampZoom(value / 100))}
+        onFit={() => setZoom(1)}
+        onFitWidth={applyFitWidth}
+      />
       {/* CSS zoom 同步缩放版面（Chromium 布局级缩放，与 HTML 预览 iframe 的 zoom 同机制）。 */}
       <div className="office-pptx-pages" ref={pagesRef} style={{ zoom }}>
         {htmls.map((html, index) => (

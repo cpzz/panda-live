@@ -3904,7 +3904,26 @@ body.resizing * {
   padding: 12px;
 }
 
-/* PDF 工具栏：页码跳转 + 缩放；固定在预览顶部。 */
+/* 所有预览缩放工具栏的共用基类：边框、底色与左右分组布局（PDF 覆写为三列网格）。 */
+.zoom-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex: none;
+  min-width: 0;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--chrome-bg);
+  flex-wrap: nowrap;
+}
+
+.zoom-toolbar-leading {
+  margin-right: 4px;
+  white-space: nowrap;
+}
+
+/* PDF 工具栏：缩放控件通栏（与其他预览一致左主右辅），页码输入绝对居中。 */
 .pdf-stack {
   display: flex;
   flex: 1;
@@ -3914,28 +3933,20 @@ body.resizing * {
 }
 
 .pdf-toolbar {
+  position: relative;
   display: flex;
-  flex: none;
   align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
-  border-bottom: 1px solid var(--border);
-  background: var(--chrome-bg);
-}
-
-/* PDF 工具栏分隔栏：把「转 Markdown」图标按钮和缩放控件隔开。 */
-.pdf-toolbar-divider {
-  flex: 0 0 auto;
-  width: 1px;
-  height: 16px;
-  margin: 0 2px;
-  background: var(--border);
+  flex: none;
 }
 
 .pdf-page-jump {
+  position: absolute;
+  left: 50%;
+  z-index: 1;
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  transform: translateX(-50%);
 }
 
 .pdf-page-jump input {
@@ -3954,18 +3965,10 @@ body.resizing * {
   font-size: 12px;
 }
 
-/* PDF 缩放控件：与图表/图片预览共用 DiagramZoomToolbar，右对齐在页码之后。
-   内部主控件靠左、复位/页宽动作靠右；固定单行不换行。 */
+/* PDF 缩放控件：复用 .zoom-toolbar 通栏，主控件靠左、动作靠右。 */
 .pdf-zoom-controls {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  flex: 0 1 360px;
-  min-width: 280px;
-  max-width: 100%;
-  margin-left: auto;
-  flex-wrap: nowrap;
+  flex: 1 1 auto;
+  width: 100%;
 }
 
 .pdf-zoom-controls .diagram-zoom-range {
@@ -4054,9 +4057,6 @@ body.resizing * {
   background: var(--surface);
 }
 
-.office-viewer-docx .office-toolbar {
-  background: var(--surface);
-}
 
 .office-docx-body {
   width: 100%;
@@ -4134,43 +4134,17 @@ body.resizing * {
   color: var(--muted);
 }
 
-/* Office 通用工具栏：吸顶于 .office-viewer 滚动容器（-12px 抵消其 padding，与工作表标签同机制）。 */
+/* Office 工具栏：复用 .zoom-toolbar（边框/底色/左右分组），仅追加吸顶行为。 */
 .office-toolbar {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: 8px;
   position: sticky;
   top: -12px;
   z-index: 3;
   margin-top: -12px;
-  padding: 4px 0 8px;
-  background: var(--surface-muted);
 }
 
 .office-toolbar-title {
   color: var(--muted);
   font-size: 12px;
-  white-space: nowrap;
-}
-
-/* 缩放控件：与 PDF 预览同款（主控件靠左、复位/页宽动作靠右）。 */
-.office-zoom-controls {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  flex: 1 1 auto;
-  min-width: 280px;
-  max-width: 100%;
-  margin-left: 8px;
-  flex-wrap: nowrap;
-}
-
-.office-zoom-controls .diagram-zoom-range {
-  flex: 0 1 120px;
-  min-width: 64px;
-  max-width: 150px;
 }
 
 /* PowerPoint：幻灯片竖排，白底 16:9 页面；容器级 CSS zoom 缩放。 */
