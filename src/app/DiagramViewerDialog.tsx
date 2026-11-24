@@ -255,8 +255,8 @@ export function DiagramViewerDialog({ svg, title, onClose }: DiagramViewerDialog
   // 对话框独占缩放快捷键，避免底层预览同时响应。
   useDiagramZoomShortcuts(zoom, setZoom, { capture: true });
 
-  /** 适配宽度：按视口可用宽度与自然宽度计算缩放比（≤100%），之后缩放仍可自由放大。 */
-  const applyFit = useCallback((): void => {
+  /** 打开对话框时的自动适配（设置项）：只缩小，不放大小图。 */
+  const applyAutoFit = useCallback((): void => {
     const body = bodyRef.current;
     if (!body || natural <= 0) return;
     const style = getComputedStyle(body);
@@ -266,10 +266,18 @@ export function DiagramViewerDialog({ svg, title, onClose }: DiagramViewerDialog
     setZoom(clampDiagramZoom(Math.min(100, Math.round((available / natural) * 100))));
   }, [natural]);
 
+  /** 默认显示：100% = 自然尺寸。 */
+  const resetZoom = useCallback((): void => setZoom(100), []);
+  /** 页宽显示：按视口可用宽度铺满内容（小图也会放大）。 */
+  const applyFitWidth = useCallback((): void => {
+    const percent = zoomToFitWidth(bodyRef.current, natural, DIAGRAM_ZOOM_MIN, DIAGRAM_ZOOM_MAX);
+    if (percent !== null) setZoom(percent);
+  }, [natural]);
+
   // 打开时按「设置 → 外观 → 图表适配宽度」自动适配一次。
   useEffect(() => {
-    if (natural > 0 && settingsStore.getState().appearance.diagramFitWidth) applyFit();
-  }, [natural, applyFit]);
+    if (natural > 0 && settingsStore.getState().appearance.diagramFitWidth) applyAutoFit();
+  }, [natural, applyAutoFit]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -316,8 +324,8 @@ export function DiagramViewerDialog({ svg, title, onClose }: DiagramViewerDialog
         <DiagramZoomToolbar
           zoom={zoom}
           onZoomChange={setZoom}
-          onFit={applyFit}
-          onFitWidth={applyFit}
+          onFit={resetZoom}
+          onFitWidth={applyFitWidth}
         />
         <div className="diagram-viewer-body" ref={bodyRef}>
           <div

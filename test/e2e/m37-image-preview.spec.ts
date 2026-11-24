@@ -45,6 +45,12 @@ test("M37：图片预览与缩放快捷键", async () => {
     await expect(zoomInput).toHaveValue("110");
     await page.keyboard.press("Control+0");
     await expect(zoomInput).toHaveValue("100");
+
+    // 页宽显示按视口可用宽度铺满内容（小图会放大，受 1000% 上限夹取），默认显示回到 100%。
+    await page.getByRole("button", { name: "页宽显示" }).click();
+    await expect.poll(() => zoomInput.inputValue()).not.toBe("100");
+    await page.getByRole("button", { name: "默认显示", exact: true }).click();
+    await expect(zoomInput).toHaveValue("100");
   } finally {
     await app.close();
     await fs.rm(tempDir, { recursive: true, force: true });

@@ -59,9 +59,12 @@ import { OfficeDocumentPreview } from "./OfficePreview";
 import {
   DiagramZoomToolbar,
   DiagramViewerDialog,
+  DIAGRAM_ZOOM_MAX,
+  DIAGRAM_ZOOM_MIN,
   clampDiagramZoom,
   diagramViewerWidth,
   useDiagramZoomShortcuts,
+  zoomToFitWidth,
 } from "./DiagramViewerDialog";
 import { svgNaturalWidth } from "../render/diagram/sanitize";
 import { DIAGRAM_OPEN_EVENT } from "../render/markdown/diagram-preview";
@@ -510,8 +513,8 @@ function DiagramPreviewPane({ document, enabled }: { document: DocumentState; en
   // 图表/图片缩放快捷键：仅在支持缩放的显示里生效。
   useDiagramZoomShortcuts(zoom, setZoom);
 
-  /** 适配宽度：按视口可用宽度与自然宽度计算缩放比（≤100%）。 */
-  const applyFit = useCallback((): void => {
+  /** 打开文档时的自动适配（设置项）：只缩小，不放大小图。 */
+  const applyAutoFit = useCallback((): void => {
     const body = bodyRef.current;
     if (!body || natural <= 0) return;
     const style = getComputedStyle(body);
@@ -521,12 +524,20 @@ function DiagramPreviewPane({ document, enabled }: { document: DocumentState; en
     setZoom(clampDiagramZoom(Math.min(100, Math.round((available / natural) * 100))));
   }, [natural]);
 
+  /** 默认显示：100% = 自然尺寸。 */
+  const resetZoom = useCallback((): void => setZoom(100), []);
+  /** 页宽显示：按视口可用宽度铺满内容（小图也会放大）。 */
+  const applyFitWidth = useCallback((): void => {
+    const percent = zoomToFitWidth(bodyRef.current, natural, DIAGRAM_ZOOM_MIN, DIAGRAM_ZOOM_MAX);
+    if (percent !== null) setZoom(percent);
+  }, [natural]);
+
   // 每个文档首图渲染后按「设置 → 外观 → 图表适配宽度」自动适配一次。
   useEffect(() => {
     if (fittedRef.current === document.id || natural <= 0) return;
     fittedRef.current = document.id;
-    if (settingsStore.getState().appearance.diagramFitWidth) applyFit();
-  }, [document.id, natural, applyFit]);
+    if (settingsStore.getState().appearance.diagramFitWidth) applyAutoFit();
+  }, [document.id, natural, applyAutoFit]);
 
   const width = natural > 0 ? diagramViewerWidth(natural, zoom) : undefined;
 
@@ -539,8 +550,8 @@ function DiagramPreviewPane({ document, enabled }: { document: DocumentState; en
           <DiagramZoomToolbar
             zoom={zoom}
             onZoomChange={setZoom}
-            onFit={applyFit}
-            onFitWidth={applyFit}
+            onFit={resetZoom}
+            onFitWidth={applyFitWidth}
           />
           <div className="diagram-viewer-body" ref={bodyRef}>
             <div
@@ -594,8 +605,8 @@ function SvgPreviewPane({ document, enabled }: { document: DocumentState; enable
   // 图片视图缩放快捷键：仅在支持缩放的显示里生效。
   useDiagramZoomShortcuts(zoom, setZoom);
 
-  /** 适配宽度：按视口可用宽度与 SVG 自然宽度计算缩放比（≤100%）。 */
-  const applyFit = useCallback((): void => {
+  /** 打开文档时的自动适配（设置项）：只缩小，不放大小图。 */
+  const applyAutoFit = useCallback((): void => {
     const body = bodyRef.current;
     if (!body || natural <= 0) return;
     const style = getComputedStyle(body);
@@ -605,12 +616,20 @@ function SvgPreviewPane({ document, enabled }: { document: DocumentState; enable
     setZoom(clampDiagramZoom(Math.min(100, Math.round((available / natural) * 100))));
   }, [natural]);
 
+  /** 默认显示：100% = 自然尺寸。 */
+  const resetZoom = useCallback((): void => setZoom(100), []);
+  /** 页宽显示：按视口可用宽度铺满内容（小图也会放大）。 */
+  const applyFitWidth = useCallback((): void => {
+    const percent = zoomToFitWidth(bodyRef.current, natural, DIAGRAM_ZOOM_MIN, DIAGRAM_ZOOM_MAX);
+    if (percent !== null) setZoom(percent);
+  }, [natural]);
+
   // 每个文档首次渲染后按「设置 → 外观 → 图表适配宽度」自动适配一次。
   useEffect(() => {
     if (fittedRef.current === document.id || natural <= 0) return;
     fittedRef.current = document.id;
-    if (settingsStore.getState().appearance.diagramFitWidth) applyFit();
-  }, [document.id, natural, applyFit]);
+    if (settingsStore.getState().appearance.diagramFitWidth) applyAutoFit();
+  }, [document.id, natural, applyAutoFit]);
 
   const width = natural > 0 ? diagramViewerWidth(natural, zoom) : undefined;
 
@@ -623,8 +642,8 @@ function SvgPreviewPane({ document, enabled }: { document: DocumentState; enable
           <DiagramZoomToolbar
             zoom={zoom}
             onZoomChange={setZoom}
-            onFit={applyFit}
-            onFitWidth={applyFit}
+            onFit={resetZoom}
+            onFitWidth={applyFitWidth}
           />
           <div className="diagram-viewer-body" ref={bodyRef}>
             <div className="diagram-viewer-sizing" style={width ? { width } : undefined}>
@@ -790,8 +809,8 @@ function ImagePreviewPane({ document }: { document: DocumentState }) {
     };
   }, [path, document.mtimeMs]);
 
-  /** 适配宽度：按视口可用宽度与图片自然宽度计算缩放比（≤100%）。 */
-  const applyFit = useCallback((): void => {
+  /** 打开文档时的自动适配（设置项）：只缩小，不放大小图。 */
+  const applyAutoFit = useCallback((): void => {
     const body = bodyRef.current;
     if (!body || natural <= 0) return;
     const style = getComputedStyle(body);
@@ -801,11 +820,19 @@ function ImagePreviewPane({ document }: { document: DocumentState }) {
     setZoom(clampDiagramZoom(Math.min(100, Math.round((available / natural) * 100))));
   }, [natural]);
 
+  /** 默认显示：100% = 自然尺寸。 */
+  const resetZoom = useCallback((): void => setZoom(100), []);
+  /** 页宽显示：按视口可用宽度铺满内容（小图也会放大）。 */
+  const applyFitWidth = useCallback((): void => {
+    const percent = zoomToFitWidth(bodyRef.current, natural, DIAGRAM_ZOOM_MIN, DIAGRAM_ZOOM_MAX);
+    if (percent !== null) setZoom(percent);
+  }, [natural]);
+
   // 每个文档加载后按「设置 → 外观 → 图表适配宽度」自动适配一次；后续缩放由用户控制。
   useEffect(() => {
     if (natural <= 0) return;
-    if (settingsStore.getState().appearance.diagramFitWidth) applyFit();
-  }, [natural, applyFit]);
+    if (settingsStore.getState().appearance.diagramFitWidth) applyAutoFit();
+  }, [natural, applyAutoFit]);
 
   const width = natural > 0 ? diagramViewerWidth(natural, zoom) : undefined;
   // 图片缩放快捷键：仅在支持缩放的显示里生效。
@@ -820,8 +847,8 @@ function ImagePreviewPane({ document }: { document: DocumentState }) {
           <DiagramZoomToolbar
             zoom={zoom}
             onZoomChange={setZoom}
-            onFit={applyFit}
-            onFitWidth={applyFit}
+            onFit={resetZoom}
+            onFitWidth={applyFitWidth}
           />
           <div className="diagram-viewer-body" ref={bodyRef}>
             <div className="diagram-viewer-sizing" style={width ? { width } : undefined}>
