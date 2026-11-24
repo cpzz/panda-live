@@ -832,9 +832,15 @@
   background: var(--surface);
 }
 
-.zoom-step-button:disabled {
+.zoom-step-button:disabled,
+.zoom-action-button:disabled {
   opacity: 0.45;
   cursor: default;
+}
+
+.zoom-action-button:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--fg);
 }
 
 /* 「放大查看」对话框：可拖拽调整大小（右下角拖拽柄）+ 标题栏最大化；工具栏 + 视口占满模态。 */

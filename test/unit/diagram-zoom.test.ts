@@ -1,6 +1,10 @@
 import { JSDOM } from "jsdom";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  DiagramZoomToolbar,
+  type PreviewZoomMode,
   measuredBaseWidth,
   zoomToContain,
   zoomToFitWidth,
@@ -26,6 +30,37 @@ function viewport(clientWidth: number): HTMLElement {
   Object.defineProperty(element, "clientWidth", { value: clientWidth });
   return element as unknown as HTMLElement;
 }
+
+describe("缩放动作按钮状态", () => {
+  function actionDisabled(mode: PreviewZoomMode): [boolean, boolean] {
+    const html = renderToStaticMarkup(
+      createElement(DiagramZoomToolbar, {
+        zoom: 100,
+        mode,
+        onZoomChange: () => undefined,
+        onFit: () => undefined,
+        onFitWidth: () => undefined,
+      }),
+    );
+    const buttons = new JSDOM(html).window.document.querySelectorAll(".zoom-action-button");
+    return [
+      buttons[0]?.hasAttribute("disabled") ?? false,
+      buttons[1]?.hasAttribute("disabled") ?? false,
+    ];
+  }
+
+  it("新页面默认显示生效：默认显示禁用、页宽显示使能", () => {
+    expect(actionDisabled("default")).toEqual([true, false]);
+  });
+
+  it("页宽显示生效：页宽显示禁用、默认显示使能", () => {
+    expect(actionDisabled("fit-width")).toEqual([false, true]);
+  });
+
+  it("手动设置缩放：两个按钮都使能", () => {
+    expect(actionDisabled("manual")).toEqual([false, false]);
+  });
+});
 
 describe("页宽显示缩放计算", () => {
   it("按视口可用宽度计算，扣减左右内边距", () => {

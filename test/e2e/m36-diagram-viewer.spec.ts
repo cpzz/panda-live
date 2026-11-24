@@ -59,9 +59,14 @@ test("M36：图表缩放与持久缓存回归", async () => {
 
       // 放大到 300%，使内容溢出视口（纵向可滚动）。
       const zoomInput = page.locator(".diagram-zoom-input");
+      const defaultView = page
+        .locator(".diagram-viewer-toolbar")
+        .getByRole("button", { name: "默认显示", exact: true });
+      await expect(defaultView).toBeDisabled();
       await zoomInput.fill("300");
       await zoomInput.press("Enter");
       await expect.poll(widthAt, { timeout: 5_000 }).toBeGreaterThan(initialWidth);
+      await expect(defaultView).toBeEnabled();
 
       // 工具栏固定在面板顶端：在图表视口内滚动后位置不变，面板本身不滚动。
       const toolbar = page.locator(".diagram-viewer-toolbar");
@@ -82,11 +87,9 @@ test("M36：图表缩放与持久缓存回归", async () => {
       ).toBe(0);
 
       // 复位：恢复自然宽度显示且不超过视口。
-      await page
-        .locator(".diagram-viewer-toolbar")
-        .getByRole("button", { name: "默认显示", exact: true })
-        .click();
+      await defaultView.click();
       await expect.poll(widthAt, { timeout: 5_000 }).toBeLessThanOrEqual(initialWidth + 1);
+      await expect(defaultView).toBeDisabled();
 
       // 缩放快捷键：Ctrl+= 放大、Ctrl+0 重置为 100%（仅缩放显示内生效）。
       const beforeShortcut = await widthAt();

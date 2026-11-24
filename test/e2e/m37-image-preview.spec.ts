@@ -34,8 +34,12 @@ test("M37：图片预览与缩放快捷键", async () => {
     const image = page.locator(".preview-pane.diagram-pane .diagram-viewer-body img");
     await expect(image).toBeVisible({ timeout: 30_000 });
     const zoomInput = page.locator(".diagram-zoom-input");
+    const defaultView = page.getByRole("button", { name: "默认显示", exact: true });
+    const fitWidth = page.getByRole("button", { name: "页宽显示" });
     await expect(zoomInput).toHaveValue("100");
-    await expect(page.getByRole("button", { name: "默认显示", exact: true })).toBeVisible();
+    await expect(defaultView).toBeVisible();
+    await expect(defaultView).toBeDisabled();
+    await expect(fitWidth).toBeEnabled();
 
     // 只读图片：没有可切换的文本模式，顶部模式条整体隐藏。
     await expect(page.locator(".mode-bar")).toHaveCount(0);
@@ -43,14 +47,22 @@ test("M37：图片预览与缩放快捷键", async () => {
     // 缩放快捷键：Ctrl+= 放大到 110%，Ctrl+0 复位到 100%。
     await page.keyboard.press("Control+=");
     await expect(zoomInput).toHaveValue("110");
+    await expect(defaultView).toBeEnabled();
+    await expect(fitWidth).toBeEnabled();
     await page.keyboard.press("Control+0");
     await expect(zoomInput).toHaveValue("100");
+    await expect(defaultView).toBeDisabled();
+    await expect(fitWidth).toBeEnabled();
 
     // 页宽显示按视口可用宽度铺满内容（小图会放大，受 1000% 上限夹取），默认显示回到 100%。
-    await page.getByRole("button", { name: "页宽显示" }).click();
+    await fitWidth.click();
     await expect.poll(() => zoomInput.inputValue()).not.toBe("100");
-    await page.getByRole("button", { name: "默认显示", exact: true }).click();
+    await expect(fitWidth).toBeDisabled();
+    await expect(defaultView).toBeEnabled();
+    await defaultView.click();
     await expect(zoomInput).toHaveValue("100");
+    await expect(defaultView).toBeDisabled();
+    await expect(fitWidth).toBeEnabled();
   } finally {
     await app.close();
     await fs.rm(tempDir, { recursive: true, force: true });

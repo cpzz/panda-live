@@ -5,6 +5,7 @@ import { onThemeChange, resolveTheme, type AppTheme } from "../services/theme";
 import {
   DiagramZoomToolbar,
   useDiagramZoomShortcuts,
+  usePreviewZoomMode,
   zoomToContain,
   zoomToFitWidth,
 } from "./DiagramViewerDialog";
@@ -51,6 +52,7 @@ export function PdfPreview({
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
+  const { mode, markDefault, markFitWidth, markManual } = usePreviewZoomMode(source);
   const [pageInput, setPageInput] = useState("1");
   const [theme, setTheme] = useState<AppTheme>(resolveTheme);
   useEffect(() => onThemeChange(setTheme), []);
@@ -239,6 +241,11 @@ export function PdfPreview({
     };
   }, [slots, zoom]);
 
+  const changeZoom = (value: number): void => {
+    setZoom(clampZoom(value / 100));
+    markManual();
+  };
+
   /** 默认显示：基准页宽容纳在视口内（超过才缩小，不放大）。 */
   const applyDefault = (): void => {
     const percent = zoomToContain(
@@ -248,12 +255,13 @@ export function PdfPreview({
       Math.round(ZOOM_MAX * 100),
     );
     if (percent !== null) setZoom(clampZoom(percent / 100));
+    markDefault();
   };
 
   // 缩放快捷键与工具栏一致：Ctrl += 放大、Ctrl -= 缩小、Ctrl+0 默认显示、Ctrl+滚轮缩放。
   useDiagramZoomShortcuts(
     Math.round(zoom * 100),
-    (value) => setZoom(clampZoom(value / 100)),
+    changeZoom,
     {
       min: Math.round(ZOOM_MIN * 100),
       max: Math.round(ZOOM_MAX * 100),
@@ -271,6 +279,7 @@ export function PdfPreview({
       Math.round(ZOOM_MAX * 100),
     );
     if (percent !== null) setZoom(clampZoom(percent / 100));
+    markFitWidth();
   };
 
   /** 跳转到指定页（表单提交；越界夹取）。 */
@@ -317,11 +326,12 @@ export function PdfPreview({
           <DiagramZoomToolbar
             className="pdf-zoom-controls"
             label={t("页面缩放")}
+            mode={mode}
             zoom={Math.round(zoom * 100)}
             min={Math.round(ZOOM_MIN * 100)}
             max={Math.round(ZOOM_MAX * 100)}
             step={Math.round(ZOOM_STEP * 100)}
-            onZoomChange={(value) => setZoom(clampZoom(value / 100))}
+            onZoomChange={changeZoom}
             onFit={applyDefault}
             onFitWidth={applyFitWidth}
           />

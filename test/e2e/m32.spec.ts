@@ -67,18 +67,29 @@ test("M32：打开 PDF 文档显示只读预览", async () => {
     await expect(zoomControls).toBeVisible();
     await expect(zoomControls.locator(".diagram-zoom-input")).toHaveValue("100");
     await expect(zoomControls.locator(".diagram-zoom-range")).toBeVisible();
-    await expect(zoomControls.getByRole("button", { name: "默认显示", exact: true })).toBeVisible();
-    await expect(zoomControls.getByRole("button", { name: "页宽显示" })).toBeVisible();
+    const defaultView = zoomControls.getByRole("button", { name: "默认显示", exact: true });
+    const fitWidth = zoomControls.getByRole("button", { name: "页宽显示" });
+    await expect(defaultView).toBeVisible();
+    await expect(fitWidth).toBeVisible();
+    // 新打开的页面：默认显示已生效，按钮禁用；页宽显示可用。
+    await expect(defaultView).toBeDisabled();
+    await expect(fitWidth).toBeEnabled();
     // 转 Markdown 按钮暂不展示。
     await expect(page.getByRole("button", { name: "转 Markdown" })).toBeHidden();
     // 缩放快捷键：Ctrl+= 放大到 110%，Ctrl+0 复位到 100%。
     const zoomInput = zoomControls.locator(".diagram-zoom-input");
     await page.keyboard.press("Control+=");
     await expect(zoomInput).toHaveValue("110");
+    await expect(defaultView).toBeEnabled();
+    await expect(fitWidth).toBeEnabled();
     await page.keyboard.press("Control+0");
     await expect(zoomInput).toHaveValue("100");
+    await expect(defaultView).toBeDisabled();
+    await expect(fitWidth).toBeEnabled();
     // 页宽显示：页面恰好铺满视口，不应产生横向滚动条。
-    await zoomControls.getByRole("button", { name: "页宽显示" }).click();
+    await fitWidth.click();
+    await expect(fitWidth).toBeDisabled();
+    await expect(defaultView).toBeEnabled();
     await expect
       .poll(() =>
         page.locator(".pdf-viewer").evaluate((el) => el.scrollWidth <= el.clientWidth + 1),

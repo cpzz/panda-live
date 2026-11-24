@@ -15,6 +15,29 @@ export function clampDiagramZoom(value: number): number {
 }
 
 /**
+ * 当前缩放来源；工具栏据此禁用已生效的按钮。
+ * - default：默认显示已生效（新打开的页面即处于此状态）
+ * - fit-width：页宽显示已生效
+ * - manual：用户手动设置过缩放比例（输入、滑块、±、快捷键、滚轮）
+ */
+export type PreviewZoomMode = "default" | "fit-width" | "manual";
+
+/** 预览缩放模式：新页面从「默认显示」开始，文档标识变化时自动重置。 */
+export function usePreviewZoomMode(resetKey?: unknown): {
+  mode: PreviewZoomMode;
+  markDefault(): void;
+  markFitWidth(): void;
+  markManual(): void;
+} {
+  const [mode, setMode] = useState<PreviewZoomMode>("default");
+  useEffect(() => setMode("default"), [resetKey]);
+  const markDefault = useCallback(() => setMode("default"), []);
+  const markFitWidth = useCallback(() => setMode("fit-width"), []);
+  const markManual = useCallback(() => setMode("manual"), []);
+  return { mode, markDefault, markFitWidth, markManual };
+}
+
+/**
  * 页宽显示：按视口可用宽度与内容基准宽度算出百分比（含内边距扣减），夹取到 [min, max]。
  * 供 PDF/Office 等有固定基准页宽、以容器级缩放显示的视图复用；无法测量时返回 null。
  */
@@ -154,6 +177,8 @@ export interface DiagramZoomControls {
   max?: number;
   /** 缩放步进（百分比），默认 10。 */
   step?: number;
+  /** 当前缩放模式；已生效的动作按钮会被禁用。默认新页面为「默认显示」。 */
+  mode?: PreviewZoomMode;
   /** 工具栏容器类名；PDF 等复用时传入自己的布局类。 */
   className?: string;
   /** 缩放控件的无障碍标签（默认「图表缩放」）。 */
@@ -174,6 +199,7 @@ export function DiagramZoomToolbar({
   min = DIAGRAM_ZOOM_MIN,
   max = DIAGRAM_ZOOM_MAX,
   step = ZOOM_STEP,
+  mode = "default",
   className = "diagram-viewer-toolbar",
   label = t("图表缩放"),
   leading,
@@ -253,6 +279,7 @@ export function DiagramZoomToolbar({
           className="icon-button zoom-action-button"
           aria-label={t("默认显示")}
           title={t("默认显示")}
+          disabled={mode === "default"}
           onClick={onFit}
         >
           <Icon name="default-view" />
@@ -262,6 +289,7 @@ export function DiagramZoomToolbar({
           className="icon-button zoom-action-button"
           aria-label={t("页宽显示")}
           title={t("页宽显示")}
+          disabled={mode === "fit-width"}
           onClick={onFitWidth}
         >
           <Icon name="fit-width" />
@@ -288,14 +316,23 @@ export function DiagramViewerDialog({ svg, title, onClose }: DiagramViewerDialog
   const bodyRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(100);
   const [maximized, setMaximized] = useState(false);
+  const { mode, markDefault, markFitWidth, markManual } = usePreviewZoomMode(svg);
   const natural = useMemo(() => svgNaturalWidth(svg), [svg]);
+  const changeZoom = useCallback(
+    (value: number): void => {
+      markManual();
+      setZoom(value);
+    },
+    [markManual],
+  );
   /** 默认显示：自然尺寸容纳在对话框视口内（超过才缩小，不放大）。 */
   const applyDefault = useCallback((): void => {
     const percent = zoomToContain(bodyRef.current, natural, DIAGRAM_ZOOM_MIN, DIAGRAM_ZOOM_MAX);
     if (percent !== null) setZoom(percent);
-  }, [natural]);
+    markDefault();
+  }, [natural, markDefault]);
   // 对话框独占缩放快捷键；Ctrl+0 与「默认显示」一致。
-  useDiagramZoomShortcuts(zoom, setZoom, { capture: true, onReset: applyDefault });
+  useDiagramZoomShortcuts(zoom, changeZoom, { capture: true, onReset: applyDefault });
 
   /** 打开对话框时的自动适配（设置项）：与默认显示一致，只缩小不放宽。 */
   const applyAutoFit = useCallback((): void => applyDefault(), [applyDefault]);
@@ -303,7 +340,8 @@ export function DiagramViewerDialog({ svg, title, onClose }: DiagramViewerDialog
   const applyFitWidth = useCallback((): void => {
     const percent = zoomToFitWidth(bodyRef.current, natural, DIAGRAM_ZOOM_MIN, DIAGRAM_ZOOM_MAX);
     if (percent !== null) setZoom(percent);
-  }, [natural]);
+    markFitWidth();
+  }, [natural, markFitWidth]);
 
   // 打开时按「设置 → 外观 → 图表适配宽度」自动适配一次。
   useEffect(() => {
@@ -354,7 +392,8 @@ export function DiagramViewerDialog({ svg, title, onClose }: DiagramViewerDialog
         </header>
         <DiagramZoomToolbar
           zoom={zoom}
-          onZoomChange={setZoom}
+          mode={mode}
+          onZoomChange={changeZoom}
           onFit={applyDefault}
           onFitWidth={applyFitWidth}
         />

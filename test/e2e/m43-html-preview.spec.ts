@@ -68,13 +68,21 @@ test("M43：HTML 预览、沙箱隔离与源码切换", async () => {
     const toolbar = page.locator(".html-preview-pane .diagram-viewer-toolbar");
     await expect(toolbar).toBeVisible();
     const zoomInput = toolbar.locator(".diagram-zoom-input");
+    const defaultView = toolbar.getByRole("button", { name: "默认显示" });
+    const fitWidth = toolbar.getByRole("button", { name: "页宽显示" });
     await expect(zoomInput).toHaveValue("100");
+    await expect(defaultView).toBeDisabled();
+    await expect(fitWidth).toBeEnabled();
     await toolbar.getByRole("button", { name: "放大" }).click();
     await expect(zoomInput).toHaveValue("110");
     await expect.poll(htmlZoom).toBe("1.1");
-    await toolbar.getByRole("button", { name: "默认显示" }).click();
+    await expect(defaultView).toBeEnabled();
+    await expect(fitWidth).toBeEnabled();
+    await defaultView.click();
     await expect(zoomInput).toHaveValue("100");
     await expect.poll(htmlZoom).toBe("1");
+    await expect(defaultView).toBeDisabled();
+    await expect(fitWidth).toBeEnabled();
 
     // —— 缩放：父侧快捷键（焦点在父文档）——
     await modes.nth(2).click(); // 焦点落在父窗口的预览按钮上

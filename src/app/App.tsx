@@ -63,6 +63,7 @@ import {
   DIAGRAM_ZOOM_MIN,
   diagramViewerWidth,
   useDiagramZoomShortcuts,
+  usePreviewZoomMode,
   zoomToContain,
   zoomToFitWidth,
 } from "./DiagramViewerDialog";
@@ -470,6 +471,7 @@ function DiagramPreviewPane({ document, enabled }: { document: DocumentState; en
   const bodyRef = useRef<HTMLDivElement>(null);
   const fittedRef = useRef<string | null>(null);
   const [zoom, setZoom] = useState(100);
+  const { mode, markDefault, markFitWidth, markManual } = usePreviewZoomMode(document.id);
   const kind = document.format === "mermaid" ? "mermaid" : "plantuml";
   const requestId = `preview:${document.id}`;
 
@@ -511,13 +513,21 @@ function DiagramPreviewPane({ document, enabled }: { document: DocumentState; en
 
   const natural = useMemo(() => (svg ? svgNaturalWidth(svg) : 0), [svg]);
 
+  const changeZoom = useCallback(
+    (value: number): void => {
+      markManual();
+      setZoom(value);
+    },
+    [markManual],
+  );
   /** 默认显示：自然尺寸容纳在视口内（超过才缩小，不放大）。 */
   const applyDefault = useCallback((): void => {
     const percent = zoomToContain(bodyRef.current, natural, DIAGRAM_ZOOM_MIN, DIAGRAM_ZOOM_MAX);
     if (percent !== null) setZoom(percent);
-  }, [natural]);
+    markDefault();
+  }, [natural, markDefault]);
   // 图表/图片缩放快捷键：仅在支持缩放的显示里生效；Ctrl+0 与「默认显示」一致。
-  useDiagramZoomShortcuts(zoom, setZoom, { onReset: applyDefault });
+  useDiagramZoomShortcuts(zoom, changeZoom, { onReset: applyDefault });
 
   /** 打开文档时的自动适配（设置项）：与默认显示一致，只缩小不放宽。 */
   const applyAutoFit = useCallback((): void => applyDefault(), [applyDefault]);
@@ -525,7 +535,8 @@ function DiagramPreviewPane({ document, enabled }: { document: DocumentState; en
   const applyFitWidth = useCallback((): void => {
     const percent = zoomToFitWidth(bodyRef.current, natural, DIAGRAM_ZOOM_MIN, DIAGRAM_ZOOM_MAX);
     if (percent !== null) setZoom(percent);
-  }, [natural]);
+    markFitWidth();
+  }, [natural, markFitWidth]);
 
   // 每个文档首图渲染后按「设置 → 外观 → 图表适配宽度」自动适配一次。
   useEffect(() => {
@@ -544,7 +555,8 @@ function DiagramPreviewPane({ document, enabled }: { document: DocumentState; en
         <div className="diagram-viewer">
           <DiagramZoomToolbar
             zoom={zoom}
-            onZoomChange={setZoom}
+            mode={mode}
+            onZoomChange={changeZoom}
             onFit={applyDefault}
             onFitWidth={applyFitWidth}
           />
@@ -576,6 +588,7 @@ function SvgPreviewPane({ document, enabled }: { document: DocumentState; enable
   const [src, setSrc] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [zoom, setZoom] = useState(100);
+  const { mode, markDefault, markFitWidth, markManual } = usePreviewZoomMode(document.id);
   const bodyRef = useRef<HTMLDivElement>(null);
   const fittedRef = useRef<string | null>(null);
 
@@ -597,13 +610,21 @@ function SvgPreviewPane({ document, enabled }: { document: DocumentState; enable
     () => (document.content.trim() ? svgNaturalWidth(document.content) : 0),
     [document.content],
   );
+  const changeZoom = useCallback(
+    (value: number): void => {
+      markManual();
+      setZoom(value);
+    },
+    [markManual],
+  );
   /** 默认显示：自然尺寸容纳在视口内（超过才缩小，不放大）。 */
   const applyDefault = useCallback((): void => {
     const percent = zoomToContain(bodyRef.current, natural, DIAGRAM_ZOOM_MIN, DIAGRAM_ZOOM_MAX);
     if (percent !== null) setZoom(percent);
-  }, [natural]);
+    markDefault();
+  }, [natural, markDefault]);
   // 图片视图缩放快捷键：仅在支持缩放的显示里生效；Ctrl+0 与「默认显示」一致。
-  useDiagramZoomShortcuts(zoom, setZoom, { onReset: applyDefault });
+  useDiagramZoomShortcuts(zoom, changeZoom, { onReset: applyDefault });
 
   /** 打开文档时的自动适配（设置项）：与默认显示一致，只缩小不放宽。 */
   const applyAutoFit = useCallback((): void => applyDefault(), [applyDefault]);
@@ -611,7 +632,8 @@ function SvgPreviewPane({ document, enabled }: { document: DocumentState; enable
   const applyFitWidth = useCallback((): void => {
     const percent = zoomToFitWidth(bodyRef.current, natural, DIAGRAM_ZOOM_MIN, DIAGRAM_ZOOM_MAX);
     if (percent !== null) setZoom(percent);
-  }, [natural]);
+    markFitWidth();
+  }, [natural, markFitWidth]);
 
   // 每个文档首次渲染后按「设置 → 外观 → 图表适配宽度」自动适配一次。
   useEffect(() => {
@@ -630,7 +652,8 @@ function SvgPreviewPane({ document, enabled }: { document: DocumentState; enable
         <div className="diagram-viewer">
           <DiagramZoomToolbar
             zoom={zoom}
-            onZoomChange={setZoom}
+            mode={mode}
+            onZoomChange={changeZoom}
             onFit={applyDefault}
             onFitWidth={applyFitWidth}
           />
@@ -659,9 +682,35 @@ function SvgPreviewPane({ document, enabled }: { document: DocumentState; enable
 function HtmlPreviewPane({ document, enabled }: { document: DocumentState; enabled: boolean }) {
   const [srcDoc, setSrcDoc] = useState("");
   const [zoom, setZoom] = useState(HTML_ZOOM_DEFAULT);
+  const { mode, markDefault, markFitWidth, markManual } = usePreviewZoomMode(document.id);
   const frameRef = useRef<HTMLIFrameElement>(null);
   const zoomRef = useRef(zoom);
   zoomRef.current = zoom;
+
+  const changeZoom = useCallback(
+    (value: number): void => {
+      markManual();
+      setZoom(value);
+    },
+    [markManual],
+  );
+  /** 步进缩放用函数式更新，避免同批次内多个滚轮/快捷键事件丢失步进。 */
+  const stepZoomBy = useCallback(
+    (delta: number): void => {
+      markManual();
+      setZoom((value) => clampHtmlZoom(value + delta));
+    },
+    [markManual],
+  );
+  /** 默认显示/页宽显示：iframe 按视口铺满，两者都回到 100% 并切换按钮状态。 */
+  const applyDefault = useCallback((): void => {
+    markDefault();
+    setZoom(HTML_ZOOM_DEFAULT);
+  }, [markDefault]);
+  const applyFitWidth = useCallback((): void => {
+    markFitWidth();
+    setZoom(HTML_ZOOM_DEFAULT);
+  }, [markFitWidth]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -694,9 +743,9 @@ function HtmlPreviewPane({ document, enabled }: { document: DocumentState; enabl
       if (data.type === MSG_ZOOM_READY) {
         applyZoom(zoomRef.current);
       } else if (data.type === MSG_ZOOM_GESTURE) {
-        if (data.action === "reset") setZoom(HTML_ZOOM_DEFAULT);
-        else if (data.action === "in") setZoom((value) => clampHtmlZoom(value + HTML_ZOOM_STEP));
-        else if (data.action === "out") setZoom((value) => clampHtmlZoom(value - HTML_ZOOM_STEP));
+        if (data.action === "reset") applyDefault();
+        else if (data.action === "in") stepZoomBy(HTML_ZOOM_STEP);
+        else if (data.action === "out") stepZoomBy(-HTML_ZOOM_STEP);
       } else if (data.type === MSG_PREVIEW_POINTER) {
         // iframe 是独立 browsing context，内部点击不冒泡到父文档，父侧 mousedown/focusin
         // 监听收不到。这里在 iframe 元素上补发一个冒泡的 mousedown，触发工作区菜单等
@@ -706,33 +755,30 @@ function HtmlPreviewPane({ document, enabled }: { document: DocumentState; enabl
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [applyZoom]);
+  }, [applyZoom, applyDefault, stepZoomBy]);
 
   // 父侧快捷键：焦点/指针不在 iframe 内时（如刚打开、切到预览栏）同样能缩放。
   // 带 enabled 门控：源码/分栏的源码栏等隐藏预览时不拦截全局快捷键。
   useEffect(() => {
     if (!enabled) return;
-    const stepBy = (delta: number): void => {
-      setZoom((value) => clampHtmlZoom(value + delta));
-    };
     const onKeyDown = (event: KeyboardEvent): void => {
       if (!(event.ctrlKey || event.metaKey)) return;
       const key = event.key;
       if (key === "=" || key === "+") {
         event.preventDefault();
-        stepBy(HTML_ZOOM_STEP);
+        stepZoomBy(HTML_ZOOM_STEP);
       } else if (key === "-" || key === "_") {
         event.preventDefault();
-        stepBy(-HTML_ZOOM_STEP);
+        stepZoomBy(-HTML_ZOOM_STEP);
       } else if (key === "0") {
         event.preventDefault();
-        setZoom(HTML_ZOOM_DEFAULT);
+        applyDefault();
       }
     };
     const onWheel = (event: WheelEvent): void => {
       if (!(event.ctrlKey || event.metaKey)) return;
       event.preventDefault();
-      stepBy(event.deltaY < 0 ? HTML_ZOOM_STEP : -HTML_ZOOM_STEP);
+      stepZoomBy(event.deltaY < 0 ? HTML_ZOOM_STEP : -HTML_ZOOM_STEP);
     };
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("wheel", onWheel, { passive: false });
@@ -740,16 +786,17 @@ function HtmlPreviewPane({ document, enabled }: { document: DocumentState; enabl
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("wheel", onWheel);
     };
-  }, [enabled]);
+  }, [enabled, applyDefault, stepZoomBy]);
 
   return (
     <div className="preview-pane html-preview-pane">
       <div className="diagram-viewer">
         <DiagramZoomToolbar
           zoom={zoom}
-          onZoomChange={setZoom}
-          onFit={() => setZoom(HTML_ZOOM_DEFAULT)}
-          onFitWidth={() => setZoom(HTML_ZOOM_DEFAULT)}
+          mode={mode}
+          onZoomChange={changeZoom}
+          onFit={applyDefault}
+          onFitWidth={applyFitWidth}
           min={HTML_ZOOM_MIN}
           max={HTML_ZOOM_MAX}
           step={HTML_ZOOM_STEP}
@@ -773,6 +820,7 @@ function ImagePreviewPane({ document }: { document: DocumentState }) {
   const [natural, setNatural] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [zoom, setZoom] = useState(100);
+  const { mode, markDefault, markFitWidth, markManual } = usePreviewZoomMode(document.path);
   const bodyRef = useRef<HTMLDivElement>(null);
   const path = document.path;
 
@@ -798,11 +846,19 @@ function ImagePreviewPane({ document }: { document: DocumentState }) {
     };
   }, [path, document.mtimeMs]);
 
+  const changeZoom = useCallback(
+    (value: number): void => {
+      markManual();
+      setZoom(value);
+    },
+    [markManual],
+  );
   /** 默认显示：自然尺寸容纳在视口内（超过才缩小，不放大）。 */
   const applyDefault = useCallback((): void => {
     const percent = zoomToContain(bodyRef.current, natural, DIAGRAM_ZOOM_MIN, DIAGRAM_ZOOM_MAX);
     if (percent !== null) setZoom(percent);
-  }, [natural]);
+    markDefault();
+  }, [natural, markDefault]);
 
   /** 打开文档时的自动适配（设置项）：与默认显示一致，只缩小不放宽。 */
   const applyAutoFit = useCallback((): void => applyDefault(), [applyDefault]);
@@ -810,7 +866,8 @@ function ImagePreviewPane({ document }: { document: DocumentState }) {
   const applyFitWidth = useCallback((): void => {
     const percent = zoomToFitWidth(bodyRef.current, natural, DIAGRAM_ZOOM_MIN, DIAGRAM_ZOOM_MAX);
     if (percent !== null) setZoom(percent);
-  }, [natural]);
+    markFitWidth();
+  }, [natural, markFitWidth]);
 
   // 每个文档加载后按「设置 → 外观 → 图表适配宽度」自动适配一次；后续缩放由用户控制。
   useEffect(() => {
@@ -820,7 +877,7 @@ function ImagePreviewPane({ document }: { document: DocumentState }) {
 
   const width = natural > 0 ? diagramViewerWidth(natural, zoom) : undefined;
   // 图片缩放快捷键：仅在支持缩放的显示里生效；Ctrl+0 与「默认显示」一致。
-  useDiagramZoomShortcuts(zoom, setZoom, { onReset: applyDefault });
+  useDiagramZoomShortcuts(zoom, changeZoom, { onReset: applyDefault });
 
   return (
     <div className="preview-pane diagram-pane">
@@ -830,7 +887,8 @@ function ImagePreviewPane({ document }: { document: DocumentState }) {
         <div className="diagram-viewer">
           <DiagramZoomToolbar
             zoom={zoom}
-            onZoomChange={setZoom}
+            mode={mode}
+            onZoomChange={changeZoom}
             onFit={applyDefault}
             onFitWidth={applyFitWidth}
           />
@@ -1139,7 +1197,7 @@ function PreviewPane({
     return <MathmlPreviewPane document={document} enabled={enabled} />;
   }
   if (document.format === "plantuml" || document.format === "mermaid") {
-    return <DiagramPreviewPane document={document} enabled={enabled} />;
+    return <DiagramPreviewPane key={document.id} document={document} enabled={enabled} />;
   }
   if (document.format === "svg") {
     return <SvgPreviewPane key={document.id} document={document} enabled={enabled} />;
@@ -1401,7 +1459,12 @@ export function App() {
   /** 进入 Git 差异前的模式，用于工具栏按钮切回。 */
   const modeBeforeGitRef = useRef<EditorMode>("source");
   // 「放大查看」对话框：承载内嵌图表块的放大视图；svg 已由图表服务消毒。
-  const [diagramViewer, setDiagramViewer] = useState<{ svg: string; title: string } | null>(null);
+  const [diagramViewer, setDiagramViewer] = useState<{
+    id: number;
+    svg: string;
+    title: string;
+  } | null>(null);
+  const diagramViewerSeq = useRef(0);
   const [recoveries, setRecoveries] = useState<DraftEntry[]>([]);
   const [recent, setRecent] = useState<RecentEntry[]>([]);
   const [perfVisible, setPerfVisible] = useState(false);
@@ -1483,7 +1546,12 @@ export function App() {
     const onOpen = (event: Event): void => {
       const svg = (event as CustomEvent<{ svg?: string }>).detail?.svg;
       if (!svg) return;
-      setDiagramViewer({ svg, title: activeRef.current?.name ?? "" });
+      diagramViewerSeq.current += 1;
+      setDiagramViewer({
+        id: diagramViewerSeq.current,
+        svg,
+        title: activeRef.current?.name ?? "",
+      });
     };
     window.addEventListener(DIAGRAM_OPEN_EVENT, onOpen);
     return () => window.removeEventListener(DIAGRAM_OPEN_EVENT, onOpen);
@@ -3173,7 +3241,7 @@ export function App() {
               hidden={!activeIsImage}
               aria-label={t("图片预览")}
             >
-              {activeIsImage ? <ImagePreviewPane document={active} /> : null}
+              {activeIsImage ? <ImagePreviewPane key={active.id} document={active} /> : null}
             </section>
             <section
               className="pane office-pane"
@@ -3451,6 +3519,7 @@ export function App() {
 
       {diagramViewer && (
         <DiagramViewerDialog
+          key={diagramViewer.id}
           svg={diagramViewer.svg}
           title={diagramViewer.title}
           onClose={() => setDiagramViewer(null)}

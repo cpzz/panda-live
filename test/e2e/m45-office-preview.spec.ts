@@ -173,8 +173,12 @@ test("M45：Word 只读预览（连续流式、缩放与大纲）", async () => 
     const toolbar = page.locator(".office-toolbar");
     await expect(toolbar).toBeVisible();
     await expect(toolbar.locator(".diagram-zoom-primary .diagram-zoom-input")).toBeVisible();
-    await expect(toolbar.getByRole("button", { name: "默认显示" })).toBeVisible();
-    await expect(toolbar.getByRole("button", { name: "页宽显示" })).toBeVisible();
+    const defaultView = toolbar.getByRole("button", { name: "默认显示" });
+    const fitWidth = toolbar.getByRole("button", { name: "页宽显示" });
+    await expect(defaultView).toBeVisible();
+    await expect(fitWidth).toBeVisible();
+    await expect(defaultView).toBeDisabled();
+    await expect(fitWidth).toBeEnabled();
     const zoomInput = toolbar.locator(".diagram-zoom-input");
     await expect(zoomInput).toHaveValue("100");
     const pagesZoom = (): Promise<string> =>
@@ -182,16 +186,22 @@ test("M45：Word 只读预览（连续流式、缩放与大纲）", async () => 
     await toolbar.getByRole("button", { name: "放大" }).click();
     await expect(zoomInput).toHaveValue("110");
     await expect.poll(pagesZoom).toBe("1.1");
-    await toolbar.getByRole("button", { name: "默认显示" }).click();
+    await expect(defaultView).toBeEnabled();
+    await expect(fitWidth).toBeEnabled();
+    await defaultView.click();
     await expect(zoomInput).toHaveValue("100");
     await expect.poll(pagesZoom).toBe("1");
+    await expect(defaultView).toBeDisabled();
+    await expect(fitWidth).toBeEnabled();
     // 页宽显示：文档宽度恰好铺满视口，不应产生横向滚动条。
-    await toolbar.getByRole("button", { name: "页宽显示" }).click();
+    await fitWidth.click();
     await expect
       .poll(() =>
         page.locator(".office-viewer").evaluate((el) => el.scrollWidth <= el.clientWidth + 1),
       )
       .toBe(true);
+    await expect(fitWidth).toBeDisabled();
+    await expect(defaultView).toBeEnabled();
 
     // 大纲：标题段落按渲染顺序打标，侧栏大纲列出标题并可点击定位。
     await expect(page.locator(".office-docx [data-docx-heading='0']")).toContainText("第一章 总则");
@@ -268,15 +278,28 @@ test("M45：PowerPoint 只读预览与缩放", async () => {
     const toolbar = page.locator(".office-toolbar");
     await expect(toolbar).toBeVisible();
     const zoomInput = toolbar.locator(".diagram-zoom-input");
+    const defaultView = toolbar.getByRole("button", { name: "默认显示" });
+    const fitWidth = toolbar.getByRole("button", { name: "页宽显示" });
     await expect(zoomInput).toHaveValue("100");
+    await expect(defaultView).toBeDisabled();
+    await expect(fitWidth).toBeEnabled();
     const pagesZoom = (): Promise<string> =>
       page.locator(".office-pptx-pages").evaluate((el) => (el as HTMLElement).style.zoom);
     await toolbar.getByRole("button", { name: "放大" }).click();
     await expect(zoomInput).toHaveValue("110");
     await expect.poll(pagesZoom).toBe("1.1");
-    await toolbar.getByRole("button", { name: "默认显示" }).click();
+    await expect(defaultView).toBeEnabled();
+    await expect(fitWidth).toBeEnabled();
+    await defaultView.click();
     await expect(zoomInput).toHaveValue("100");
     await expect.poll(pagesZoom).toBe("1");
+    await expect(defaultView).toBeDisabled();
+    await expect(fitWidth).toBeEnabled();
+    await fitWidth.click();
+    await expect(fitWidth).toBeDisabled();
+    await expect(defaultView).toBeEnabled();
+    await defaultView.click();
+    await expect(zoomInput).toHaveValue("100");
 
     // 父窗口快捷键：Ctrl+= 放大、Ctrl+0 复位。
     await page.locator(".office-pptx-slide").click();

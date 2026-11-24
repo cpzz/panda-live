@@ -8,6 +8,7 @@ import {
   DiagramZoomToolbar,
   measuredBaseWidth,
   useDiagramZoomShortcuts,
+  usePreviewZoomMode,
   zoomToContain,
   zoomToFitWidth,
 } from "./DiagramViewerDialog";
@@ -89,6 +90,7 @@ function DocxBody({
   const styleRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
+  const { mode, markDefault, markFitWidth, markManual } = usePreviewZoomMode(bytes);
   /** 页宽显示后的实测校正标记：按真实渲染宽度修正测量误差，直到恰好铺满。 */
   const fitWidthPendingRef = useRef(false);
 
@@ -117,17 +119,23 @@ function DocxBody({
   const applyDefault = useCallback((): void => {
     fitWidthPendingRef.current = false;
     applyZoomMode(zoomToContain);
-  }, [applyZoomMode]);
+    markDefault();
+  }, [applyZoomMode, markDefault]);
   /** 页宽显示：页面宽度铺满视口（一次性动作）。 */
   const applyFitWidth = useCallback((): void => {
     fitWidthPendingRef.current = true;
     applyZoomMode(zoomToFitWidth);
-  }, [applyZoomMode]);
+    markFitWidth();
+  }, [applyZoomMode, markFitWidth]);
   /** 手动缩放/快捷键取消页宽校正，避免覆盖用户选择的比例。 */
-  const changeZoom = useCallback((value: number): void => {
-    fitWidthPendingRef.current = false;
-    setZoom(clampZoom(value / 100));
-  }, []);
+  const changeZoom = useCallback(
+    (value: number): void => {
+      fitWidthPendingRef.current = false;
+      setZoom(clampZoom(value / 100));
+      markManual();
+    },
+    [markManual],
+  );
   useDiagramZoomShortcuts(Math.round(zoom * 100), changeZoom, {
     min: Math.round(ZOOM_MIN * 100),
     max: Math.round(ZOOM_MAX * 100),
@@ -206,6 +214,7 @@ function DocxBody({
       <DiagramZoomToolbar
         className="office-toolbar"
         label={t("文档缩放")}
+        mode={mode}
         zoom={Math.round(zoom * 100)}
         min={Math.round(ZOOM_MIN * 100)}
         max={Math.round(ZOOM_MAX * 100)}
@@ -262,6 +271,7 @@ function XlsxBody({ sheets }: { sheets: OfficeSheetInfo[] }) {
 /** pptx 分支：幻灯片竖排 + 页码标签，缩放工具栏与 PDF/图表/图片预览一致。 */
 function PptxBody({ slides }: { slides: string[] }) {
   const [zoom, setZoom] = useState(1);
+  const { mode, markDefault, markFitWidth, markManual } = usePreviewZoomMode(slides);
   const pagesRef = useRef<HTMLDivElement>(null);
 
   /** 默认显示与页宽显示共用同一视口测量和基准页宽。 */
@@ -278,10 +288,23 @@ function PptxBody({ slides }: { slides: string[] }) {
     [],
   );
   /** 默认显示：基准页宽容纳在视口内（超过才缩小，不放大）。 */
-  const applyDefault = useCallback((): void => applyZoomMode(zoomToContain), [applyZoomMode]);
+  const applyDefault = useCallback((): void => {
+    applyZoomMode(zoomToContain);
+    markDefault();
+  }, [applyZoomMode, markDefault]);
   /** 页宽显示：基准页宽铺满视口。 */
-  const applyFitWidth = useCallback((): void => applyZoomMode(zoomToFitWidth), [applyZoomMode]);
-  useDiagramZoomShortcuts(Math.round(zoom * 100), (value) => setZoom(clampZoom(value / 100)), {
+  const applyFitWidth = useCallback((): void => {
+    applyZoomMode(zoomToFitWidth);
+    markFitWidth();
+  }, [applyZoomMode, markFitWidth]);
+  const changeZoom = useCallback(
+    (value: number): void => {
+      setZoom(clampZoom(value / 100));
+      markManual();
+    },
+    [markManual],
+  );
+  useDiagramZoomShortcuts(Math.round(zoom * 100), changeZoom, {
     min: Math.round(ZOOM_MIN * 100),
     max: Math.round(ZOOM_MAX * 100),
     step: Math.round(ZOOM_STEP * 100),
@@ -296,11 +319,12 @@ function PptxBody({ slides }: { slides: string[] }) {
         className="office-toolbar"
         label={t("幻灯片缩放")}
         leading={<span className="office-toolbar-title">{t("幻灯片 {0} 页", slides.length)}</span>}
+        mode={mode}
         zoom={Math.round(zoom * 100)}
         min={Math.round(ZOOM_MIN * 100)}
         max={Math.round(ZOOM_MAX * 100)}
         step={Math.round(ZOOM_STEP * 100)}
-        onZoomChange={(value) => setZoom(clampZoom(value / 100))}
+        onZoomChange={changeZoom}
         onFit={applyDefault}
         onFitWidth={applyFitWidth}
       />
