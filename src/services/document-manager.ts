@@ -13,6 +13,7 @@ import type {
   WorkspaceSessionState,
 } from "../shared/ipc";
 import { detectFormatEntry, formatHasPreview } from "../extensions/registry";
+import { isBinaryFormat } from "../formats/registry";
 import { parseMarkdown } from "../formats/markdown/parse";
 import type { SaveEol } from "../shared/settings";
 import { decideOpenPolicy, preferSourceByBlocks } from "./open-policy";
@@ -113,11 +114,18 @@ function formatTime(ms: number): string {
   return new Date(ms).toLocaleString("zh-CN", { hour12: false });
 }
 
+/** Office 格式对应的通知文案前缀（与 pdf/image 的既有文案并列）。 */
+const OFFICE_LABEL: Record<string, string> = {
+  docx: "Word",
+  xlsx: "Excel",
+  pptx: "PowerPoint",
+};
+
 /** 视图模式是否适用于指定格式；不适用时切换标签要回落到源码模式。 */
 function modeSupported(mode: EditorMode, formatId: string): boolean {
   if (mode === "wysiwyg") return formatId === "markdown";
-  // PDF/图片是二进制只读文档，固定使用专用预览面板。
-  if (formatId === "pdf" || formatId === "image") return mode === "preview";
+  // PDF/图片/Office 是二进制只读文档，固定使用专用预览面板。
+  if (isBinaryFormat(formatId)) return mode === "preview";
   // 分栏/预览只对具有渲染预览的格式开放；代码与纯文本只有源码模式。
   if (mode === "split" || mode === "preview") return formatHasPreview(formatId);
   return true;
@@ -273,7 +281,7 @@ export class DocumentManager {
       this.notify("error", t("该格式不支持所见即所得编辑，请使用源码模式"));
       return;
     }
-    const isBinary = active?.format === "pdf" || active?.format === "image";
+    const isBinary = isBinaryFormat(active?.format);
     if ((mode === "preview" || mode === "split") && active && !isBinary && !formatHasPreview(active.format)) {
       this.notify("error", t("该格式没有渲染预览，请使用源码模式"));
       return;
@@ -297,10 +305,10 @@ export class DocumentManager {
   }
 
   /** 打开文件时的默认视图：支持渲染预览的格式（Markdown、PlantUML、Mermaid、LaTeX、
-   * SVG、HTML、扩展格式）与 PDF/图片进入预览，其余进入源码；`preferSource` 用于大文件降级，
+   * SVG、HTML、扩展格式）与 PDF/图片/Office 进入预览，其余进入源码；`preferSource` 用于大文件降级，
    * 但二进制文档只能预览。 */
   private defaultModeFor(formatId: string, preferSource = false): EditorMode {
-    if (formatId === "pdf" || formatId === "image") return "preview";
+    if (isBinaryFormat(formatId)) return "preview";
     if (preferSource) return "source";
     return formatHasPreview(formatId) ? "preview" : "source";
   }
@@ -482,6 +490,11 @@ export class DocumentManager {
       this.notify("info", t("图片文档为只读预览，无需保存"));
       return;
     }
+    const officeLabel = OFFICE_LABEL[doc.format];
+    if (officeLabel) {
+      this.notify("info", t("{0} 文档为只读预览，无需保存", officeLabel));
+      return;
+    }
     if (!doc.path) {
       await this.saveDocumentAs(id);
       return;
@@ -534,6 +547,11 @@ export class DocumentManager {
     }
     if (doc.format === "image") {
       this.notify("error", t("图片文档为只读预览，不支持另存为"));
+      return;
+    }
+    const officeLabel = OFFICE_LABEL[doc.format];
+    if (officeLabel) {
+      this.notify("error", t("{0} 文档为只读预览，不支持另存为", officeLabel));
       return;
     }
     try {
@@ -852,9 +870,9 @@ export class DocumentManager {
       ) {
         return;
       }
-      // PDF/图片是二进制文档：不读文本，只读元数据并以只读预览打开。
+      // PDF/图片/Office 是二进制文档：不读文本，只读元数据并以只读预览打开。
       const formatId = detectFormatEntry(ref.name)?.id ?? "text";
-      const isBinary = formatId === "pdf" || formatId === "image";
+      const isBinary = isBinaryFormat(formatId);
       const data = isBinary ? null : await window.panda.fs.readText({ path: ref.path });
       const watchId = await this.watchFile(ref.path);
       let forceSource = policy.preferSource;
@@ -934,8 +952,8 @@ export class DocumentManager {
       return;
     }
     if (!doc.path) return;
-    // PDF/图片是二进制只读文档：外部修改只更新元数据并提示重新打开，不做文本重读。
-    if (doc.format === "pdf" || doc.format === "image") {
+    // PDF/图片/Office 是二进制只读文档：外部修改只更新元数据并提示重新打开，不做文本重读。
+    if (isBinaryFormat(doc.format)) {
       try {
         const stats = await window.panda.fs.stat({ path: doc.path });
         this.patchDocument(doc.id, () => ({ mtimeMs: stats.mtimeMs, size: stats.size }));

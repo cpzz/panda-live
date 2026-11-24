@@ -928,7 +928,7 @@ function plantumlOutline(source: string): OutlineItem[] {
 /*                                  对外接口                                  */
 /* -------------------------------------------------------------------------- */
 
-/** 所有内置支持大纲的格式；不含二进制与无结构格式（pdf / image / text / mathml）。 */
+/** 所有内置支持大纲的格式；不含二进制与无结构格式（pdf / image / docx / xlsx / pptx / text / mathml）。 */
 export const OUTLINE_FORMATS: ReadonlySet<string> = new Set<string>([
   "markdown",
   "latex",

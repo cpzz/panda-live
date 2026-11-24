@@ -92,6 +92,24 @@ const IMAGE_EXTENSIONS = [
   "avif",
 ];
 
+/** 以只读 HTML 预览打开的 Microsoft Office 扩展名（含旧版格式，打开后由渲染层识别）。 */
+const OFFICE_EXTENSIONS = [
+  "docx",
+  "docm",
+  "dotx",
+  "dotm",
+  "doc",
+  "xlsx",
+  "xlsm",
+  "xlsb",
+  "xls",
+  "pptx",
+  "pptm",
+  "potx",
+  "potm",
+  "ppt",
+];
+
 /** 允许转存的图片类型；SVG 不在此列，避免把可执行脚本带入文档目录。 */
 const IMAGE_MIME_EXTENSIONS: Record<string, string> = {
   "image/png": "png",
@@ -111,8 +129,9 @@ function timestamp(date: Date): string {
 
 function markdownFilters(): FileFilter[] {
   return [
-    { name: t("所有支持的文件"), extensions: [...MARKDOWN_EXTENSIONS, ...CODE_EXTENSIONS, ...IMAGE_EXTENSIONS, "tex", "latex", "pdf"] },
+    { name: t("所有支持的文件"), extensions: [...MARKDOWN_EXTENSIONS, ...CODE_EXTENSIONS, ...IMAGE_EXTENSIONS, ...OFFICE_EXTENSIONS, "tex", "latex", "pdf"] },
     { name: "PDF", extensions: ["pdf"] },
+    { name: t("Office 文档"), extensions: OFFICE_EXTENSIONS },
     { name: t("图片"), extensions: IMAGE_EXTENSIONS },
     { name: t("代码文件"), extensions: CODE_EXTENSIONS },
     { name: "Markdown", extensions: MARKDOWN_EXTENSIONS },

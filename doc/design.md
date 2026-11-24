@@ -131,12 +131,15 @@ Panda Live 是本地优先的桌面文档编辑器，核心特征是**编辑区�
 | `.svg` | SVG | 源码 / 分栏 / 预览（隔离渲染） |
 | `.html` `.htm` `.xhtml` | HTML | 源码 / 分栏 / 预览（sandbox iframe 渲染） |
 | `.pdf` | PDF | 只读 PDF 预览 |
+| `.docx` `.docm` `.dotx` `.dotm` `.doc` | Word | 只读 Word 预览 |
+| `.xlsx` `.xlsm` `.xlsb` `.xls` | Excel | 只读 Excel 预览 |
+| `.pptx` `.pptm` `.potx` `.potm` `.ppt` | PowerPoint | 只读 PowerPoint 预览 |
 | 代码语言：C/C++（`.c`/`.cc`/`.cpp`/`.hpp`…）、Java（`.java`）、JS/TS（`.js`/`.jsx`/`.mjs`/`.ts`/`.tsx`…）、Python（`.py`/`.pyi`）、Go（`.go`）、Rust（`.rs`）、C#（`.cs`）、Ruby（`.rb`）、Kotlin（`.kt`/`.kts`）、Swift（`.swift`）、Scala（`.scala`/`.sc`）、PHP（`.php`/`.phtml`）、Dart（`.dart`）、Lua（`.lua`）、Perl（`.pl`/`.pm`）、Objective-C（`.m`/`.mm`）、R（`.r`）、Shell（`.sh`/`.bash`/`.zsh`）、SQL（`.sql`） | 各语言独立格式（`CODE_FORMATS`） | 源码 + 符号大纲 |
 | 数据 / 标记 / 配置：JSON（`.json`/`.jsonc`/`.json5`）、YAML（`.yaml`/`.yml`）、CSS（`.css`/`.scss`/`.less`/`.sass`）、XML（`.xml`/`.xsd`/`.xsl`/`.xslt`/`.plist`）、INI（`.ini`/`.cfg`/`.properties`）、TOML（`.toml`） | 各语言独立格式（`CODE_FORMATS`） | 源码 + 符号大纲 |
 | 扩展提供的格式 | Extension Provider | 按 `capabilities`：源码或 WYSIWYG + 预览 |
 | 其他未知扩展 | Text | 源码（纯文本兜底） |
 
-`.mdx` 按 Markdown 处理，JSX 片段作为原始块保留，不执行。`.myst` / `.mst` 同样按 Markdown 处理，额外支持官方冒号围栏写法（`:::{tab-set}`）。`.puml` / `.plantuml` / `.mmd` / `.mermaid` 作为单图表文档打开：源码可写，预览为 SVG，不套用 Markdown schema。`.svg` 作为独立文本格式打开：源码按 XML 编辑，预览以 data URL 放入 `<img>` 隔离渲染，SVG 内脚本不执行、样式不影响应用界面。`.html` / `.htm` / `.xhtml` 作为文本格式打开：源码按 HTML 编辑，预览把完整文档作为 `srcDoc` 放进 `<iframe sandbox="allow-scripts">` 渲染；只给脚本权限、不给 `allow-same-origin`，iframe 是 opaque origin，其中脚本无法访问父窗口、应用数据或本地文件（无 `window.panda`），页面样式不污染应用界面。iframe 是独立 browsing context，内部点击不会冒泡到父文档；注入脚本在捕获阶段监听 `pointerdown` 并经 `postMessage` 通知父窗口，父窗口在 iframe 元素上补发 `mousedown`，使工作区菜单等「点击外部关闭」浮层照常关闭。
+`.mdx` 按 Markdown 处理，JSX 片段作为原始块保留，不执行。`.myst` / `.mst` 同样按 Markdown 处理，额外支持官方冒号围栏写法（`:::{tab-set}`）。`.puml` / `.plantuml` / `.mmd` / `.mermaid` 作为单图表文档打开：源码可写，预览为 SVG，不套用 Markdown schema。`.svg` 作为独立文本格式打开：源码按 XML 编辑，预览以 data URL 放入 `<img>` 隔离渲染，SVG 内脚本不执行、样式不影响应用界面。`.html` / `.htm` / `.xhtml` 作为文本格式打开：源码按 HTML 编辑，预览把完整文档作为 `srcDoc` 放进 `<iframe sandbox="allow-scripts">` 渲染；只给脚本权限、不给 `allow-same-origin`，iframe 是 opaque origin，其中脚本无法访问父窗口、应用数据或本地文件（无 `window.panda`），页面样式不污染应用界面。iframe 是独立 browsing context，内部点击不会冒泡到父文档；注入脚本在捕获阶段监听 `pointerdown` 并经 `postMessage` 通知父窗口，父窗口在 iframe 元素上补发 `mousedown`，使工作区菜单等「点击外部关闭」浮层照常关闭。Office 文档（`.docx` / `.xlsx` / `.pptx` 及变体）按二进制只读文档打开：不读文本、默认预览模式、跳过编辑与保存，专用面板动态加载渲染库（docx-preview / SheetJS `xlsx` / `@jvmr/pptx-to-html`）渲染磁盘字节，库输出 HTML 一律经 DOMPurify 消毒后进入 DOM。Word 采用连续流式布局（不分页、不渲染页眉页脚），扁平化呈现（覆盖库自带的灰色「桌面」背景与页级阴影，内容无边框卡片、直接铺开），PowerPoint 幻灯片竖排；Word 与 PowerPoint 均带与 PDF/图表/图片预览一致的缩放工具栏（Ctrl+=/−/0）。Word 还支持侧栏大纲：从 docx 包内 styles.xml 解析标题层级，点击大纲项跳转渲染段落。旧版 OLE2 二进制容器（`.doc` / `.ppt`）按容器魔数识别并提示「用 Microsoft Office 另存为 `.docx` / `.pptx` 后重新打开」；`.xls` 由 SheetJS 直接解析。
 
 ---
 
@@ -407,7 +410,7 @@ type BuiltinDocumentFormat =
   // 图表
   | "plantuml" | "mermaid"
   // 二进制与只读预览
-  | "pdf" | "image"
+  | "pdf" | "image" | "docx" | "xlsx" | "pptx"
   // 标记 / 样式 / 数据（含大纲）
   | "svg" | "html" | "css" | "xml" | "json" | "yaml" | "ini" | "toml"
   // 主流代码语言（各自独立格式，含大纲）
@@ -1020,6 +1023,7 @@ DM --> User: PDF 预览 + 问题面板
 - PDF.js worker 作为独立资源打包，初始化前设置 `GlobalWorkerOptions.workerSrc`；切换文档或关闭预览时终止旧 worker。
 - PDF.js 关闭内嵌脚本与自动外部链接解析，链接点击走统一协议校验。
 - `.pdf` 文档作为二进制只读文档打开：不读文本、跳过编辑与保存，由专用面板复用 PDF.js 渲染磁盘字节；外部更新时仅刷新元数据并提示。
+- Office 文档（`.docx` / `.xlsx` / `.pptx` 及变体）复用同一二进制只读模式：不读文本、跳过编辑与保存；专用面板按需动态 `import()` docx-preview（Word，连续流式布局不分页，渲染脚注/尾注，样式注入独立隐藏容器避免污染应用；覆盖库注入样式的灰色背景/内边距/页级阴影实现扁平化，容器级 CSS zoom 缩放工具栏与快捷键同 PDF；渲染后按 styles.xml 的 outlineLvl/内建 Heading N/basedOn 继承链解析标题层级，从真实 DOM 提取大纲并打 data-docx-heading 标记，供侧栏大纲跳转）、SheetJS `xlsx`（Excel，工作表切换 + 单元格样式 + 合并单元格，上限 5000 行 × 200 列）、`@jvmr/pptx-to-html`（PowerPoint，按演示顺序逐页输出内联样式 HTML，幻灯片竖排 + 页码标签，缩放工具栏与快捷键同 PDF/图表/图片预览）。三个库的输出 HTML 一律经 DOMPurify 消毒后进入 DOM；旧版 OLE2 容器（`.doc` / `.ppt`）按魔数提示另存为新版格式。
 - 安全约束见 §13.4：引擎以受限模式运行（优先启用 Tectonic `--untrusted`），工作目录限定工作区根，禁用 shell-escape 并最小化环境变量；除首次 bundle 下载外禁止网络；超时强杀。
 
 编译契约：
@@ -1510,7 +1514,7 @@ form-action 'none';
 - 状态栏为中性底色 24px，只放高频状态与开关；品牌绿只用于活动态。
 
 - 左侧工作区可折叠；编辑区可切换 WYSIWYG / 源码 / 双栏。
-- 工作区下方提供大纲面板：Markdown 取标题层级，LaTeX 取 `\section` 等层级；代码格式取类/函数/方法等符号，JSON/YAML/TOML/INI 取嵌套键路径，XML/HTML/SVG 取有结构意义的标签，CSS 取 `@` 规则与选择器，SQL 取 `CREATE`/`ALTER` 对象，Mermaid/PlantUML 取图声明与子图/参与者；点击跳转。面板本身无独立标题行与折叠按钮，折叠通过各分类组头进行。支持格式由 `formats/outline.ts` 的 `OUTLINE_FORMATS` 统一声明，与格式能力位 `capabilities.outline` 保持一致。二进制（PDF/图片）、无结构文本与 MathML 不提供大纲。大纲项标注各语言的具体语法类型（类/结构体/接口/枚举/命名空间/模块/函数/方法/键/节/标签/选择器/`@` 规则/表/视图/子图等），另归入用于选图标的粗分类：除 Markdown/LaTeX 纯标题树（维持文档顺序并保留层级缩进）外，所有格式的大纲都按具体语法类型分组、每个分类项都归入对应分类之下（即便只有一种类型，如 JS/Go 纯函数文件也显示「函数」分类），组间以空白分隔（不用分隔线），组头文字加粗且可展开/折叠（箭头在分类名前，不带图标）、计数为纯数字（无圆环），分组视图顶部提供一条只含分类下拉框的工具栏（参考工作区的文件夹定位）：选中分类后展开并滚动定位到该分类、随后复位占位项，纯标题树不显示；组内子项带「文件轮廓 + 类型英文首字母」图标（类 → C、枚举 → E、函数 → F，由 `icons.tsx` 的 `OutlineSymbolIcon` 渲染），且缩进统一（不按层级），方向键自动跳过折叠项。所有支持大纲的格式在点击大纲项后都把目标置于显示区约 1/3 高度处、便于阅读上下文：源码/分栏模式用 `setCursorAtRatio`（内部用 CodeMirror 官方 `EditorView.scrollIntoView({ y: "start", yMargin })`，margin 由 `ratioMargin` 算成视口高的 1/3；这样目标行不在当前视口、尚未被虚拟滚动渲染时也能先滚动到位再定位，不用 `coordsAtPos` 手动算 scrollTop——后者对未渲染行返回 null 会导致远处目标跳不过去），所见即所得与 Markdown 预览用共享的 `scrollElementToRatio`（`shared/scroll.ts`），预览下无标题 DOM 的格式（SVG/图表/LaTeX 等）切回源码按行号定位；源码跳转 effect 位于编辑器创建/模式切换 reset 之后并限定源码类模式，避免 preview→source 切换的 state 重建清掉刚设置的光标、或切到预览时重放旧跳转抢焦点。
+- 工作区下方提供大纲面板：Markdown 取标题层级，LaTeX 取 `\section` 等层级；代码格式取类/函数/方法等符号，JSON/YAML/TOML/INI 取嵌套键路径，XML/HTML/SVG 取有结构意义的标签，CSS 取 `@` 规则与选择器，SQL 取 `CREATE`/`ALTER` 对象，Mermaid/PlantUML 取图声明与子图/参与者；点击跳转。面板本身无独立标题行与折叠按钮，折叠通过各分类组头进行。支持格式由 `formats/outline.ts` 的 `OUTLINE_FORMATS` 统一声明，与格式能力位 `capabilities.outline` 保持一致。Word（docx）是二进制只读格式中的例外：无源码可解析，大纲由 `render/office/docx-outline.ts` 在 docx-preview 渲染完成后提取。先读包内 `word/styles.xml`，按 `w:outlineLvl`、内建 `Heading N` / 中文「标题 1」「标题一」名称与样式 ID、`w:basedOn` 继承链得到「样式 css class → 层级」；再遍历真实渲染 DOM 的 `<p>`（docx-preview 把段落一律渲染为 `<p>`，样式名转为 `office-docx_<styleId>` class）按展示顺序生成 `OutlineItem` 并打 `data-docx-heading` 序号。语义提取**结果为空**时依次兜底（注意 Word 默认 `styles.xml` 常含 Heading1–9 定义但文档段落一个都没用，不能只看样式表有没有层级就跳过兜底）：段落自身 `w:outlineLvl`（无标题样式，按文本匹配 DOM）、字号/加粗启发式、纯加粗启发式——因为很多真实 Word 文档不用标题样式。启发式同时读两条来源：段落 inline `font-size`，以及 `styles.xml` 的 `w:sz`/`w:szCs`（半点转 pt）与 `w:b`，经 `w:basedOn` 继承链补全后按 `office-docx_<styleId>` class 映射（docx-preview 把自定义样式的字号写进注入的 `<style>`、DOM 上不留 inline 样式，只查 inline 会全漏）。正文基准字号先按段落数取众数、并列时按文本长度加权、每种字号只出现一次时取最小值，避免短文档把大标题误判为正文；比基准大或「更大且加粗且文本短」的段落按字号降序映射层级，最多 6 级。字号也无差异时最后按加粗推断：整段短文本（≤100 字）几乎全加粗视为一级标题，段首连续加粗且带编号前缀（`1.` / `一、` / `(1)` 等，≤30 字）视为二级标题；跳过自动编号列表（`office-docx-num-*` class）与表格单元格（表头常整格加粗）。侧栏点击时用 `scrollElementToRatio` 滚动到对应段落（无源码行号，不显示行号 tooltip），大纲随文档渲染完成回调上报、切换文档即清空。其余二进制格式（PDF/图片/Excel/PowerPoint）、无结构文本与 MathML 不提供大纲。大纲项标注各语言的具体语法类型（类/结构体/接口/枚举/命名空间/模块/函数/方法/键/节/标签/选择器/`@` 规则/表/视图/子图等），另归入用于选图标的粗分类：除 Markdown/LaTeX 纯标题树（维持文档顺序并保留层级缩进）外，所有格式的大纲都按具体语法类型分组、每个分类项都归入对应分类之下（即便只有一种类型，如 JS/Go 纯函数文件也显示「函数」分类），组间以空白分隔（不用分隔线），组头文字加粗且可展开/折叠（箭头在分类名前，不带图标）、计数为纯数字（无圆环），分组视图顶部提供一条只含分类下拉框的工具栏（参考工作区的文件夹定位）：选中分类后展开并滚动定位到该分类、随后复位占位项，纯标题树不显示；组内子项带「文件轮廓 + 类型英文首字母」图标（类 → C、枚举 → E、函数 → F，由 `icons.tsx` 的 `OutlineSymbolIcon` 渲染），且缩进统一（不按层级），方向键自动跳过折叠项。所有支持大纲的格式在点击大纲项后都把目标置于显示区约 1/3 高度处、便于阅读上下文：源码/分栏模式用 `setCursorAtRatio`（内部用 CodeMirror 官方 `EditorView.scrollIntoView({ y: "start", yMargin })`，margin 由 `ratioMargin` 算成视口高的 1/3；这样目标行不在当前视口、尚未被虚拟滚动渲染时也能先滚动到位再定位，不用 `coordsAtPos` 手动算 scrollTop——后者对未渲染行返回 null 会导致远处目标跳不过去），所见即所得与 Markdown 预览用共享的 `scrollElementToRatio`（`shared/scroll.ts`），预览下无标题 DOM 的格式（SVG/图表/LaTeX 等）切回源码按行号定位；源码跳转 effect 位于编辑器创建/模式切换 reset 之后并限定源码类模式，避免 preview→source 切换的 state 重建清掉刚设置的光标、或切到预览时重放旧跳转抢焦点。
 - 支持文档内页内目录 `[标题](#id)`：预览保留原始 HTML（仍经 DOMPurify 消毒）以便 `<a id="…">` 生效，点击后在当前面板平滑滚动并短暂高亮；WYSIWYG 按标题 id 或锚点节点的 raw 属性定位。
 - 文件树与大纲支持上下方向键直接切换：文件树打开上一/下一个文件（目录只移动焦点），大纲跳到上/下一条标题；跳转后焦点保留在侧栏项上，便于连续按键。切换标签时文件树会自动展开当前文件的父目录，并把活动项滚动到文件栏中部（从文件树点开文件时不滚动，避免列表跳动）；手动展开/折叠文件夹不触发定位，视口保持原样。未打开工作区时工作区页只显示提示；工作区 tab 顶部工具栏左侧显示文件夹数量（N=0 时显示「工作区」），右侧提供「打开文件夹」与「刷新全部」。
 - 标签支持拖拽排序、中键关闭、未保存标记圆点；列表溢出时横向滚动，右侧提供左右滚动箭头、「关闭全部」（≥2 个文档时显示，点击先确认，关闭中遇到「取消」即中止剩余）与「全部标签」下拉；下拉列出全部文档（图标、未保存点、名称、当前标记）并带行内关闭按钮，选择或切换文档时活动标签自动滚动进可视区。
@@ -1642,7 +1646,7 @@ AST(parse(s1)) 语义等价于 AST(parse(s2))
 
 - 渲染进程：Vite `build.target = "esnext"`（只面向 Electron Chromium），`sourcemap` 开发开启、发布隐藏。
 - 主进程/预加载：`vite-plugin-electron` 分别构建到 `dist-electron/`。
-- 代码分割：`mathlive`、`pdfjs-dist`、`mermaid`、`@plantuml/core`、Shiki 语法包独立 chunk，按需加载。
+- 代码分割：`mathlive`、`pdfjs-dist`、`mermaid`、`@plantuml/core`、`docx-preview`、`xlsx`、`@jvmr/pptx-to-html`、Shiki 语法包独立 chunk，按需加载。
 - 内置格式随主包编译，无独立构建、无清单；第三方扩展按 `.panda` 包安装到用户数据目录，不参与应用构建。
 - `asar: true`；TeX 引擎随 extraResources 携带当前平台的 Tectonic（`scripts/prepare-tectonic.cjs`）。
 - `npm run package` 前置 `scripts/ensure-electron.cjs`：postinstall 下载失败时会静默跳过，而 electron-builder 缺少 `electron .` 的自动补齐兜底，故打包前检测 `node_modules/electron/dist` 缺失即调 `install.js` 补齐（支持 `ELECTRON_MIRROR` 镜像）。
@@ -2342,6 +2346,9 @@ interface GitSnapshot {
 | mermaid | Mermaid 渲染 | MIT |
 | DOMPurify | HTML/SVG 消毒 | MPL-2.0 OR Apache-2.0 |
 | pdfjs-dist | PDF 预览 | Apache-2.0 |
+| docx-preview | Word 文档预览 | MIT |
+| xlsx（SheetJS） | Excel 工作簿预览 | Apache-2.0 |
+| @jvmr/pptx-to-html | PowerPoint 幻灯片预览 | MIT |
 | Shiki | 代码高亮 | MIT |
 | zod | IPC 校验 | MIT |
 | semver | 扩展 `engines.panda` 版本匹配 | ISC |

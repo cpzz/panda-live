@@ -64,6 +64,32 @@ const ICONS = {
       <path d="M14.5 15.5 17 18l2.5-2.5" />
     </>
   ),
+  /** Word 文档：文件轮廓 + 字母 W */
+  "file-word": (
+    <>
+      <path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" />
+      <path d="M14 2v5a1 1 0 0 0 1 1h5" />
+      <path d="M8 12l1.3 6 1.7-3.4L12.7 18 14 12" />
+    </>
+  ),
+  /** Excel 表格：文件轮廓 + 字母 X */
+  "file-excel": (
+    <>
+      <path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" />
+      <path d="M14 2v5a1 1 0 0 0 1 1h5" />
+      <path d="M9 12l6 6" />
+      <path d="M15 12l-6 6" />
+    </>
+  ),
+  /** PowerPoint 演示：文件轮廓 + 演示屏与播放三角 */
+  "file-pptx": (
+    <>
+      <path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" />
+      <path d="M14 2v5a1 1 0 0 0 1 1h5" />
+      <path d="M7.5 12h9v5.5h-9z" />
+      <path d="M11 13.6v2.3l2-1.15z" />
+    </>
+  ),
   /** HTML 文档：文件轮廓 + 尖括号与斜线 */
   "file-html": (
     <>
@@ -377,11 +403,17 @@ const TEXT_FILE_EXT = /\.(md|markdown|mdown|mkd|qmd|rmd|mdx|myst|mst|adoc|txt)$/
 const CODE_FILE_EXT = /\.(tex|latex|mml|mathml)$/i;
 const DIAGRAM_FILE_EXT = /\.(puml|plantuml|mmd|mermaid)$/i;
 const PDF_FILE_EXT = /\.pdf$/i;
+const WORD_FILE_EXT = /\.(docx|docm|dotx|dotm|doc)$/i;
+const EXCEL_FILE_EXT = /\.(xlsx|xlsm|xlsb|xls)$/i;
+const PPTX_FILE_EXT = /\.(pptx|pptm|potx|potm|ppt)$/i;
 
 /** 按文件扩展名挑选标签页/文件树使用的文档图标。 */
 export function fileIconForPath(filePath: string | null | undefined): IconName {
   if (!filePath) return "file";
   if (PDF_FILE_EXT.test(filePath)) return "file-pdf";
+  if (WORD_FILE_EXT.test(filePath)) return "file-word";
+  if (EXCEL_FILE_EXT.test(filePath)) return "file-excel";
+  if (PPTX_FILE_EXT.test(filePath)) return "file-pptx";
   if (DIAGRAM_FILE_EXT.test(filePath)) return "diagram";
   if (CODE_FILE_EXT.test(filePath)) return "file-code";
   if (TEXT_FILE_EXT.test(filePath)) return "file-text";

@@ -30,6 +30,10 @@ const BUILTIN_CAPABILITIES: Record<BuiltinDocumentFormat, FormatCapabilities> = 
   pdf: { source: false, wysiwyg: false, preview: "none", outline: false, exportHtml: false },
   // 图片：二进制只读，不支持源码编辑
   image: { source: false, wysiwyg: false, preview: "none", outline: false, exportHtml: false },
+  // Office（Word/Excel/PowerPoint）：二进制只读，渲染为 HTML 预览
+  docx: { source: false, wysiwyg: false, preview: "none", outline: false, exportHtml: false },
+  xlsx: { source: false, wysiwyg: false, preview: "none", outline: false, exportHtml: false },
+  pptx: { source: false, wysiwyg: false, preview: "none", outline: false, exportHtml: false },
   // SVG：文本格式，源码为 XML 编辑，预览在 img 中隔离渲染
   svg: { source: true, wysiwyg: false, preview: "inline", outline: true, exportHtml: false },
   text: { source: true, wysiwyg: false, preview: "none", outline: false, exportHtml: false },
@@ -70,6 +74,9 @@ const BUILTIN_EXTENSIONS: Record<BuiltinDocumentFormat, string[]> = {
   mermaid: [".mmd", ".mermaid"],
   pdf: [".pdf"],
   image: [".png", ".jpg", ".jpeg", ".jfif", ".gif", ".webp", ".bmp", ".ico", ".avif", ".apng"],
+  docx: [".docx", ".docm", ".dotx", ".dotm", ".doc"],
+  xlsx: [".xlsx", ".xlsm", ".xlsb", ".xls"],
+  pptx: [".pptx", ".pptm", ".potx", ".potm", ".ppt"],
   svg: [".svg"],
   text: [],
   cpp: [".c", ".h", ".cc", ".cpp", ".cxx", ".hh", ".hpp", ".hxx", ".ino"],
@@ -109,6 +116,9 @@ const BUILTIN_SYNTAX: Record<BuiltinDocumentFormat, LanguageSyntax> = {
   mermaid: "plain",
   pdf: "plain",
   image: "plain",
+  docx: "plain",
+  xlsx: "plain",
+  pptx: "plain",
   svg: "xml",
   text: "plain",
   cpp: "cpp",

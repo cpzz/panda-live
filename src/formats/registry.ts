@@ -6,6 +6,9 @@ export type BuiltinDocumentFormat =
   | "mermaid"
   | "pdf"
   | "image"
+  | "docx"
+  | "xlsx"
+  | "pptx"
   | "svg"
   | "text"
   | "cpp"
@@ -67,6 +70,21 @@ const EXTENSION_MAP: Record<string, BuiltinDocumentFormat> = {
   ico: "image",
   avif: "image",
   apng: "image",
+  // Microsoft Office（OOXML zip）：二进制只读预览，渲染为 HTML
+  docx: "docx",
+  docm: "docx",
+  dotx: "docx",
+  dotm: "docx",
+  doc: "docx", // 旧版二进制（OLE2）：渲染层检出非 zip 后提示另存为 .docx
+  xlsx: "xlsx",
+  xlsm: "xlsx",
+  xlsb: "xlsx",
+  xls: "xlsx", // 旧版 BIFF：SheetJS 同样可读
+  pptx: "pptx",
+  pptm: "pptx",
+  potx: "pptx",
+  potm: "pptx",
+  ppt: "pptx", // 旧版二进制（OLE2）：渲染层检出非 zip 后提示另存为 .pptx
   // SVG：文本格式，源码可编辑，预览经消毒后渲染
   svg: "svg",
   // 主流代码格式
@@ -161,6 +179,21 @@ export const PREVIEW_FORMATS: ReadonlySet<string> = new Set([
   "svg",
   "html",
 ]);
+
+/** 二进制只读格式：不读文本内容，以专用只读预览面板展示，禁止保存/另存为。
+ * 打开、模式切换、保存拦截、外部变更提示等处统一用 isBinaryFormat 判定。 */
+export const BINARY_FORMATS: ReadonlySet<string> = new Set([
+  "pdf",
+  "image",
+  "docx",
+  "xlsx",
+  "pptx",
+]);
+
+/** 格式是否二进制只读（PDF/图片/Office）。 */
+export function isBinaryFormat(formatId: string | undefined | null): boolean {
+  return formatId !== undefined && formatId !== null && BINARY_FORMATS.has(formatId);
+}
 
 /** 纯代码格式：只有源码编辑、没有渲染预览，但提供符号大纲（见 formats/outline.ts）。
  * HTML 不在此列——它是文本格式并提供 sandbox 渲染预览。 */

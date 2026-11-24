@@ -101,7 +101,7 @@ export function OutlinePanel({
             ? { paddingLeft: `${8 + Math.min(4, item.level - baseLevel) * 12}px` }
             : undefined
         }
-        title={t("第 {0} 行", item.line)}
+        title={item.line > 0 ? t("第 {0} 行", item.line) : undefined}
         onClick={(event) => {
           const button = event.currentTarget;
           onSelect(item);

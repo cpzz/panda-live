@@ -3,6 +3,7 @@ import type { EditorState } from "@codemirror/state";
 import { renderMarkdownToHtml } from "../formats/markdown/preview";
 import { parseMarkdown } from "../formats/markdown/parse";
 import { buildOutline, formatSupportsOutline, type OutlineItem } from "../formats/outline";
+import { isBinaryFormat } from "../formats/registry";
 import { EMPTY_PROBLEMS, problemStore, type Problem } from "../services/problem-store";
 import { mathOptionsSignature } from "../services/math-settings";
 import { formatHasPreview, getFormatEntry, refreshExtensionFormats } from "../extensions/registry";
@@ -54,6 +55,7 @@ import { scrollElementToRatio } from "../shared/scroll";
 import { Icon, PandaMark, fileIconForPath, type IconName } from "./icons";
 import { OutlinePanel } from "./OutlinePanel";
 import { PdfPreview, PdfDocumentPreview } from "./PdfPreview";
+import { OfficeDocumentPreview } from "./OfficePreview";
 import {
   DiagramZoomToolbar,
   DiagramViewerDialog,
@@ -1327,8 +1329,7 @@ export function App() {
     const activeDoc = manager.getState().documents.find((doc) => doc.id === state.activeId);
     if (
       !activeDoc ||
-      activeDoc.format === "pdf" ||
-      activeDoc.format === "image" ||
+      isBinaryFormat(activeDoc.format) ||
       ((state.mode === "wysiwyg" || state.mode === "preview") && activeDoc.format !== "markdown")
     ) {
       searchActiveRef.current = false;
@@ -1412,6 +1413,8 @@ export function App() {
   const exportWrapRef = useRef<HTMLDivElement>(null);
   const problemsState = useSyncExternalStore(problemStore.subscribe, problemStore.getState);
   const [outline, setOutline] = useState<OutlineItem[]>([]);
+  /** Word 是二进制只读文档，大纲由 docx 渲染完成后回调上报（无源码可解析）。 */
+  const [officeOutline, setOfficeOutline] = useState<OutlineItem[]>([]);
   const [sourceJump, setSourceJump] = useState<{
     line: number;
     column: number;
@@ -1439,7 +1442,10 @@ export function App() {
   const activeIsPdf = active?.format === "pdf";
   // 图片同理：二进制只读，由专用图片面板展示。
   const activeIsImage = active?.format === "image";
-  const activeIsBinary = activeIsPdf || activeIsImage;
+  // Office 同理：二进制只读，由专用 Office 面板渲染 HTML 预览。
+  const activeIsOffice =
+    active?.format === "docx" || active?.format === "xlsx" || active?.format === "pptx";
+  const activeIsBinary = active ? isBinaryFormat(active.format) : false;
   const activeRef = useRef(active);
   activeRef.current = active;
   const settingsRef = useRef(settings);
@@ -1518,7 +1524,7 @@ export function App() {
       const doc = current.documents.find((item) => item.id === current.activeId);
       if (!doc || !doc.path || pathKey(doc.path) !== pathKey(filePath)) return;
       updateDiffOption(doc.id, { base: "head", ref: "", target, paneMode: "baseline" });
-      if (doc.format !== "pdf" && doc.format !== "image") {
+      if (!isBinaryFormat(doc.format)) {
         if (current.mode !== "git") modeBeforeGitRef.current = current.mode;
         manager.setMode("git");
       }
@@ -1533,7 +1539,7 @@ export function App() {
       const doc = current.documents.find((item) => item.id === current.activeId);
       if (!doc || !doc.path || pathKey(doc.path) !== pathKey(filePath)) return;
       updateDiffOption(doc.id, { paneMode: "refs", refA: `${shortHash}^`, refB: shortHash });
-      if (doc.format !== "pdf" && doc.format !== "image") {
+      if (!isBinaryFormat(doc.format)) {
         if (current.mode !== "git") modeBeforeGitRef.current = current.mode;
         manager.setMode("git");
       }
@@ -1555,7 +1561,7 @@ export function App() {
           target: "worktree",
         });
       }
-      if (doc.format !== "pdf" && doc.format !== "image") {
+      if (!isBinaryFormat(doc.format)) {
         if (current.mode !== "git") modeBeforeGitRef.current = current.mode;
         manager.setMode("git");
       }
@@ -1573,7 +1579,7 @@ export function App() {
         ref: "",
         target: "worktree",
       });
-      if (doc.format !== "pdf" && doc.format !== "image") {
+      if (!isBinaryFormat(doc.format)) {
         if (current.mode !== "git") modeBeforeGitRef.current = current.mode;
         manager.setMode("git");
       }
@@ -1583,7 +1589,7 @@ export function App() {
   const enterGitView = (): void => {
     const current = manager.getState();
     const doc = current.documents.find((item) => item.id === current.activeId);
-    if (!doc || doc.format === "pdf" || doc.format === "image") return;
+    if (!doc || isBinaryFormat(doc.format)) return;
     if (current.mode !== "git") modeBeforeGitRef.current = current.mode;
     manager.setMode("git");
   };
@@ -1784,6 +1790,11 @@ export function App() {
     };
   }, [activeId, activeContent, activeFormat]);
 
+  // 切换文档立即清空 Word 大纲，避免渲染完成前显示上一份文档的标题。
+  useEffect(() => {
+    setOfficeOutline([]);
+  }, [activeId]);
+
   const problems = activeId ? (problemsState.byDocument[activeId] ?? EMPTY_PROBLEMS) : EMPTY_PROBLEMS;
   const errorCount = problems.filter((problem) => problem.severity === "error").length;
   const warningCount = problems.filter((problem) => problem.severity === "warning").length;
@@ -1824,6 +1835,14 @@ export function App() {
   const jumpToOutline = (item: OutlineItem): void => {
     jumpTokenRef.current += 1;
     const token = jumpTokenRef.current;
+    // Word：二进制只读无源码行号，按渲染时标记的 data-docx-heading 序号定位。
+    if (activeFormat === "docx") {
+      const heading = document.querySelector<HTMLElement>(
+        `.pane.office-pane [data-docx-heading="${item.index}"]`,
+      );
+      if (heading) scrollElementToRatio(heading, 1 / 3);
+      return;
+    }
     if (state.mode === "wysiwyg") {
       setWysiwygJump({ index: item.index, token });
       return;
@@ -2411,7 +2430,12 @@ export function App() {
                 void manager.removeDocumentByPath(filePath);
               }}
               onNotice={(kind, message) => manager.showNotice(kind, message)}
-              outline={<OutlinePanel items={outline} onSelect={jumpToOutline} />}
+              outline={
+                <OutlinePanel
+                  items={activeFormat === "docx" ? officeOutline : outline}
+                  onSelect={jumpToOutline}
+                />
+              }
               sourceControl={
                 <GitPanel
                   store={git}
@@ -3124,6 +3148,20 @@ export function App() {
             >
               {activeIsImage ? <ImagePreviewPane document={active} /> : null}
             </section>
+            <section
+              className="pane office-pane"
+              hidden={!activeIsOffice}
+              aria-label={t("Office 预览")}
+            >
+              {activeIsOffice && active?.path && (
+                <OfficeDocumentPreview
+                  path={active.path}
+                  mtimeMs={active.mtimeMs}
+                  format={active.format as "docx" | "xlsx" | "pptx"}
+                  onOutline={setOfficeOutline}
+                />
+              )}
+            </section>
           </main>
           </div>
         ) : (
@@ -3236,15 +3274,21 @@ export function App() {
               ? `PDF · ${formatSize(active.size)} · ${t("只读")}`
               : active.format === "image"
                 ? `${t("图片")} · ${formatSize(active.size)} · ${t("只读")}`
-                : [
-                    t(ENCODING_LABELS[active.encoding] ?? active.encoding),
-                    active.eol.toUpperCase(),
-                    active.bom ? "BOM" : "",
-                    active.readOnly ? t("只读") : "",
-                    active.format,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")}
+                : active.format === "docx"
+                  ? `Word · ${formatSize(active.size)} · ${t("只读")}`
+                  : active.format === "xlsx"
+                    ? `Excel · ${formatSize(active.size)} · ${t("只读")}`
+                    : active.format === "pptx"
+                      ? `PowerPoint · ${formatSize(active.size)} · ${t("只读")}`
+                      : [
+                          t(ENCODING_LABELS[active.encoding] ?? active.encoding),
+                          active.eol.toUpperCase(),
+                          active.bom ? "BOM" : "",
+                          active.readOnly ? t("只读") : "",
+                          active.format,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
           </span>
         )}
         <span className="statusbar-spacer" />
