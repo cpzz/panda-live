@@ -100,7 +100,8 @@
 :root[data-theme="dark"] {
   --bg: #1e1e1e;
   --chrome-bg: #252526;
-  --toolbar-bg: #2d2d2d;
+  /* 与 electron/main.ts titlebarOverlayColors() 的深色 color 一致，避免顶栏与系统标题栏出现色差 */
+  --toolbar-bg: #252526;
   --sidebar-bg: #252526;
   --tab-bg: #252526;
   --surface: #1e1e1e;

@@ -510,6 +510,10 @@ export const ipcRequestSchemas = {
   "latex:compile": z.object({ jobId: z.string().min(1), rootPath: z.string().min(1) }),
   "app:pendingOpenPaths": z.undefined(),
   "app:getInfo": z.undefined(),
+  "app:setTitleBarColor": z.object({
+    /** CSS 计算出的工具栏背景色，如 #252526；主进程据此设置系统标题栏。 */
+    color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+  }),
 } as const;
 
 export type IpcChannel = keyof typeof ipcRequestSchemas;
@@ -585,6 +589,7 @@ export interface IpcResponseMap {
   "latex:compile": CompileResult;
   "app:pendingOpenPaths": string[];
   "app:getInfo": AppInfo;
+  "app:setTitleBarColor": void;
 }
 
 /** `window.panda`：渲染进程可访问的全部平台能力。 */
@@ -696,6 +701,8 @@ export interface PandaApi {
     getInfo(): Promise<AppInfo>;
     /** 启动参数或文件关联带来的待打开路径；取走即清空。 */
     pendingOpenPaths(): Promise<string[]>;
+    /** 把 CSS 中的工具栏颜色同步给系统标题栏，消除深浅主题下的色差。 */
+    setTitleBarColor(request: { color: string }): Promise<void>;
   };
   export: {
     pdf(request: PdfExportRequest): Promise<PdfExportResult>;

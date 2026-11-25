@@ -9,6 +9,7 @@ export class SettingsStore {
   private readonly listeners = new Set<() => void>();
   private loaded = false;
   private systemDarkQuery: MediaQueryList | null = null;
+  private lastSyncedTitlebarColor: string | null = null;
   private readonly onSystemThemeChange = (): void => {
     if (this.state.appearance.theme === "system") this.apply();
   };
@@ -68,6 +69,23 @@ export class SettingsStore {
     root.style.setProperty("--editor-font-size", `${fontSize}px`);
     root.style.setProperty("--prose-font-size", `${fontSize}px`);
     root.style.setProperty("--cm-tab-size", String(this.state.editor.tabSize));
+    this.syncTitleBarColor(root);
+  }
+
+  /**
+   * 主题颜色单一源在 base.css。这里读取工具栏的实际计算色推送给主进程，
+   * 让 Windows 系统标题栏与自绘工具栏同色；同一颜色只推送一次。
+   */
+  private syncTitleBarColor(root: HTMLElement): void {
+    const color = getComputedStyle(root).getPropertyValue("--toolbar-bg").trim();
+    if (!color || color === this.lastSyncedTitlebarColor) return;
+    const setTitleBarColor = window.panda?.app?.setTitleBarColor;
+    // 主进程不支持该通道（旧版 preload / 测试桩）时跳过，不影响渲染。
+    if (typeof setTitleBarColor !== "function") return;
+    this.lastSyncedTitlebarColor = color;
+    void Promise.resolve(setTitleBarColor.call(window.panda.app, { color })).catch(() => {
+      this.lastSyncedTitlebarColor = null;
+    });
   }
 
   private emit(): void {

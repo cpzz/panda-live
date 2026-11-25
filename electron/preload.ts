@@ -103,6 +103,7 @@ const api: PandaApi = {
   app: {
     getInfo: () => invoke("app:getInfo", undefined),
     pendingOpenPaths: () => invoke("app:pendingOpenPaths", undefined),
+    setTitleBarColor: (request) => invoke("app:setTitleBarColor", request),
   },
   export: {
     pdf: (request) => invoke("export:pdf", request),

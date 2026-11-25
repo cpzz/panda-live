@@ -129,15 +129,20 @@ function applyLanguage(settingsValue: Settings): void {
 }
 
 /**
- * 标题栏系统按钮（titleBarOverlay）配色：跟随应用主题（显式或系统）。
- * macOS 使用 hiddenInset，无需 overlay 配色。
+ * 标题栏系统按钮（titleBarOverlay）配色。
+ * 背景色以渲染进程推送的 CSS `--toolbar-bg` 为准（主题颜色单一源在 base.css）；
+ * 推送到达前用与 CSS 初值一致的 fallback，避免首帧色差。macOS 用 hiddenInset，无需 overlay。
  */
+let syncedTitlebarColor: string | null = null;
+
 function titlebarOverlayColors(): { color: string; symbolColor: string; height: number } {
   const theme = settings?.get().appearance.theme;
   const dark = theme === "dark" || (theme !== "light" && nativeTheme.shouldUseDarkColors);
-  return dark
-    ? { color: "#252526", symbolColor: "#d4d4d4", height: 40 }
-    : { color: "#f8f8f8", symbolColor: "#24292f", height: 40 };
+  return {
+    color: syncedTitlebarColor ?? (dark ? "#252526" : "#f8f8f8"),
+    symbolColor: dark ? "#d4d4d4" : "#24292f",
+    height: 40,
+  };
 }
 
 function applyTitlebarOverlay(): void {
@@ -256,6 +261,11 @@ async function bootstrap(): Promise<void> {
     ],
   );
   registerAppHandlers();
+  // 渲染进程把 CSS 中的 --toolbar-bg 推送过来，作为系统标题栏背景色的唯一来源。
+  handle("app:setTitleBarColor", ({ color }) => {
+    syncedTitlebarColor = color;
+    applyTitlebarOverlay();
+  });
   registerFileHandlers({ files, getWindow: () => mainWindow });
   registerWorkspaceHandlers({ files, workspaces: workspaceService, getWindow: () => mainWindow });
   registerGitHandlers({ files, git: new GitService(), settings });
