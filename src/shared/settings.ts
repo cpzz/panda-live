@@ -8,8 +8,8 @@ export type SaveEol = "preserve" | "lf" | "crlf";
 /** 界面语言：中文、英文，或跟随系统。 */
 export type LanguagePreference = "system" | "zh" | "en";
 
-/** 拉取策略：遵循 Git 配置，或由应用覆盖为 merge / rebase / ff-only。 */
-export type GitPullStrategy = "config" | "merge" | "rebase" | "ff-only";
+/** 拉取策略：遵循 Git 配置（git pull），或改用变基（git pull --rebase）。 */
+export type GitPullStrategy = "config" | "rebase";
 
 /** 仓库状态自动刷新时机；`60s` / `300s` 仍在窗口聚焦时刷新。 */
 export type GitAutoRefresh = "off" | "focus" | "60s" | "300s";
@@ -68,7 +68,10 @@ export interface Settings {
      * 见 doc/design.md §21.3。
      */
     command: string;
-    /** 拉取策略；`config` 表示遵循用户 Git 配置。 */
+    /**
+     * 默认拉取方式，决定拉取确认窗口里「拉取方式」的初值（窗口内可改，不改设置）。
+     * `config` 执行裸 `git pull`（遵循用户 Git 配置），`rebase` 执行 `git pull --rebase`。
+     */
     pullStrategy: GitPullStrategy;
     /** 获取时是否清理远程已删除的分支（`fetch --prune`）。 */
     fetchPrune: boolean;
@@ -78,8 +81,6 @@ export interface Settings {
     autoRefresh: GitAutoRefresh;
     /** 提交历史每页条数。 */
     historyPageSize: number;
-    /** 分支没有上游时，推送自动设置上游而不询问。 */
-    autoSetUpstream: boolean;
   };
   privacy: {
     logLevel: "error" | "warn" | "info" | "debug";
@@ -110,12 +111,11 @@ export const DEFAULT_SETTINGS: Settings = {
   diff: { defaultOn: false, defaultBase: "head" },
   git: {
     command: "git",
-    pullStrategy: "config",
+    pullStrategy: "rebase",
     fetchPrune: true,
     networkTimeoutSeconds: 120,
     autoRefresh: "focus",
     historyPageSize: 50,
-    autoSetUpstream: false,
   },
   privacy: { logLevel: "info" },
 };
@@ -243,7 +243,7 @@ export function mergeSettings(raw: unknown): Settings {
           : DEFAULT_SETTINGS.git.command,
       pullStrategy: pickEnum(
         git.pullStrategy,
-        ["config", "merge", "rebase", "ff-only"] as const,
+        ["config", "rebase"] as const,
         DEFAULT_SETTINGS.git.pullStrategy,
       ),
       fetchPrune:
@@ -264,10 +264,6 @@ export function mergeSettings(raw: unknown): Settings {
         git.historyPageSize === 100 || git.historyPageSize === 200
           ? git.historyPageSize
           : DEFAULT_SETTINGS.git.historyPageSize,
-      autoSetUpstream:
-        typeof git.autoSetUpstream === "boolean"
-          ? git.autoSetUpstream
-          : DEFAULT_SETTINGS.git.autoSetUpstream,
     },
     privacy: {
       ...privacy,

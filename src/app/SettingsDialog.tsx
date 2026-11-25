@@ -376,13 +376,14 @@ export function SettingsDialog({
                     onChange={(event) => patch("git", { pullStrategy: event.target.value })}
                   >
                     <option value="config">{t("遵循 Git 配置")}</option>
-                    <option value="merge">{t("合并（merge）")}</option>
-                    <option value="rebase">{t("变基（rebase）")}</option>
-                    <option value="ff-only">{t("仅快进（ff-only）")}</option>
+                    <option value="rebase">{t("变基")}</option>
                   </select>
                 </label>
                 <p className="settings-note">
-                  {t("「合并 / 变基 / 仅快进」会覆盖 Git 配置中的 pull 策略。")}
+                  {t("拉取确认窗口默认按此方式执行，也可在窗口内临时更改。变基方式执行")}{" "}
+                  <code>git pull --rebase</code>
+                  {t("，遵循 Git 配置则执行")} <code>git pull</code>
+                  {t("，不会附加任何参数。")}
                 </p>
                 <label className="settings-row">
                   <span>{t("获取时清理已删除的远程分支")}</span>
@@ -433,15 +434,6 @@ export function SettingsDialog({
                     <option value="200">200</option>
                   </select>
                 </label>
-                <label className="settings-row">
-                  <span>{t("无上游分支时自动推送并设置上游")}</span>
-                  <input
-                    type="checkbox"
-                    checked={draft.git.autoSetUpstream}
-                    onChange={(event) => patch("git", { autoSetUpstream: event.target.checked })}
-                  />
-                </label>
-                <p className="settings-note">{t("可在状态栏随时开关；非 Git 仓库自动改用「上次保存」对比。")}</p>
               </>
             )}
 

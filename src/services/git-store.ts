@@ -1,5 +1,6 @@
 import { describeError } from "../shared/errors";
 import type { GitBranch, GitCommit, GitCommitDetail, GitSnapshot } from "../shared/git";
+import type { GitPullStrategy } from "../shared/settings";
 import { pathKey } from "../utils/paths";
 
 export interface GitStoreState {
@@ -208,13 +209,37 @@ export class GitStore {
     await this.operate("获取", async (root) => window.panda.git.fetch({ root }));
   }
 
-  async pull(): Promise<void> {
-    await this.operate("拉取", async (root) => window.panda.git.pull({ root }));
+  async pull(strategy?: GitPullStrategy): Promise<void> {
+    await this.operate(
+      "拉取",
+      async (root) => window.panda.git.pull({ root, strategy }),
+      { inlineError: false },
+    );
   }
 
-  async push(setUpstream = false): Promise<void> {
-    await this.operate("推送", async (root) =>
-      window.panda.git.push({ root, setUpstream }),
+  async push(setUpstream = false, force = false): Promise<void> {
+    await this.operate(
+      "推送",
+      async (root) => window.panda.git.push({ root, setUpstream, force }),
+      { inlineError: false },
+    );
+  }
+
+  /** 配置远程地址；失败交给调用方（设置远程地址对话框就地显示，不留面板常驻错误）。 */
+  async addRemote(name: string, url: string): Promise<void> {
+    await this.operate(
+      "设置远程地址",
+      async (root) => window.panda.git.addRemote({ root, name, url }),
+      { inlineError: false },
+    );
+  }
+
+  /** 修改已有远程的地址；同样把失败交给调用方就地显示。 */
+  async setRemoteUrl(name: string, url: string): Promise<void> {
+    await this.operate(
+      "设置远程地址",
+      async (root) => window.panda.git.setRemoteUrl({ root, name, url }),
+      { inlineError: false },
     );
   }
 
@@ -264,6 +289,7 @@ export class GitStore {
   private async operate(
     label: string,
     action: (root: string) => Promise<GitSnapshot>,
+    options: { inlineError?: boolean } = {},
   ): Promise<void> {
     const root = this.root;
     if (!root || this.state.busy) return;
@@ -293,7 +319,12 @@ export class GitStore {
     } catch (error) {
       if (this.root !== root) return;
       this.refreshToken += 1;
-      this.patch({ loading: false, busy: null, error: describeError(error) });
+      this.patch({
+        loading: false,
+        busy: null,
+        // 同步类操作（拉取/推送）把失败交给通知气泡，不在面板里留常驻错误。
+        ...(options.inlineError === false ? {} : { error: describeError(error) }),
+      });
       throw error;
     }
   }

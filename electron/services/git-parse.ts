@@ -4,6 +4,7 @@ import type {
   GitChangeKind,
   GitCommit,
   GitCompareStatus,
+  GitRemote,
 } from "../../src/shared/git";
 
 export interface ParsedStatus {
@@ -239,4 +240,22 @@ export function parseDiffNumstat(output: string): Map<string, ParsedDiffStat> {
     });
   }
   return stats;
+}
+
+/**
+ * 解析 `git remote -v`：每个 remote 两行（fetch / push），名称与地址之间是制表符。
+ * 地址本身可能含空格，所以只按首个制表符切分；同名只保留一条，优先 fetch 地址。
+ */
+export function parseGitRemoteList(output: string): GitRemote[] {
+  const found = new Map<string, GitRemote>();
+  for (const line of output.split(/\r?\n/u)) {
+    const match = /^(.*?)\t(.*) \((fetch|push)\)$/u.exec(line);
+    if (!match) continue;
+    const [, name, url, kind] = match;
+    if (!name || !url) continue;
+    if (kind === "fetch" || !found.has(name)) {
+      found.set(name, { name, url });
+    }
+  }
+  return [...found.values()];
 }

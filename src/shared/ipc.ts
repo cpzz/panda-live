@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { GitDiffRequest, GitDiffResult } from "./diff";
+import { REMOTE_NAME_PATTERN } from "./git";
 import type {
   GitBranch,
   GitCommit,
@@ -9,7 +10,7 @@ import type {
 } from "./git";
 import type { PandaErrorPayload } from "./errors";
 import type { MenuCommand } from "./menu";
-import type { Settings } from "./settings";
+import type { GitPullStrategy, Settings } from "./settings";
 import type {
   ExtensionFormatInfo,
   ExtensionInfo,
@@ -477,8 +478,34 @@ export const ipcRequestSchemas = {
   }),
   "git:deleteBranch": z.object({ root: z.string().min(1), branch: z.string().min(1).max(255) }),
   "git:fetch": z.object({ root: z.string().min(1) }),
-  "git:pull": z.object({ root: z.string().min(1) }),
-  "git:push": z.object({ root: z.string().min(1), setUpstream: z.boolean() }),
+  "git:pull": z.object({
+    root: z.string().min(1),
+    /** 本次拉取是否改用变基：省略或 config 表示普通 git pull，rebase 表示 git pull --rebase。 */
+    strategy: z.enum(["config", "rebase"]).optional(),
+  }),
+  "git:push": z.object({
+    root: z.string().min(1),
+    setUpstream: z.boolean(),
+    /** 强制推送（--force）：用本地分支覆盖远端分支。 */
+    force: z.boolean().optional(),
+  }),
+  "git:addRemote": z.object({
+    root: z.string().min(1),
+    /** 远程名：Git 允许的字符集，且不能以连字符开头（避免被当成选项）。 */
+    name: z
+      .string()
+      .trim()
+      .min(1)
+      .max(64)
+      .regex(REMOTE_NAME_PATTERN, "远程名只能包含字母、数字、点、下划线与连字符"),
+    url: z.string().trim().min(1).max(2048),
+  }),
+  "git:setRemoteUrl": z.object({
+    root: z.string().min(1),
+    /** 已存在的远程名，界面上只能从列表里选，不重新校验字符集。 */
+    name: z.string().trim().min(1).max(64),
+    url: z.string().trim().min(1).max(2048),
+  }),
   "git:log": z.object({
     root: z.string().min(1),
     limit: z.number().int().min(1).max(200),
@@ -576,6 +603,8 @@ export interface IpcResponseMap {
   "git:fetch": GitSnapshot;
   "git:pull": GitSnapshot;
   "git:push": GitSnapshot;
+  "git:addRemote": GitSnapshot;
+  "git:setRemoteUrl": GitSnapshot;
   "git:log": GitCommit[];
   "git:commitDetail": GitCommitDetail;
   "git:fileLog": GitCommit[];
@@ -636,8 +665,10 @@ export interface PandaApi {
     checkout(request: { root: string; branch: string; create: boolean }): Promise<GitSnapshot>;
     deleteBranch(request: { root: string; branch: string }): Promise<GitSnapshot>;
     fetch(request: { root: string }): Promise<GitSnapshot>;
-    pull(request: { root: string }): Promise<GitSnapshot>;
-    push(request: { root: string; setUpstream: boolean }): Promise<GitSnapshot>;
+    pull(request: { root: string; strategy?: GitPullStrategy }): Promise<GitSnapshot>;
+    push(request: { root: string; setUpstream: boolean; force?: boolean }): Promise<GitSnapshot>;
+    addRemote(request: { root: string; name: string; url: string }): Promise<GitSnapshot>;
+    setRemoteUrl(request: { root: string; name: string; url: string }): Promise<GitSnapshot>;
     log(request: { root: string; limit: number; skip?: number }): Promise<GitCommit[]>;
     commitDetail(request: { root: string; hash: string }): Promise<GitCommitDetail>;
     fileLog(request: { path: string; limit: number; skip?: number }): Promise<GitCommit[]>;

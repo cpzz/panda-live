@@ -5,14 +5,15 @@ import { PandaError } from "../../src/shared/errors";
 import { t } from "../../src/i18n";
 import type { GitBaselineReason, GitDiffBase, GitDiffResult } from "../../src/shared/diff";
 import type { GitPullStrategy } from "../../src/shared/settings";
-import type {
-  GitBranch,
-  GitCommit,
-  GitCommitDetail,
-  GitCompareFile,
-  GitCompareResult,
-  GitOperation,
-  GitSnapshot,
+import {
+  pickRemote,
+  type GitBranch,
+  type GitCommit,
+  type GitCommitDetail,
+  type GitCompareFile,
+  type GitCompareResult,
+  type GitOperation,
+  type GitSnapshot,
 } from "../../src/shared/git";
 import {
   parseCommitFiles,
@@ -20,6 +21,7 @@ import {
   parseDiffNumstat,
   parseGitBranches,
   parseGitLog,
+  parseGitRemoteList,
   parseGitStatus,
 } from "./git-parse";
 
@@ -176,6 +178,30 @@ function errorText(error: unknown): string {
   return parts.toLowerCase();
 }
 
+/**
+ * 远程配置失败的常见原因本地化：重名、非法名称、远程已不存在。
+ * 认证、网络、权限等其余错误保留原始 stderr，用户排查时需要原文。
+ */
+function remoteConfigError(error: unknown, name: string): unknown {
+  const text = errorText(error);
+  if (text.includes("already exists")) {
+    return new PandaError(
+      "E_GIT_OPERATION",
+      t("已存在名为 {0} 的远程，请直接选中它修改地址。", name),
+    );
+  }
+  if (text.includes("is not a valid remote name")) {
+    return new PandaError("E_GIT_OPERATION", t("远程名只能包含字母、数字、点、下划线与连字符。"));
+  }
+  if (text.includes("no such remote")) {
+    return new PandaError(
+      "E_GIT_OPERATION",
+      t("远程 {0} 不存在，可能已被外部删除，请刷新后重试。", name),
+    );
+  }
+  return error;
+}
+
 /** 非仓库结果只缓存一段时间，`git init` 后无需重启即可恢复。 */
 const NEGATIVE_CACHE_MS = 5_000;
 
@@ -207,20 +233,25 @@ export class GitService {
         upstream: null,
         ahead: 0,
         behind: 0,
+        remotes: [],
         operation: null,
         changes: [],
       };
     }
-    const [status, gitDir] = await Promise.all([
+    const [status, gitDir, remoteList] = await Promise.all([
       runGit(["status", "--porcelain=v2", "--branch", "-z", "--untracked-files=normal"], root, command, {
         timeout: GIT_STATUS_TIMEOUT_MS,
       }),
       runGit(["rev-parse", "--absolute-git-dir"], root, command),
+      // -v 才能拿到地址：界面改地址时要回填当前值，不必再多开一次 IPC。
+      runGit(["remote", "-v"], root, command, { timeout: GIT_STATUS_TIMEOUT_MS }),
     ]);
     return {
       inRepo: true,
       root,
       ...parseGitStatus(status.stdout),
+      // 只读本地配置，随状态一起刷新；界面据此判断能否 fetch / pull / push。
+      remotes: parseGitRemoteList(remoteList.stdout),
       operation: await detectOperation(gitDir.stdout.trim()),
     };
   }
@@ -355,21 +386,15 @@ export class GitService {
     return this.snapshot(root, commandLine);
   }
 
-  /** `config` 遵循用户 Git 配置；其余策略追加明确参数覆盖。 */
+  /** `config` 执行裸 `git pull` 遵循用户 Git 配置；`rebase` 追加 `--rebase` 覆盖。 */
   async pull(
     root: string,
     commandLine?: string,
     options: { strategy?: GitPullStrategy; timeoutMs?: number } = {},
   ): Promise<GitSnapshot> {
     const command = parseGitCommand(commandLine);
-    const strategyArgs =
-      options.strategy === "merge"
-        ? ["--no-rebase"]
-        : options.strategy === "rebase"
-          ? ["--rebase"]
-          : options.strategy === "ff-only"
-            ? ["--ff-only"]
-            : [];
+    // 只支持两种拉取方式：普通 pull 遵循 Git 配置，rebase 显式覆盖为 --rebase。
+    const strategyArgs = options.strategy === "rebase" ? ["--rebase"] : [];
     await runGit(["pull", ...strategyArgs], root, command, {
       timeout: options.timeoutMs ?? GIT_NETWORK_TIMEOUT_MS,
     });
@@ -380,26 +405,70 @@ export class GitService {
     root: string,
     setUpstream: boolean,
     commandLine?: string,
-    options: { timeoutMs?: number } = {},
+    options: { force?: boolean; timeoutMs?: number } = {},
   ): Promise<GitSnapshot> {
     const command = parseGitCommand(commandLine);
     const timeout = options.timeoutMs ?? GIT_NETWORK_TIMEOUT_MS;
+    const forceArgs = options.force ? ["--force"] : [];
     if (setUpstream) {
       const current = await this.snapshot(root, commandLine);
       if (current.detached || !current.branch) {
         throw new PandaError("E_GIT_OPERATION", t("detached HEAD 无法设置上游分支"));
       }
-      const remotes = (await runGit(["remote"], root, command)).stdout
-        .split(/\r?\n/u)
-        .map((value) => value.trim())
-        .filter(Boolean);
-      const remote = remotes.includes("origin") ? "origin" : remotes[0];
+      // 快照里已经带 remote 列表，不必再单独跑一次 git remote。
+      const remote = pickRemote(current.remotes);
       if (!remote) throw new PandaError("E_GIT_OPERATION", t("仓库没有配置远程地址"));
-      await runGit(["push", "-u", remote, current.branch], root, command, {
+      await runGit(["push", ...forceArgs, "-u", remote.name, current.branch], root, command, {
         timeout,
       });
     } else {
-      await runGit(["push"], root, command, { timeout });
+      await runGit(["push", ...forceArgs], root, command, { timeout });
+    }
+    return this.snapshot(root, commandLine);
+  }
+
+  /**
+   * 配置一个远程地址。只执行 `git remote add`，不顺手推送：
+   * 首次推送仍由用户在确认窗口里决定，届时才设置上游。
+   */
+  async addRemote(
+    root: string,
+    name: string,
+    url: string,
+    commandLine?: string,
+  ): Promise<GitSnapshot> {
+    const command = parseGitCommand(commandLine);
+    // `--` 终止选项解析：地址以 `-` 开头时不会被当成 Git 选项。
+    try {
+      await runGit(["remote", "add", "--", name, url], root, command);
+    } catch (error) {
+      throw remoteConfigError(error, name);
+    }
+    return this.snapshot(root, commandLine);
+  }
+
+  /**
+   * 修改已有 remote 的地址：只改地址，不改名、不推送。
+   * 单独配置过 pushurl 的仓库一并改掉，否则界面换了地址、推送仍走旧地址。
+   */
+  async setRemoteUrl(
+    root: string,
+    name: string,
+    url: string,
+    commandLine?: string,
+  ): Promise<GitSnapshot> {
+    const command = parseGitCommand(commandLine);
+    try {
+      const [fetchUrl, pushUrl] = await Promise.all([
+        runGit(["remote", "get-url", name], root, command),
+        runGit(["remote", "get-url", "--push", name], root, command),
+      ]);
+      await runGit(["remote", "set-url", "--", name, url], root, command);
+      if (pushUrl.stdout.trim() !== fetchUrl.stdout.trim()) {
+        await runGit(["remote", "set-url", "--push", "--", name, url], root, command);
+      }
+    } catch (error) {
+      throw remoteConfigError(error, name);
     }
     return this.snapshot(root, commandLine);
   }

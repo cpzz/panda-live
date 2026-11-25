@@ -1361,8 +1361,10 @@ IME：组合输入期间禁用 input rules 与自定义 keymap；`compositionend
 | `git:commit` | R→M | `{ root, message, amend }` | `GitSnapshot` |
 | `git:branches` | R→M | `{ root }` | `GitBranch[]` |
 | `git:checkout` / `git:deleteBranch` | R→M | `{ root, branch, create? }` | `GitSnapshot` |
-| `git:fetch` / `git:pull` / `git:abort` / `git:continue` | R→M | `{ root }` | `GitSnapshot` |
-| `git:push` | R→M | `{ root, setUpstream }` | `GitSnapshot` |
+| `git:fetch` / `git:abort` / `git:continue` | R→M | `{ root }` | `GitSnapshot` |
+| `git:pull` | R→M | `{ root, strategy? }` | `GitSnapshot` |
+| `git:push` | R→M | `{ root, setUpstream, force? }` | `GitSnapshot` |
+| `git:addRemote` / `git:setRemoteUrl` | R→M | `{ root, name, url }` | `GitSnapshot` |
 | `git:log` | R→M | `{ root, limit }` | `GitCommit[]` |
 | `git:commitDetail` | R→M | `{ root, hash }` | `GitCommitDetail` |
 | `app:getInfo` | R→M | — | 版本、路径、平台 |
@@ -1552,7 +1554,7 @@ CSS 变量定义：
 
 ### 15.3 设置
 
-分组：外观（主题、界面语言、字号、图表适配宽度）、编辑（自动保存、Tab、换行、行号、粘贴为 Markdown、键位方案）、数学（宏、单美元内联公式开关、默认渲染）、图表（缓存上限；图表主题永远跟随应用主题）、LaTeX（引擎路径、编译超时）、Git（默认显示改动、默认对比基线、Git 命令、拉取策略、获取清理远程分支、网络超时、自动刷新、历史每页条数、自动设置上游）、扩展（已安装扩展、启用状态、安装/卸载、扩展设置）、隐私（日志级别）。设置对话框「保存」写盘但不关闭窗口（可连续调整后一并生效），关闭走 Esc、遮罩或标题栏关闭按钮。
+分组：外观（主题、界面语言、字号、图表适配宽度）、编辑（自动保存、Tab、换行、行号、粘贴为 Markdown、键位方案）、数学（宏、单美元内联公式开关、默认渲染）、图表（缓存上限；图表主题永远跟随应用主题）、LaTeX（引擎路径、编译超时）、Git（默认显示改动、默认对比基线、Git 命令、拉取策略、获取清理远程分支、网络超时、自动刷新、历史每页条数）、扩展（已安装扩展、启用状态、安装/卸载、扩展设置）、隐私（日志级别）。设置对话框「保存」写盘但不关闭窗口（可连续调整后一并生效），关闭走 Esc、遮罩或标题栏关闭按钮。
 
 设置文件带 `schemaVersion`；启动时按版本迁移，未知字段保留。
 
@@ -2173,13 +2175,13 @@ interface RenderedDiff {
 
 ## 22. 源代码管理（Git）
 
-> 状态：首版已实现。覆盖工作区状态、暂存/提交、分支、fetch/pull/push、冲突继续/中止、最近提交与详情；不包含内置三方合并编辑器、提交图、force push、stash/tag/submodule，也不在应用内管理凭据。
+> 状态：首版已实现。覆盖工作区状态、暂存/提交、分支、fetch/pull/push（含强制推送）、远程地址配置、冲突继续/中止、最近提交与详情；不包含内置三方合并编辑器、提交图、stash/tag/submodule，也不在应用内管理凭据。
 
 ### 22.1 目标与范围
 
 - **目标**：在应用内完成日常 Git 操作，不必切换终端；与 §21 的渲染态差异共享同一仓库探测与 Git 命令配置。
 - **首版包含**：状态列表（已暂存 / 更改 / 未跟踪 / 冲突）、暂存、取消暂存、放弃修改、提交与 Amend、分支列表 / 创建 / 切换 / 删除、fetch / pull / push、merge / rebase / cherry-pick 的继续与中止、提交历史（每页 50 / 100 / 200，可加载更多）与提交详情。
-- **非目标**：三方合并编辑器、提交图、逐行暂存、force push、tag / stash / submodule 管理、应用内 Token 或 SSH Key 管理。
+- **非目标**：三方合并编辑器、提交图、逐行暂存、tag / stash / submodule 管理、应用内 Token 或 SSH Key 管理。
 
 ### 22.2 入口与布局
 
@@ -2187,8 +2189,9 @@ interface RenderedDiff {
 - 面板内分「更改 / 历史 / 比较」三个子视图；「更改」包含提交框与分组列表，「历史」为最近提交与详情，「比较」用于任意两个版本之间的文件级比较；
 - 多根工作区：面板顶部提供仓库切换器，列出所有工作区目录；默认跟随当前文档所在仓库，切换文档时回到该文档所属仓库；
 - 状态栏右侧提供分支按钮：分支名 + `↑ahead ↓behind` + 进行中的操作；点击展开侧栏 Git 标签；
-- 面板顶部分支行右侧的同步操作固定为 `↑ahead ↓behind`（有值时） `|` `获取 | 拉取 | 推送` `|` `刷新`：`↑N` 为领先上游的提交数（待推送），`↓N` 为落后上游的提交数（待拉取），悬停显示说明；「刷新」与三个同步操作以分隔线隔开，刷新只重读本地仓库状态；
-- 设置 → Git 提供全局选项：默认对比基线（HEAD / 暂存区 / 上次保存，仅影响新文档）、拉取策略（遵循 Git 配置 / merge / rebase / ff-only）、获取时清理远程已删除分支（`fetch --prune`，默认开启）、网络操作超时（30–600 秒，默认 120）、仓库状态自动刷新（不自动 / 窗口聚焦 / 每 60 秒 / 每 5 分钟）、提交历史每页条数（50 / 100 / 200）、无上游分支时自动推送并设置上游；
+- 面板顶部为两行：第一行是分支选择（图标在框外，字段与仓库切换器同宽），第二行是右对齐的同步工具栏 `↑ahead ↓behind`（有值时） `|` `获取 | 拉取 | 推送` `|` `设置远程地址` `|` `刷新`；`↑N` 为领先上游的提交数（待推送），`↓N` 为落后上游的提交数（待拉取），悬停显示说明；「刷新」只重读本地仓库状态；
+- 远程地址：仓库没有配置 remote 时，获取 / 拉取 / 推送三个按钮禁用并说明原因，工具栏的链条图标按钮打开「设置远程地址」对话框；已有 remote 时在同一对话框内从下拉选择远程并改地址（`git remote add` / `git remote set-url`）。对话框只写配置，不顺手推送，首次推送时才设置上游；
+- 设置 → Git 提供全局选项：默认对比基线（HEAD / 暂存区 / 上次保存，仅影响新文档）、拉取策略（遵循 Git 配置 / rebase）、获取时清理远程已删除分支（`fetch --prune`，默认开启）、网络操作超时（30–600 秒，默认 120）、仓库状态自动刷新（不自动 / 窗口聚焦 / 每 60 秒 / 每 5 分钟）、提交历史每页条数（50 / 100 / 200）；
 - 点击变更项打开对应文件并切换到 Git 差异视图（§21.15）：已暂存项默认「HEAD ⇄ 暂存区」，更改与未跟踪项默认「工作区 ⇄ HEAD」；冲突项只打开文件本身（冲突标记需在源码模式处理，不进入只读差异视图）；
 - 历史提交行 ▸/▾ 内联展开变更文件列表，文件行点击打开文件并进入「该提交 ⇄ 父提交」差异（首次提交按空文本回退）；合并提交按第一父提交列出文件（与 `git diff HEAD~1 --name-only` 一致），首个提交也能列出文件；
 - 「比较」子视图：
@@ -2212,11 +2215,15 @@ interface GitSnapshot {
   upstream: string | null;
   ahead: number;
   behind: number;
+  /** 已配置的远程；空数组表示仓库没有任何 remote。 */
+  remotes: GitRemote[];
   operation: "merge" | "rebase" | "cherry-pick" | null;
   changes: GitChange[];
 }
 ```
 
+- `GitRemote` 为 `{ name, url }`，`url` 取 fetch 地址；快照与状态一起由 `git remote -v` 读出，界面据此判断能否 fetch / pull / push；
+- 推送目标的选取规则收敛在 `pickRemote()`（优先 `origin`，否则第一个 remote，没有则为 `null`）：界面展示的目标与主进程实际推送的 remote 共用同一函数，避免两边各猜一套；
 - `GitChange.path` 为**仓库根下的相对路径**，重命名保留 `origPath`；`staged` / `unstaged` / `untracked` / `conflicted` 为派生布尔值，`indexStatus` / `worktreeStatus` 保留 porcelain 原始字符；
 - 仓库探测路径：当前活动文档所在目录优先，否则取首个工作区根；探测成功后把仓库根登记为允许根（§22.5）；
 - 渲染进程 `GitStore` 以 `useSyncExternalStore` 暴露快照、分支、提交与 `loading` / `busy` / `error`；写操作串行（`busy` 非空时忽略新操作），完成后并行刷新快照、分支与日志；
@@ -2238,8 +2245,11 @@ interface GitSnapshot {
 | 切换 / 创建 | `check-ref-format --branch <name>` + `switch [ -c ] <name>` | 创建与切换统一走 `switch` |
 | 删除分支 | `check-ref-format --branch <name>` + `branch -d <name>` | 只允许安全删除 |
 | 获取 | `fetch --prune` / `fetch --no-prune` | 是否清理远程已删除分支由设置控制 |
-| 拉取 | `pull` | 策略默认遵循 Git 配置；设置覆盖时追加 `--no-rebase` / `--rebase` / `--ff-only` |
-| 推送 | `push` / `push -u <remote> <branch>` | 无上游时优先 `origin`，否则第一个 remote；设置开启自动上游时不再询问 |
+| 拉取 | `pull` | 策略默认遵循 Git 配置；设置覆盖时追加 `--rebase` |
+| 推送 | `push` / `push -u <remote> <branch>` / `push --force` | 无上游时取 `pickRemote()` 的结果（优先 `origin`），同时设置上游；强制推送需在窗口内勾选 |
+| 新增远程 | `remote add -- <name> <url>` | `--` 终止选项解析，地址以 `-` 开头也不会被当成参数 |
+| 修改远程地址 | `remote get-url [--push]` + `remote set-url [--push] -- <name> <url>` | 单独配置过 pushurl 时一并改，否则推送仍走旧地址 |
+| 远程列表 | `remote -v` | 随快照刷新；`parseGitRemoteList()` 按制表符切分，地址含空格也成立 |
 | 历史 | `log -n <limit> --pretty=format:%H%x1f%h%x1f%s%x1f%an%x1f%aI%x1e` | `limit` 限制在 1–200 |
 | 提交详情 | `show -s --pretty=format:…` + `show --name-only -z --format=` | 元数据与变更文件分两次读取 |
 | 继续 / 中止 | `merge/rebase/cherry-pick --continue` / `--abort` | 由 git-dir 下的 `MERGE_HEAD`、`rebase-merge`、`rebase-apply`、`CHERRY_PICK_HEAD` 判定 |
@@ -2247,7 +2257,7 @@ interface GitSnapshot {
 - **超时**：普通只读 5 s、`status` 15 s、`commit` 60 s（可能触发 hooks）、网络命令默认 120 s（设置中可调 30–600 s）；输出上限 8 MB；
 - **环境**：`GIT_TERMINAL_PROMPT=0` 禁止终端交互挂起，`GIT_EDITOR=true` 与 `GIT_MERGE_AUTOEDIT=no` 避免等待编辑器，`GIT_PAGER=cat`、`LC_ALL=C` 稳定输出；
 - **认证**：依赖系统 Git Credential Manager / SSH Agent，应用不保存任何凭据；
-- **错误码**：`E_GIT_MISSING`、`E_GIT_TIMEOUT`、`E_GIT_TOO_LARGE` 沿用 §21.3；命令本身失败（推送被拒、冲突未解决、删除未合并分支等）统一返回 `E_GIT_OPERATION`，消息优先取 stderr。
+- **错误码**：`E_GIT_MISSING`、`E_GIT_TIMEOUT`、`E_GIT_TOO_LARGE` 沿用 §21.3；命令本身失败（推送被拒、冲突未解决、删除未合并分支等）统一返回 `E_GIT_OPERATION`，消息优先取 stderr；远程配置的重名、非法名称、远程不存在三类失败在服务层翻译为中文，其余（认证、网络、权限）保留原始 stderr；
 
 ### 22.5 安全边界
 
@@ -2255,7 +2265,7 @@ interface GitSnapshot {
 - 渲染进程只提交**仓库相对路径**，主进程 `path.resolve` 后校验仍位于仓库根内，否则返回 `E_PATH_OUTSIDE_ROOT`；
 - 仓库根在探测成功后登记为允许根，后续 `fs:*` 与路径白名单复用同一套校验（§13.5）；
 - 未跟踪文件的「放弃修改」通过 `shell.trashItem` 移入系统回收站，不直接删除；
-- 不提供 force push、不执行任意用户输入命令；提交引用仍受 §21.3 的 `REF_PATTERN` 约束；
+- 强制推送需在同步窗口显式勾选，并给出「改写远端历史」的警示；不执行任意用户输入命令；提交引用仍受 §21.3 的 `REF_PATTERN` 约束；
 - 外部 Git 命令运行时若目标文件在编辑器中未保存，面板显式提示「Git 只使用磁盘内容」，并在 checkout / pull / push 前二次确认。
 
 ### 22.6 冲突处理

@@ -5,6 +5,7 @@ import {
   parseDiffNumstat,
   parseGitBranches,
   parseGitLog,
+  parseGitRemoteList,
   parseGitStatus,
 } from "../../electron/services/git-parse";
 
@@ -150,5 +151,30 @@ describe("Git 比较解析", () => {
     expect(stats.get("src/a.ts")).toEqual({ additions: 2, deletions: 1, binary: false });
     expect(stats.get("assets/logo.png")).toEqual({ additions: 0, deletions: 0, binary: true });
     expect(stats.get("new name.txt")).toEqual({ additions: 0, deletions: 0, binary: false });
+  });
+});
+
+describe("git remote -v 解析", () => {
+  it("每个 remote 取 fetch 地址，push 地址不同也只保留一条", () => {
+    const output = [
+      "origin\thttps://example.com/a.git (fetch)",
+      "origin\thttps://example.com/push.git (push)",
+      "upstream\tgit@example.com:b.git (fetch)",
+      "upstream\tgit@example.com:b.git (push)",
+      "",
+    ].join("\n");
+    expect(parseGitRemoteList(output)).toEqual([
+      { name: "origin", url: "https://example.com/a.git" },
+      { name: "upstream", url: "git@example.com:b.git" },
+    ]);
+  });
+
+  it("地址里含空格、没有 remote 或输出带 CR 时都不误判", () => {
+    const output = [
+      "local\t/tmp/my repo (fetch)",
+      "local\t/tmp/my repo (push)",
+    ].join("\r\n");
+    expect(parseGitRemoteList(output)).toEqual([{ name: "local", url: "/tmp/my repo" }]);
+    expect(parseGitRemoteList("")).toEqual([]);
   });
 });

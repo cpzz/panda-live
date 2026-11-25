@@ -72,7 +72,6 @@ describe("设置合并", () => {
         networkTimeoutSeconds: 5,
         autoRefresh: "60s",
         historyPageSize: 100,
-        autoSetUpstream: true,
       },
     });
     expect(merged.git.pullStrategy).toBe("rebase");
@@ -80,7 +79,6 @@ describe("设置合并", () => {
     expect(merged.git.networkTimeoutSeconds).toBe(30);
     expect(merged.git.autoRefresh).toBe("60s");
     expect(merged.git.historyPageSize).toBe(100);
-    expect(merged.git.autoSetUpstream).toBe(true);
 
     const invalid = mergeSettings({
       git: {
@@ -89,15 +87,13 @@ describe("设置合并", () => {
         networkTimeoutSeconds: 99_999,
         autoRefresh: "always",
         historyPageSize: 75,
-        autoSetUpstream: 1,
       },
     });
-    expect(invalid.git.pullStrategy).toBe("config");
+    expect(invalid.git.pullStrategy).toBe("rebase");
     expect(invalid.git.fetchPrune).toBe(true);
     expect(invalid.git.networkTimeoutSeconds).toBe(600);
     expect(invalid.git.autoRefresh).toBe("focus");
     expect(invalid.git.historyPageSize).toBe(50);
-    expect(invalid.git.autoSetUpstream).toBe(false);
   });
 
   it("默认对比基线仅接受 head / index / lastSave", () => {

@@ -42,6 +42,7 @@
   --accent-soft: #e3f1eb;
   --accent-fg: #ffffff;
   --danger: #cf222e;
+  --danger-fg: #ffffff;
 
   --statusbar-bg: #f3f3f3;
   --statusbar-fg: var(--fg);
@@ -117,6 +118,7 @@
   --accent-soft: #12283f;
   --accent-fg: #061525;
   --danger: #f48771;
+  --danger-fg: #2b1210;
 
   --statusbar-bg: #1a1a1a;
   --statusbar-fg: var(--fg);
@@ -481,6 +483,17 @@ button {
 
 .button.primary:hover:not(:disabled) {
   background: var(--accent-strong);
+}
+
+.button.danger {
+  padding: 6px 16px;
+  background: var(--danger);
+  color: var(--danger-fg);
+  box-shadow: var(--shadow-ctl);
+}
+
+.button.danger:hover:not(:disabled) {
+  filter: brightness(1.08);
 }
 
 .button.small {
@@ -1316,6 +1329,11 @@ button {
   color: var(--diff-del-fg);
 }
 
+/* 同步按钮的提示载体：禁用按钮自身不显示 title，由外层 span 承担。 */
+.git-sync-slot {
+  display: inline-flex;
+}
+
 .git-icon-button {
   display: inline-flex;
   align-items: center;
@@ -1330,9 +1348,21 @@ button {
   cursor: pointer;
 }
 
-.git-icon-button:hover {
+.git-icon-button:hover:not(:disabled) {
   color: var(--fg);
   border-color: var(--border-strong);
+}
+
+/* 无内容可操作/正在执行时的按钮必须看起来不可用，否则用户会反复点击。 */
+.git-icon-button:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+  /* 禁用控件会吞掉鼠标事件，交给外层 slot 承接悬停与提示。 */
+  pointer-events: none;
+}
+
+.git-sync-slot:has(> .git-icon-button:disabled) {
+  cursor: not-allowed;
 }
 
 .git-icon-button.active {
@@ -4958,43 +4988,71 @@ body.resizing * {
   cursor: pointer;
 }
 
+/* 分支行与同步工具栏各占一行：窄侧栏里挤成一行会把分支名压成省略号。 */
 .git-panel-header {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
   padding: 6px 8px;
   border-bottom: 1px solid var(--border);
 }
 
+/* 与工作区选择栏同一套构成：图标在框外，字段占满剩余宽度。 */
 .git-branch-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+}
+
+.git-branch-field {
   position: relative;
   flex: 1;
   min-width: 0;
 }
 
+/* 分支选择沿用工作区选择栏的形状：占满一行、带描边，箭头贴右边缘。 */
 .git-branch-button {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 4px;
-  max-width: 100%;
+  gap: 5px;
+  width: 100%;
   height: 24px;
-  padding: 0 6px;
-  border: 1px solid transparent;
-  border-radius: 2px;
-  background: transparent;
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--field-inset);
   color: var(--fg);
   font-size: 12px;
+  /* 按钮默认居中，字段形态下要和下拉框一样左对齐。 */
+  text-align: left;
   cursor: pointer;
 }
 
 .git-branch-button span {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .git-branch-button:hover {
-  background: var(--surface-hover);
+  border-color: var(--border-strong);
+}
+
+.git-branch-button:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+  box-shadow: var(--focus-halo), var(--field-inset);
+}
+
+/* 菜单展开时保持描边加深，和下落的列表连成一体。 */
+.git-branch-button[aria-expanded="true"] {
+  border-color: var(--border-strong);
 }
 
 .git-branch-menu {
@@ -5071,17 +5129,367 @@ body.resizing * {
   font-size: 12px;
 }
 
+/* 同步确认窗口：标题居中；分支信息右对齐；长分支名可横向滚动并带悬停全名提示。 */
+.git-sync-modal {
+  width: min(380px, 92vw);
+}
+
+.git-sync-head {
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-muted);
+  text-align: center;
+}
+
+.git-sync-head h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+/* 内容区与标题条带留出呼吸间隔；底部留白让强制推送与 footer 分隔线不粘连。 */
+.git-sync-body {
+  padding: 16px 18px;
+}
+
+/* 分支信息与推送数量合并为一个圆角方框，与标题条带、强制推送保持呼吸间距。 */
+.git-sync-box {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.git-sync-meta {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+}
+
+.git-sync-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.git-sync-meta-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+}
+
+/* 标签退一档（12px），让 13px 等宽的分支值成为这两行的视觉重点。 */
+.git-sync-meta-label {
+  flex: 0 0 auto;
+  /* 与右侧值留出距离，长名被裁切时才不会像贴着标签。 */
+  margin-right: 8px;
+  color: var(--fg);
+  font-size: 12px;
+}
+
+/* 值区域：短名右对齐；长名在自身区域内左右滚动，不撑破窗口。 */
+.git-sync-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+}
+
+/* 文本层：靠右对齐，等宽字体与标签形成字形差异。 */
+.git-sync-value-text {
+  display: inline-block;
+  min-width: 100%;
+  color: var(--fg);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 13px;
+  text-align: right;
+}
+
+/* 默认高度为 0，不占滚动条位置；仅在内容溢出时出现 4px 细滑块。 */
+.git-sync-value::-webkit-scrollbar {
+  height: 0;
+}
+
+.git-sync-value.is-overflowing::-webkit-scrollbar {
+  height: 4px;
+}
+
+.git-sync-value::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 溢出时始终显示细滑块，提示该行可左右移动；悬停时加深。 */
+.git-sync-value::-webkit-scrollbar-thumb {
+  border-radius: 2px;
+  background: var(--border-strong);
+}
+
+.git-sync-value:hover::-webkit-scrollbar-thumb {
+  background: var(--muted);
+}
+
+/* 数量提示是方框内的末段：降一档（12px）+ 弱化色，只说明后果，不与分支值抢重点。 */
+.git-sync-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 12px;
+  border-top: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.git-sync-banner svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--muted);
+}
+
+.git-sync-banner-warn {
+  background: var(--error-bg);
+  color: var(--danger);
+}
+
+.git-sync-banner-warn svg {
+  color: var(--danger);
+}
+
+/* 补充说明（无上游、有未保存文档）：与提示条同档 12px，不再出现半像素字号。 */
+.git-sync-note {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.git-sync-note + .git-sync-note {
+  margin-top: 2px;
+}
+
+/* 单个一次性选项：push 为强制推送，pull 为拉取方式两选一；与控件文字同档（12px）。 */
+.git-sync-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  color: var(--fg);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* 复选框与设置页一致（14px），和 12px 的标签比例更协调。 */
+.git-sync-option input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+/* 拉取方式：下拉紧跟标签左对齐，与 push 的勾选行同侧，避免窗口右侧拉出一段空当。
+   这一行不是 label，点空白处不会把焦点甩给下拉，只有点到下拉本身才聚焦。 */
+.git-sync-option-select {
+  cursor: default;
+}
+
+/* 高度贴着 12px 的选项文字（22px），比设置页的 26px 更紧凑。 */
+.git-sync-select {
+  flex: 0 0 auto;
+  min-width: 136px;
+  height: 22px;
+  padding: 0 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 12px;
+}
+
+/* 执行中 / 结果态：图标与文案成行，失败文案保留 Git 原始换行并在框内滚动。 */
+.git-sync-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.git-sync-status-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  color: var(--accent);
+}
+
+.git-sync-status.is-error .git-sync-status-icon {
+  color: var(--danger);
+}
+
+.git-sync-status-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  /* 约容纳 12 行报错；更长的 Git 输出在框内滚动，不把窗口撑到屏幕外。 */
+  max-height: 232px;
+  margin: 0;
+  overflow-y: auto;
+  /* 始终预留滚动条槽位，长报错出现时不至于让文字宽度忽然变窄。 */
+  scrollbar-gutter: stable;
+  color: var(--fg);
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+/* 报错文本的滚动条：比全局更细，拇指用次级文字色，浅深两色下都能看见。 */
+.git-sync-status-text::-webkit-scrollbar {
+  width: 8px;
+}
+
+.git-sync-status-text::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 4px;
+  background: var(--muted);
+  background-clip: content-box;
+}
+
+/* 旋转圈：与状态图标同尺寸，颜色取强调色，深色主题下同样可见。 */
+.git-sync-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: git-sync-spin 700ms linear infinite;
+}
+
+@keyframes git-sync-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 减弱动效时停转，靠文案说明仍在进行。 */
+@media (prefers-reduced-motion: reduce) {
+  .git-sync-spinner {
+    animation: none;
+  }
+}
+
+/* 底部操作区加回淡分隔线，与内容区分开；取消为次级按钮，补描边避免看成纯文本。 */
+.git-sync-modal .modal-footer,
+.git-remote-modal .modal-footer {
+  padding: 14px 18px 16px;
+  border-top: 1px solid var(--border);
+  background: transparent;
+}
+
+/* 按钮沿用全局 12px，只放大纵向内边距，让操作区更好点。 */
+.git-sync-modal .modal-footer .button,
+.git-remote-modal .modal-footer .button {
+  padding: 5px 16px;
+}
+
+.git-sync-modal .modal-footer .button.ghost,
+.git-remote-modal .modal-footer .button.ghost {
+  border-color: var(--border-strong);
+  color: var(--fg);
+}
+
+.git-sync-modal .modal-footer .button.ghost:hover:not(:disabled),
+.git-remote-modal .modal-footer .button.ghost:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+/* 设置远程地址：地址通常较长，比同步窗口宽一点；字段与说明都沿用 12px。 */
+.git-remote-modal {
+  width: min(420px, 92vw);
+}
+
+.git-remote-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 18px;
+}
+
+.git-remote-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.git-remote-field .git-remote-input {
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--fg);
+  font-size: 12px;
+  font-family: ui-monospace, Consolas, monospace;
+}
+
+.git-remote-field .git-remote-input::placeholder {
+  color: var(--muted);
+}
+
+/* 远程名下拉：给原生箭头留出位置，避免名字贴到箭头上。 */
+.git-remote-field select.git-remote-input {
+  padding-right: 22px;
+}
+
+/* 保存期间字段禁用：自定义了底色，需要显式降透明度，否则看不出已锁定。 */
+.git-remote-field .git-remote-input:disabled {
+  opacity: 0.6;
+}
+
+/* 失败原因就地显示：Git 原始报错可能较长，允许换行、可滚动。 */
+.git-remote-error {
+  max-height: 96px;
+  margin: 0;
+  overflow-y: auto;
+  color: var(--danger);
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.git-remote-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .git-sync-actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 2px;
+}
+
+/* 工具栏独占一行后靠右收拢；按钮比面板里的常规图标按钮小一号，避免一行五个显得笨重。 */
+.git-sync-actions .git-icon-button {
+  width: 22px;
+  height: 22px;
 }
 
 /* 同步区段分隔线：领先/落后计数与同步操作、同步操作与刷新之间。 */
 .git-sync-divider {
   flex: 0 0 auto;
   width: 1px;
-  height: 14px;
+  height: 12px;
   margin: 0 4px;
   background: var(--border-strong);
 }
@@ -5773,10 +6181,12 @@ body.resizing * {
 .git-branch-input,
 .git-commit-input,
 .git-compare-input,
+.git-remote-input,
 .prompt-input,
 .goto-input,
 .diff-mode-select,
-.git-repo-select {
+.git-repo-select,
+.git-sync-select {
   box-shadow: var(--field-inset);
 }
 
@@ -5791,8 +6201,10 @@ body.resizing * {
 .git-branch-input:focus,
 .git-commit-input:focus,
 .git-compare-input:focus,
+.git-remote-input:focus,
 .prompt-input:focus,
-.goto-input:focus {
+.goto-input:focus,
+.git-sync-select:focus {
   border-color: var(--accent);
   outline: none;
   box-shadow: var(--focus-halo), var(--field-inset);

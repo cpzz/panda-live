@@ -226,6 +226,16 @@ const ICONS = {
       <line x1="6" y1="6" x2="18" y2="18" />
     </>
   ),
+  /** 成功结果：同步完成的状态图标。 */
+  check: <path d="M20 6 9 17l-5-5" />,
+  /** 风险警示：强制推送的风险提示。 */
+  "alert-triangle": (
+    <>
+      <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+      <path d="M12 9v4" />
+      <path d="M12 17h.01" />
+    </>
+  ),
   "chevron-up": <polyline points="18 15 12 9 6 15" />,
   "chevron-down": <polyline points="6 9 12 15 18 9" />,
   "chevron-left": <path d="m15 18-6-6 6-6" />,
@@ -402,6 +412,16 @@ const ICONS = {
       <circle cx="12" cy="18" r="1.2" fill="currentColor" stroke="none" />
     </>
   ),
+  /** 分支本身：两个提交节点 + 分叉线，用于「本地分支」标签。 */
+  branch: (
+    <>
+      <circle cx="6" cy="6" r="2.5" />
+      <circle cx="6" cy="18" r="2.5" />
+      <circle cx="18" cy="7" r="2.5" />
+      <path d="M6 8.5v7" />
+      <path d="M18 9.5c0 3.5-3.6 4.2-7.4 4.9" />
+    </>
+  ),
   git: (
     <>
       <circle cx="6" cy="6" r="2.5" />
@@ -409,6 +429,13 @@ const ICONS = {
       <circle cx="18" cy="8" r="2.5" />
       <path d="M6 8.5v7" />
       <path d="M18 10.5c0 3.2-3.5 3.6-7 4" />
+    </>
+  ),
+  /** 设置远程地址：本地仓库与远程地址之间的连接（链）。 */
+  link: (
+    <>
+      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
     </>
   ),
   compare: (

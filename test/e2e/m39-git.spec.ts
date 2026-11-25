@@ -65,6 +65,22 @@ test("M39：源代码管理变更、提交与分支", async () => {
     await expect(changeRow).toHaveCount(1);
     await expect(changeRow.locator(".git-change-status")).toHaveText("M");
 
+    // 这个仓库没有 remote：联网按钮直接置灰，配置入口在工具栏（与同步按钮用竖线分隔）。
+    await expect(page.getByRole("button", { name: "推送", exact: true })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "获取", exact: true })).toBeDisabled();
+
+    // 首次配置远程：名字默认 origin，保存后推送按钮恢复可用。
+    await page.getByRole("button", { name: "设置远程地址", exact: true }).click();
+    const remoteDialog = page.getByRole("dialog", { name: "设置远程地址" });
+    await expect(remoteDialog).toBeVisible();
+    const remoteFields = remoteDialog.locator(".git-remote-input");
+    await expect(remoteFields).toHaveCount(2);
+    await expect(remoteFields.first()).toHaveValue("origin");
+    await remoteFields.nth(1).fill("https://example.com/repo.git");
+    await remoteDialog.getByRole("button", { name: "保存", exact: true }).click();
+    await expect(remoteDialog).toHaveCount(0, { timeout: 20_000 });
+    await expect(page.getByRole("button", { name: "推送", exact: true })).toBeEnabled();
+
     // 点击变更项打开文档并进入 Git 差异视图。
     await changeRow.locator(".git-change-path").click();
     await expect(page.locator(".git-diff-pane")).toBeVisible({ timeout: 20_000 });
@@ -196,8 +212,17 @@ test("M39：fetch、pull 与 push", async () => {
     await page.getByRole("button", { name: "获取", exact: true }).click();
     await expect(page.locator(".git-behind")).toHaveText("↓1", { timeout: 30_000 });
 
-    // pull 快进到远程提交，磁盘内容同步更新。
+    // pull 快进到远程提交：打开确认窗口，核对远端/分支后确认。
     await page.getByRole("button", { name: "拉取", exact: true }).click();
+    const pullDialog = page.getByRole("dialog", { name: "拉取提交" });
+    await expect(pullDialog.locator(".git-sync-meta")).toContainText("origin");
+    await expect(pullDialog.locator(".git-sync-meta")).toContainText("main");
+    await pullDialog.getByRole("button", { name: "确认", exact: true }).click();
+    // 执行结束后窗口停在原位显示结果，点「完成」才收起。
+    await expect(page.getByRole("dialog", { name: "拉取完成" })).toBeVisible({
+      timeout: 30_000,
+    });
+    await page.getByRole("button", { name: "完成", exact: true }).click();
     await expect(page.locator(".git-behind")).toHaveCount(0, { timeout: 30_000 });
     expect(await fs.readFile(note, "utf8")).toContain("同伴追加。");
 
@@ -214,6 +239,13 @@ test("M39：fetch、pull 与 push", async () => {
     await expect(page.locator(".git-ahead")).toHaveText("↑1", { timeout: 20_000 });
 
     await page.getByRole("button", { name: "推送", exact: true }).click();
+    const pushDialog = page.getByRole("dialog", { name: "推送提交" });
+    await expect(pushDialog.locator(".git-sync-meta")).toContainText("origin");
+    await pushDialog.getByRole("button", { name: "确认", exact: true }).click();
+    await expect(page.getByRole("dialog", { name: "推送完成" })).toBeVisible({
+      timeout: 30_000,
+    });
+    await page.getByRole("button", { name: "完成", exact: true }).click();
     await expect(page.locator(".git-ahead")).toHaveCount(0, { timeout: 30_000 });
     expect(await git(bare, ["log", "-1", "--pretty=%s"])).toBe("应用提交");
   } finally {

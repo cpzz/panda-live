@@ -366,6 +366,11 @@ export class DocumentManager {
     this.notify(kind, message);
   }
 
+  /** 只写入通知历史、不弹气泡；用于 Git 同步等操作的结果留痕。 */
+  recordNotice(kind: Notice["kind"], message: string): void {
+    this.notify(kind, message, false);
+  }
+
   /** 仓库内未保存文档数量；Git 操作只读取磁盘内容。 */
   dirtyCountInRoot(root: string): number {
     return this.state.documents.filter((doc) => doc.dirty && doc.path && isUnderRoot(doc.path, root)).length;
@@ -1104,7 +1109,7 @@ export class DocumentManager {
     for (const listener of this.listeners) listener(this.state);
   }
 
-  private notify(kind: Notice["kind"], message: string): void {
+  private notify(kind: Notice["kind"], message: string, toast = true): void {
     const entry: NoticeEntry = {
       id: (this.noticeSeq += 1),
       kind,
@@ -1112,6 +1117,13 @@ export class DocumentManager {
       at: Date.now(),
       level: kind === "error" ? "high" : "low",
     };
+    // 只留痕的操作结果不弹气泡，也不排自动关闭的定时器。
+    if (!toast) {
+      const notices = [entry, ...this.state.notices].slice(0, 200);
+      this.state = { ...this.state, notices };
+      for (const listener of this.listeners) listener(this.state);
+      return;
+    }
     // 气泡最多 3 条（新的在上）；历史最多 200 条，均按时间倒序。
     const toasts = [entry, ...this.state.toasts].slice(0, 3);
     const notices = [entry, ...this.state.notices].slice(0, 200);

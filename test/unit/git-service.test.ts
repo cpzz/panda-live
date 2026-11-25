@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { GitService, parseGitCommand } from "../../electron/services/git-service";
+import { pickRemote } from "../../src/shared/git";
 
 function git(cwd: string, ...args: string[]): string {
   return execFileSync("git", args, { cwd, encoding: "utf8" });
@@ -369,6 +370,79 @@ describe.skipIf(!hasGit)("Git 文件历史与仓库比较", () => {
       await expect(service.compare(repo, "no-such-ref", "HEAD")).rejects.toMatchObject({
         code: "E_GIT_OPERATION",
       });
+    } finally {
+      rmTempRepo(repo);
+    }
+  }, 30_000);
+});
+
+describe("同步远端的选取规则", () => {
+  const remote = (name: string) => ({ name, url: `https://example.com/${name}.git` });
+
+  it("优先 origin，否则取第一个已配置的 remote，没有则返回 null", () => {
+    expect(pickRemote([])).toBeNull();
+    expect(pickRemote([remote("upstream")])?.name).toBe("upstream");
+    expect(pickRemote([remote("upstream"), remote("origin")])?.name).toBe("origin");
+  });
+});
+
+describe.skipIf(!hasGit)("Git 远程配置", () => {
+  it("本地仓库没有 remote 时快照如实返回空数组，addRemote 之后可读到", async () => {
+    const repo = mkdtempSync(path.join(tmpdir(), "panda-git-remote-"));
+    try {
+      initRepo(repo);
+      writeFileSync(path.join(repo, "a.txt"), "a\n", "utf8");
+      git(repo, "add", ".");
+      git(repo, "commit", "-m", "init");
+
+      const service = new GitService();
+      const before = await service.snapshot(repo);
+      // 界面据此禁用 fetch / pull / push，而不是让用户点开确认窗口后失败。
+      expect(before.remotes).toEqual([]);
+
+      const after = await service.addRemote(repo, "upstream", "https://example.com/repo.git");
+      expect(after.remotes).toEqual([
+        { name: "upstream", url: "https://example.com/repo.git" },
+      ]);
+      expect(pickRemote(after.remotes)?.name).toBe("upstream");
+
+      const both = await service.addRemote(repo, "origin", "https://example.com/origin.git");
+      // `git remote -v` 按名称排序输出，这里如实比对顺序。
+      expect(both.remotes).toEqual([
+        { name: "origin", url: "https://example.com/origin.git" },
+        { name: "upstream", url: "https://example.com/repo.git" },
+      ]);
+      expect(pickRemote(both.remotes)?.name).toBe("origin");
+
+      // 重名在服务层就地翻译成中文，不把 git 的英文 stderr 抛给界面。
+      await expect(
+        service.addRemote(repo, "origin", "https://example.com/other.git"),
+      ).rejects.toThrow("已存在名为 origin 的远程");
+
+      // 非法名称同样翻译，并提示允许的字符集。
+      await expect(
+        service.addRemote(repo, "bad name", "https://example.com/bad.git"),
+      ).rejects.toThrow("远程名只能包含字母、数字、点、下划线与连字符。");
+
+      // 远程已被外部删除时也给出可操作的中文提示，而不是 `No such remote`。
+      await expect(service.setRemoteUrl(repo, "gone", "/tmp/gone.git")).rejects.toThrow(
+        "远程 gone 不存在",
+      );
+
+      // 改地址：只动 origin，upstream 保持不变；快照里的地址同步更新。
+      const updated = await service.setRemoteUrl(repo, "origin", "/tmp/bare.git");
+      expect(updated.remotes).toEqual([
+        { name: "origin", url: "/tmp/bare.git" },
+        { name: "upstream", url: "https://example.com/repo.git" },
+      ]);
+
+      // 单独配置过 pushurl 的仓库：改地址时两个一起改，否则推送仍走旧地址。
+      git(repo, "remote", "set-url", "--push", "origin", "https://example.com/push.git");
+      await service.setRemoteUrl(repo, "origin", "/tmp/bare2.git");
+      expect(git(repo, "remote", "get-url", "--push", "origin").trim()).toBe("/tmp/bare2.git");
+      expect(git(repo, "remote", "get-url", "upstream").trim()).toBe(
+        "https://example.com/repo.git",
+      );
     } finally {
       rmTempRepo(repo);
     }

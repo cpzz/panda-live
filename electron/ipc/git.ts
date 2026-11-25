@@ -136,7 +136,8 @@ export function registerGitHandlers({
     const root = await assertRoot(request.root);
     return operation(() =>
       git.pull(root, command(), {
-        strategy: gitSettings().pullStrategy,
+        // 渲染层的一次性选择优先；未指定时沿用设置中的全局策略。
+        strategy: request.strategy ?? gitSettings().pullStrategy,
         timeoutMs: networkTimeout(),
       }),
     );
@@ -145,8 +146,21 @@ export function registerGitHandlers({
   handle("git:push", async (request): Promise<GitSnapshot> => {
     const root = await assertRoot(request.root);
     return operation(() =>
-      git.push(root, request.setUpstream, command(), { timeoutMs: networkTimeout() }),
+      git.push(root, request.setUpstream, command(), {
+        force: request.force ?? false,
+        timeoutMs: networkTimeout(),
+      }),
     );
+  });
+
+  handle("git:addRemote", async (request): Promise<GitSnapshot> => {
+    const root = await assertRoot(request.root);
+    return operation(() => git.addRemote(root, request.name, request.url, command()));
+  });
+
+  handle("git:setRemoteUrl", async (request): Promise<GitSnapshot> => {
+    const root = await assertRoot(request.root);
+    return operation(() => git.setRemoteUrl(root, request.name, request.url, command()));
   });
 
   handle("git:log", async (request): Promise<GitCommit[]> => {

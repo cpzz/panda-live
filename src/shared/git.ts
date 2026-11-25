@@ -27,6 +27,12 @@ export interface GitChange {
 
 export type GitOperation = "merge" | "rebase" | "cherry-pick" | null;
 
+/** 已配置的远程；`url` 取 fetch 地址，单独配置过 pushurl 的会在改地址时一并同步。 */
+export interface GitRemote {
+  name: string;
+  url: string;
+}
+
 export interface GitSnapshot {
   inRepo: boolean;
   root: string | null;
@@ -35,10 +41,23 @@ export interface GitSnapshot {
   upstream: string | null;
   ahead: number;
   behind: number;
+  /** 已配置的远程；空数组表示仓库还没有 remote（例如只做本地版本管理）。 */
+  remotes: GitRemote[];
   /** 当前是否有未完成的 merge/rebase/cherry-pick。 */
   operation: GitOperation;
   changes: GitChange[];
 }
+
+/**
+ * 推送/拉取使用的远端：优先 origin，否则取第一个已配置的 remote。
+ * 界面展示目标与主进程执行共用同一规则，避免窗口写的目标与实际推送目标不一致。
+ */
+export function pickRemote(remotes: readonly GitRemote[]): GitRemote | null {
+  return remotes.find((remote) => remote.name === "origin") ?? remotes[0] ?? null;
+}
+
+/** 远程名允许的字符集：首字符不能是连字符，避免被 Git 当成选项。 */
+export const REMOTE_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/u;
 
 export interface GitBranch {
   name: string;

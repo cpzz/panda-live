@@ -2586,7 +2586,8 @@ export function App() {
                   store={git}
                   state={gitState}
                   dirtyCount={gitDirtyCount}
-                  autoSetUpstream={settings.git.autoSetUpstream}
+                  pullStrategy={settings.git.pullStrategy}
+                  onRecord={(kind, message) => manager.recordNotice(kind, message)}
                   repos={gitRepoOptions}
                   selectedRepo={gitRepoSelected}
                   onSelectRepo={setGitRepoChoice}
