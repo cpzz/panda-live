@@ -14,6 +14,15 @@
 
   --radius-sm: 3px;
   --radius-md: 6px;
+  --radius-ctl: 5px; /* 交互控件统一圆角 */
+
+  /* 字体层级：6 档收敛，消除 0.5px 碎档。见 doc/ui-font-controls.md */
+  --fs-2xs: 11px; /* 角标、快捷键 */
+  --fs-xs: 12px; /* 图标按钮、状态栏、侧栏 tab */
+  --fs-sm: 13px; /* 标签、树、工具栏 */
+  --fs-base: 14px; /* 正文、文档名 */
+  --fs-lg: 15px; /* 面板主标题 */
+  --fs-2xl: 24px; /* 空状态主标题 */
 
   /* 工作台色板 */
   --bg: #f3f3f3;
@@ -50,6 +59,8 @@
   --tooltip-fg: #ffffff;
   --shadow: 0 10px 28px rgba(15, 23, 42, 0.16);
   --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.1);
+  --shadow-ctl: 0 1px 2px rgba(16, 24, 40, 0.06); /* 主按钮层次 */
+  --focus-ring: rgba(11, 107, 79, 0.5); /* 焦点环，跟随主色 */
 
   /* 编辑器 */
   --editor-bg: #ffffff;
@@ -99,10 +110,11 @@
   --muted: #9d9d9d;
   --border: #333333;
   --border-strong: #454545;
-  --accent: #41bf95;
-  --accent-strong: #67d6b0;
-  --accent-soft: #133a2f;
-  --accent-fg: #07261d;
+  /* 深色主色用蓝色系（GitHub Dark 风格），与编辑器选区蓝同族；浅色仍为深绿。见 doc/ui-dark-blue.md */
+  --accent: #58a6ff;
+  --accent-strong: #79b8ff;
+  --accent-soft: #12283f;
+  --accent-fg: #061525;
   --danger: #f48771;
 
   --statusbar-bg: #1a1a1a;
@@ -121,6 +133,8 @@
   --tooltip-fg: #ffffff;
   --shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.45);
+  --shadow-ctl: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --focus-ring: rgba(88, 166, 255, 0.55); /* 跟随蓝色主色 */
 
   --editor-bg: #1e1e1e;
   --editor-fg: #d4d4d4;
@@ -181,8 +195,15 @@ button {
 }
 
 :focus-visible {
-  outline: 1px solid var(--accent);
-  outline-offset: 1px;
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* 图标描边微收（viewBox 尺寸不变） */
+.icon-button svg,
+.mode-button svg,
+.statusbar-icon svg {
+  stroke-width: 1.8;
 }
 
 /* 动效：控件 hover 120ms；弹层出现 140ms；reduced-motion 下全部禁用。 */
@@ -242,6 +263,7 @@ button {
   padding: 0 10px;
   background: var(--toolbar-bg);
   border-bottom: 1px solid var(--border);
+  font-size: var(--fs-sm);
   user-select: none;
   -webkit-app-region: drag;
   /* Windows/Linux 窗口按钮覆盖在右侧，避开 overlay 区域；无 overlay 的平台回退为 0。 */
@@ -270,9 +292,9 @@ button {
 }
 
 .brand-name {
-  font-size: 13px;
+  font-size: var(--fs-sm);
   font-weight: 600;
-  letter-spacing: 0.01em;
+  letter-spacing: -0.01em;
   white-space: nowrap;
   color: var(--fg);
 }
@@ -309,7 +331,7 @@ button {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12.5px;
+  font-size: var(--fs-base);
   font-weight: 600;
 }
 
@@ -409,9 +431,10 @@ button {
   height: 24px;
   padding: 0;
   border: 0;
-  border-radius: 2px;
+  border-radius: var(--radius-ctl);
   background: transparent;
   color: var(--muted);
+  font-weight: 500;
   cursor: pointer;
 }
 
@@ -459,6 +482,7 @@ button {
   padding: 6px 16px;
   background: var(--accent);
   color: var(--accent-fg);
+  box-shadow: var(--shadow-ctl);
 }
 
 .button.primary:hover:not(:disabled) {
@@ -563,6 +587,10 @@ button {
   box-shadow: inset 0 2px 0 var(--accent);
 }
 
+.tab-item.active .tab {
+  font-weight: 600;
+}
+
 .tab {
   flex: 1 1 auto;
   min-width: 0;
@@ -573,7 +601,8 @@ button {
   border: 0;
   background: transparent;
   color: inherit;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
+  font-weight: 500;
   white-space: nowrap;
   cursor: pointer;
 }
@@ -611,7 +640,7 @@ button {
   margin: auto 3px auto 0;
   padding: 0;
   border: 0;
-  border-radius: 2px;
+  border-radius: var(--radius-ctl);
   background: transparent;
   color: var(--muted);
   opacity: 0;
@@ -1751,7 +1780,7 @@ button {
   background: var(--statusbar-bg);
   border-top: 1px solid var(--border);
   color: var(--statusbar-fg);
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   user-select: none;
 }
 
@@ -1775,10 +1804,10 @@ button {
 .statusbar-button {
   padding: 1px 8px;
   border: 1px solid transparent;
-  border-radius: 2px;
+  border-radius: var(--radius-ctl);
   background: transparent;
   color: var(--statusbar-fg);
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   line-height: 18px;
   cursor: pointer;
   white-space: nowrap;
@@ -2451,10 +2480,11 @@ body.resizing * {
 .icon-button {
   padding: 3px 7px;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-ctl);
   background: transparent;
   color: var(--muted);
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
+  font-weight: 500;
   line-height: 16px;
   cursor: pointer;
   white-space: nowrap;
@@ -2631,7 +2661,8 @@ body.resizing * {
   border-bottom: 2px solid transparent;
   background: transparent;
   color: var(--muted);
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
+  font-weight: 500;
   cursor: pointer;
 }
 
@@ -2644,6 +2675,7 @@ body.resizing * {
   background: var(--surface);
   border-bottom-color: var(--accent);
   color: var(--fg);
+  font-weight: 600;
 }
 
 /* 目录树 */
@@ -2756,7 +2788,7 @@ body.resizing * {
   min-width: 0;
   min-height: 22px;
   padding-right: 4px;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
 }
 
 .tree-row:hover {
@@ -2793,7 +2825,7 @@ body.resizing * {
   height: 22px;
   padding: 0 4px;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-ctl);
   background: transparent;
   color: var(--fg);
   font-size: 11px;
@@ -2850,7 +2882,7 @@ body.resizing * {
   border: 0;
   background: transparent;
   color: var(--fg);
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   text-align: left;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -4866,10 +4898,11 @@ body.resizing * {
   min-width: 16px;
   height: 16px;
   padding: 0 4px;
-  border-radius: 8px;
+  border-radius: 999px;
   background: var(--accent);
   color: var(--accent-fg);
-  font-size: 10px;
+  font-size: var(--fs-2xs);
+  font-weight: 600;
   display: inline-flex;
   align-items: center;
   justify-content: center;
