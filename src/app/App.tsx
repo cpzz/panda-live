@@ -3332,7 +3332,7 @@ export function App() {
                 {t("新建文档")}
               </button>
               <button type="button" className="button" onClick={() => void manager.openFiles()}>
-                <Icon name="folder-open" size={14} />
+                <Icon name="file" size={14} />
                 {t("打开文件")}
               </button>
             </div>
@@ -3526,7 +3526,7 @@ export function App() {
           title={t("性能浮层")}
           onClick={() => setPerfVisible((value) => !value)}
         >
-          <Icon name="activity" size={12} />
+          <Icon name="gauge" size={12} />
         </button>
         {(problems.length > 0 || problemsOpen) && (
           <>

@@ -47,7 +47,7 @@ export type SidebarTab = "files" | "outline" | "source-control";
 /** 每个侧栏标签对应的图标，供展开的 tab 栏与折叠后的竖列 rail 共用。 */
 export const SIDEBAR_TAB_ICON: Record<SidebarTab, IconName> = {
   files: "folder-open",
-  outline: "list",
+  outline: "list-tree",
   "source-control": "git",
 };
 
@@ -874,7 +874,7 @@ export function SidebarRail({
         data-tip={t("展开工作区")}
         onClick={onExpand}
       >
-        <Icon name="sidebar-open" size={15} />
+        <Icon name="sidebar-open" size={14} />
       </button>
       {tabs.map(({ key, label }) => (
         <button
@@ -886,7 +886,7 @@ export function SidebarRail({
           data-tip={label}
           onClick={() => onSelect(key)}
         >
-          <Icon name={SIDEBAR_TAB_ICON[key]} size={15} />
+          <Icon name={SIDEBAR_TAB_ICON[key]} size={14} />
           {key === "source-control" && sourceControlCount > 0 && (
             <span className="sidebar-rail-badge">{sourceControlCount}</span>
           )}

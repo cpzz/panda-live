@@ -12,7 +12,7 @@ const DIAGRAM_LANGUAGES: Record<string, DiagramKind> = {
 
 /** 「放大查看」按钮图标：与全局线性图标（Lucide）风格一致。 */
 const EXPAND_ICON =
-  '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>';
+  '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>';
 
 /** 打开放大查看对话框的窗口事件；App 侧监听并承载对话框。 */
 export const DIAGRAM_OPEN_EVENT = "panda-diagram-open";

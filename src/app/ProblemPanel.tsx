@@ -50,7 +50,7 @@ export function ProblemPanel({
           title={t("关闭")}
           onClick={onClose}
         >
-          <Icon name="close" />
+          <Icon name="close" size={14} />
         </button>
       </div>
       {items.length > 0 ? (

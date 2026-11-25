@@ -106,7 +106,7 @@ export function SettingsDialog({
         <header className="modal-header">
           <h2>{t("设置")}</h2>
           <button type="button" className="icon-button" onClick={onClose} aria-label={t("关闭")} title={t("关闭")}>
-            <Icon name="close" />
+            <Icon name="close" size={14} />
           </button>
         </header>
 

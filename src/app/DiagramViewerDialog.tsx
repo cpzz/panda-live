@@ -386,7 +386,7 @@ export function DiagramViewerDialog({ svg, title, onClose }: DiagramViewerDialog
               aria-label={t("关闭")}
               title={t("关闭")}
             >
-              <Icon name="close" />
+              <Icon name="close" size={14} />
             </button>
           </div>
         </header>

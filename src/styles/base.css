@@ -200,13 +200,6 @@ button {
   outline-offset: 2px;
 }
 
-/* 图标描边微收（viewBox 尺寸不变） */
-.icon-button svg,
-.mode-button svg,
-.statusbar-icon svg {
-  stroke-width: 1.8;
-}
-
 /* 动效：控件 hover 120ms；弹层出现 140ms；reduced-motion 下全部禁用。 */
 .button,
 .icon-button,

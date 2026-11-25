@@ -117,6 +117,17 @@ const ICONS = {
       <path d="M12 18v-6" />
     </>
   ),
+  /** 加入（Git 暂存）：独立的加号，避免与「新建文件」共用 file-plus。 */
+  plus: (
+    <>
+      <path d="M12 5v14" />
+      <path d="M5 12h14" />
+    </>
+  ),
+  /** 移出（Git 取消暂存）：与 plus 成对的减号。 */
+  minus: (
+    <path d="M5 12h14" />
+  ),
   folder: (
     <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
   ),
@@ -259,13 +270,21 @@ const ICONS = {
       <path d="M3 3v5h5" />
     </>
   ),
-  /** 缩放工具栏：默认显示（1:1 实际尺寸） */
+  /** 缩放工具栏：默认显示（1:1 实际尺寸），用比例字标替代晦涩的旗形。 */
   "default-view": (
     <>
-      <path d="M7 10l2-1.5V16" />
-      <path d="M12.5 11h.02" />
-      <path d="M12.5 15h.02" />
-      <path d="M16 10l2-1.5V16" />
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <text
+        x="12"
+        y="15.6"
+        textAnchor="middle"
+        fontSize="8.5"
+        fontWeight="700"
+        fill="currentColor"
+        stroke="none"
+      >
+        1:1
+      </text>
     </>
   ),
   /** 缩放工具栏：页宽显示（页面边界内的横向双箭头） */
@@ -285,11 +304,22 @@ const ICONS = {
       <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" />
     </>
   ),
+  /** 普通列表（标签溢出菜单等） */
   list: (
     <>
       <path d="M3 5h18" />
       <path d="M3 12h18" />
       <path d="M3 19h18" />
+    </>
+  ),
+  /** 大纲/目录树：层级缩进 + 节点圆点，与平面列表区分。 */
+  "list-tree": (
+    <>
+      <path d="M3 6h18" />
+      <path d="M7 12h14" />
+      <path d="M7 18h14" />
+      <circle cx="4" cy="12" r="0.9" fill="currentColor" stroke="none" />
+      <circle cx="4" cy="18" r="0.9" fill="currentColor" stroke="none" />
     </>
   ),
   "more-vertical": (
@@ -364,6 +394,14 @@ const ICONS = {
       <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
     </>
   ),
+  /** 性能浮层：仪表盘 + 指针，比心电线更贴近性能指标语义。 */
+  gauge: (
+    <>
+      <path d="M3 18a9 9 0 0 1 18 0" />
+      <path d="M12 18l4-7" />
+      <circle cx="12" cy="18" r="1.2" fill="currentColor" stroke="none" />
+    </>
+  ),
   git: (
     <>
       <circle cx="6" cy="6" r="2.5" />
@@ -379,6 +417,16 @@ const ICONS = {
       <rect x="14" y="4" width="7" height="16" rx="1" />
       <path d="M5 8h3M5 12h3M5 16h3" />
       <path d="M16 8h3M16 12h3M16 16h3" />
+    </>
+  ),
+  /** 文档差异开关：左侧减号、右侧加号，与「对比视图」的双栏 compare 区分。 */
+  diff: (
+    <>
+      <path d="M4 4v16" />
+      <path d="M20 4v16" />
+      <path d="M7 9h4" />
+      <path d="M13 15h4" />
+      <path d="M15 13v4" />
     </>
   ),
   /* 预览对比：diff 加减号（上一行新增、下一行删除），与「预览」眼睛图标区分。 */
@@ -500,7 +548,7 @@ export function OutlineSymbolIcon({
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth={1.75}
+      strokeWidth={1.8}
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
@@ -568,7 +616,7 @@ export function Icon({
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth={1.75}
+      strokeWidth={1.8}
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"

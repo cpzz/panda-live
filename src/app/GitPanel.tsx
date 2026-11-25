@@ -141,7 +141,7 @@ function ChangeRow({
             disabled={disabled}
             onClick={() => onStage(change)}
           >
-            <Icon name="file-plus" size={13} />
+            <Icon name="plus" size={13} />
           </button>
         )}
         {onUnstage && (
@@ -153,7 +153,7 @@ function ChangeRow({
             disabled={disabled}
             onClick={() => onUnstage(change)}
           >
-            <Icon name="reset" size={13} />
+            <Icon name="minus" size={13} />
           </button>
         )}
         {onDiscard && (

@@ -105,7 +105,7 @@ export function DiffControls({
         onClick={onToggle}
         disabled={disabled}
       >
-        <Icon name="compare" size={12} />
+        <Icon name="diff" size={12} />
         {enabled && dirty && <span className="diff-dirty-dot" aria-label={t("包含未保存修改")} />}
       </button>
 
