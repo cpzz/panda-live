@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type DragEvent as ReactDragEvent, type PointerEvent as ReactPointerEvent } from "react";
 import type { EditorState } from "@codemirror/state";
 import { renderMarkdownToHtml } from "../formats/markdown/preview";
 import { parseMarkdown } from "../formats/markdown/parse";
@@ -2455,6 +2455,56 @@ export function App() {
     window.addEventListener("pointerup", end);
   };
 
+  // 将外部文件/目录拖入主显示区时打开（与侧栏拖放行为一致）。
+  const dropDepthRef = useRef(0);
+  const [dropActive, setDropActive] = useState(false);
+  const dropHasFiles = (event: ReactDragEvent<HTMLElement>): boolean =>
+    Array.from(event.dataTransfer.types).includes("Files");
+  const handleEditorDragEnter = (event: ReactDragEvent<HTMLElement>): void => {
+    if (!dropHasFiles(event)) return;
+    event.preventDefault();
+    dropDepthRef.current += 1;
+    setDropActive(true);
+  };
+  const handleEditorDragOver = (event: ReactDragEvent<HTMLElement>): void => {
+    if (!dropHasFiles(event)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+  };
+  const handleEditorDragLeave = (event: ReactDragEvent<HTMLElement>): void => {
+    if (!dropHasFiles(event)) return;
+    dropDepthRef.current = Math.max(0, dropDepthRef.current - 1);
+    if (dropDepthRef.current === 0) setDropActive(false);
+  };
+  const handleEditorDrop = (event: ReactDragEvent<HTMLElement>): void => {
+    if (!dropHasFiles(event)) return;
+    // 若内部编辑器已消费该拖放（如正文拖入图片以插入），则不再打开为文档。
+    if (event.defaultPrevented) {
+      dropDepthRef.current = 0;
+      setDropActive(false);
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    dropDepthRef.current = 0;
+    setDropActive(false);
+    const paths = Array.from(event.dataTransfer.files)
+      .map((file) => window.panda.getPathForFile(file))
+      .filter((filePath) => filePath.length > 0);
+    for (const filePath of paths) {
+      void window.panda.fs
+        .inspectDrop({ path: filePath })
+        .then((info) => {
+          if (info.isFile) {
+            void manager.openPath(info.ref.path, info.ref.rootId);
+          } else {
+            void workspaces.openPath(info.ref.path, []);
+          }
+        })
+        .catch(() => undefined);
+    }
+  };
+
   return (
     <div className="app" ref={appRef}>
       <header className="toolbar">
@@ -2579,7 +2629,19 @@ export function App() {
           />
         )}
 
-        <div className="editor-area">
+        <div
+          className={dropActive ? "editor-area dragging" : "editor-area"}
+          onDragEnter={handleEditorDragEnter}
+          onDragOver={handleEditorDragOver}
+          onDragLeave={handleEditorDragLeave}
+          onDrop={handleEditorDrop}
+        >
+          {dropActive && (
+            <div className="editor-drop-hint" aria-hidden="true">
+              <Icon name="folder-open" size={22} />
+              <span>{t("松开以打开文件或文件夹")}</span>
+            </div>
+          )}
           <div className="tabstrip">
             <div className="tabstrip-scroll" ref={tabScrollRef}>
               <div
