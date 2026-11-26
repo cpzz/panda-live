@@ -5475,8 +5475,15 @@ body.resizing * {
 .git-sync-actions {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
   gap: 2px;
+}
+
+/* 领先/落后计数整组靠左；右侧 auto 边距把同步按钮组推到最右（无计数时按钮仍靠右）。 */
+.git-sync-stats {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: auto;
 }
 
 /* 工具栏独占一行后靠右收拢；按钮比面板里的常规图标按钮小一号，避免一行五个显得笨重。 */
@@ -5485,7 +5492,7 @@ body.resizing * {
   height: 22px;
 }
 
-/* 同步区段分隔线：领先/落后计数与同步操作、同步操作与刷新之间。 */
+/* 同步区段分隔线：同步操作之间，以及同步操作与刷新之间。 */
 .git-sync-divider {
   flex: 0 0 auto;
   width: 1px;

@@ -1108,25 +1108,25 @@ export function GitPanel({
           </div>
         </div>
         <div className="git-sync-actions">
-          {snapshot.ahead > 0 && (
-            <span
-              className="git-ahead"
-              title={t("领先上游 {0} 个提交（待推送）", snapshot.ahead)}
-            >
-              ↑{snapshot.ahead}
-            </span>
-          )}
-          {snapshot.behind > 0 && (
-            <span
-              className="git-behind"
-              title={t("落后上游 {0} 个提交（待拉取）", snapshot.behind)}
-            >
-              ↓{snapshot.behind}
-            </span>
-          )}
-          {(snapshot.ahead > 0 || snapshot.behind > 0) && (
-            <span className="git-sync-divider" aria-hidden="true" />
-          )}
+          {/* 领先/落后计数作为整体靠左，悬停显示合并提示；同步按钮组靠右，两者之间不再有分隔线。 */}
+          <span
+            className="git-sync-stats"
+            title={
+              [
+                snapshot.ahead > 0
+                  ? t("领先上游 {0} 个提交（待推送）", snapshot.ahead)
+                  : null,
+                snapshot.behind > 0
+                  ? t("落后上游 {0} 个提交（待拉取）", snapshot.behind)
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(" · ") || undefined
+            }
+          >
+            {snapshot.ahead > 0 && <span className="git-ahead">↑{snapshot.ahead}</span>}
+            {snapshot.behind > 0 && <span className="git-behind">↓{snapshot.behind}</span>}
+          </span>
           {/* 禁用按钮在 Chromium 下不显示 title，用外层承载原因提示。 */}
           <span className="git-sync-slot" title={fetchBlockReason ?? t("获取（fetch）")}>
             <button
