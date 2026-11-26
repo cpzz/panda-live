@@ -57,6 +57,7 @@ const api: PandaApi = {
     push: (request) => invoke("git:push", request),
     addRemote: (request) => invoke("git:addRemote", request),
     setRemoteUrl: (request) => invoke("git:setRemoteUrl", request),
+    removeRemote: (request) => invoke("git:removeRemote", request),
     log: (request) => invoke("git:log", request),
     commitDetail: (request) => invoke("git:commitDetail", request),
     fileLog: (request) => invoke("git:fileLog", request),

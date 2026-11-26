@@ -163,6 +163,11 @@ export function registerGitHandlers({
     return operation(() => git.setRemoteUrl(root, request.name, request.url, command()));
   });
 
+  handle("git:removeRemote", async (request): Promise<GitSnapshot> => {
+    const root = await assertRoot(request.root);
+    return operation(() => git.removeRemote(root, request.name, command()));
+  });
+
   handle("git:log", async (request): Promise<GitCommit[]> => {
     const root = await assertRoot(request.root);
     return operation(() => git.log(root, request.limit, request.skip ?? 0, command()));

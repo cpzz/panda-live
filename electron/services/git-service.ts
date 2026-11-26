@@ -473,6 +473,20 @@ export class GitService {
     return this.snapshot(root, commandLine);
   }
 
+  /**
+   * 删除一个已配置的远程：执行 `git remote remove`，不触碰分支与上游。
+   * 名字以 `--` 保护，避免以 `-` 开头被当成选项；失败复用远程配置的归一化错误。
+   */
+  async removeRemote(root: string, name: string, commandLine?: string): Promise<GitSnapshot> {
+    const command = parseGitCommand(commandLine);
+    try {
+      await runGit(["remote", "remove", "--", name], root, command);
+    } catch (error) {
+      throw remoteConfigError(error, name);
+    }
+    return this.snapshot(root, commandLine);
+  }
+
   async log(
     root: string,
     limit: number,

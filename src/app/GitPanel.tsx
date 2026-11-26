@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   pickRemote,
   REMOTE_NAME_PATTERN,
@@ -311,10 +311,15 @@ export function GitPanel({
   /** 拉取窗口内对「拉取方式」的临时覆盖；null 表示沿用设置里的值。 */
   const [strategyOverride, setStrategyOverride] = useState<GitPullStrategy | null>(null);
   const [syncForce, setSyncForce] = useState(false);
-  /** 设置远程地址对话框：入口在工具栏，既能首次配置，也能修改当前远程的地址。 */
+  /** 设置远程地址对话框：入口在工具栏，展示当前仓库全部远程，支持添加与删除。 */
   const [remoteDialog, setRemoteDialog] = useState(false);
-  const [remoteName, setRemoteName] = useState("origin");
-  const [remoteUrl, setRemoteUrl] = useState("");
+  /** 「添加远程」表单是否展开；列表态与新增态互斥。 */
+  const [remoteAdding, setRemoteAdding] = useState(false);
+  /** 新增草稿的远程名 / 地址。 */
+  const [draftName, setDraftName] = useState("");
+  const [draftUrl, setDraftUrl] = useState("");
+  /** 待删除的远程名；非空时弹出删除确认窗口，确认后才真正调用 store。 */
+  const [pendingRemove, setPendingRemove] = useState<string | null>(null);
   const [remoteError, setRemoteError] = useState<string | null>(null);
   const [remoteSaving, setRemoteSaving] = useState(false);
   const [newBranch, setNewBranch] = useState("");
@@ -450,7 +455,10 @@ export function GitPanel({
     setTab("changes");
     setSyncDialog(null);
     setRemoteDialog(false);
-    setRemoteUrl("");
+    setRemoteAdding(false);
+    setDraftName("");
+    setDraftUrl("");
+    setPendingRemove(null);
     setRemoteError(null);
   }, [selectedRepo]);
 
@@ -804,12 +812,14 @@ export function GitPanel({
   };
 
   /**
-   * 打开「设置远程地址」：有 remote 时定位到推送会用的那个并回填地址（改地址），
-   * 没有时才从 origin + 空地址开始（首次配置）。错误每次都清空，避免带上一次的结果。
+   * 打开「远程地址」：进入列表态，直接展示当前仓库已配置的全部远程，
+   * 并清空上一次的草稿、编辑、待删除与错误，避免带上次的状态。
    */
   const openRemoteDialog = (): void => {
-    setRemoteName(currentRemote?.name ?? "origin");
-    setRemoteUrl(currentRemote?.url ?? "");
+    setRemoteAdding(false);
+    setDraftName("");
+    setDraftUrl("");
+    setPendingRemove(null);
     setRemoteError(null);
     setRemoteSaving(false);
     setRemoteDialog(true);
@@ -820,28 +830,71 @@ export function GitPanel({
     if (remoteError) setRemoteError(null);
   };
 
-  /** 已有远程只改地址（set-url），没有才新增（remote add）；都不顺手推送。 */
-  const submitRemote = (event: FormEvent<HTMLFormElement>): void => {
-    event.preventDefault();
-    const name = remoteName.trim();
-    const url = remoteUrl.trim();
-    if (!name || !url || remoteSaving || busy) return;
-    const existing = remotes.some((remote) => remote.name === name);
-    // 只在新增时校验字符集：已有远程可能是 Git 允许、但不在白名单里的名字（如 a+b、中文），
-    // 那种情况下名字由下拉给出，用户改不了，不该因此挡住改地址。
-    if (!existing && !REMOTE_NAME_PATTERN.test(name)) {
+  /** 展开新增表单：远程名默认 origin（选中态便于直接改写），焦点由 autoFocus 落到该输入。 */
+  const startAdd = (): void => {
+    if (remoteSaving || busy) return;
+    setDraftName("origin");
+    setDraftUrl("");
+    setRemoteError(null);
+    setRemoteAdding(true);
+  };
+
+  const cancelAdd = (): void => {
+    if (remoteSaving) return;
+    setRemoteAdding(false);
+    setDraftName("");
+    setDraftUrl("");
+    setRemoteError(null);
+  };
+
+  /** 保存新增远程：名字走字符集与唯一性校验，地址必填；成功后收起表单。 */
+  const submitAdd = (): void => {
+    if (remoteSaving || busy) return;
+    const name = draftName.trim();
+    const url = draftUrl.trim();
+    if (!name || !url) return;
+    if (!REMOTE_NAME_PATTERN.test(name)) {
       setRemoteError(t("远程名只能包含字母、数字、点、下划线与连字符。"));
+      return;
+    }
+    if (remotes.some((remote) => remote.name === name)) {
+      setRemoteError(t("已存在名为 {0} 的远程。", name));
       return;
     }
     setRemoteError(null);
     setRemoteSaving(true);
-    void (existing ? store.setRemoteUrl(name, url) : store.addRemote(name, url))
+    void store
+      .addRemote(name, url)
       .then(() => {
-        setRemoteDialog(false);
-        onRecord(
-          "info",
-          existing ? t("已更新远程 {0} 的地址。", name) : t("已配置远程 {0}。", name),
-        );
+        setRemoteAdding(false);
+        onRecord("info", t("已配置远程 {0}。", name));
+      })
+      .catch((error) => setRemoteError(describeError(error)))
+      .finally(() => setRemoteSaving(false));
+  };
+
+  /** 请求删除某远程：只置为待删除并弹窗确认，不直接调用 store。 */
+  const requestRemove = (name: string): void => {
+    if (remoteSaving || busy) return;
+    setRemoteError(null);
+    setPendingRemove(name);
+  };
+
+  const cancelRemove = (): void => {
+    if (remoteSaving) return;
+    setPendingRemove(null);
+  };
+
+  /** 确认删除：真正调用 store，成功后收起弹窗；失败就地显示。 */
+  const confirmRemove = (): void => {
+    const name = pendingRemove;
+    if (!name || remoteSaving || busy) return;
+    setRemoteSaving(true);
+    void store
+      .removeRemote(name)
+      .then(() => {
+        setPendingRemove(null);
+        onRecord("info", t("已删除远程 {0}。", name));
       })
       .catch((error) => setRemoteError(describeError(error)))
       .finally(() => setRemoteSaving(false));
@@ -1121,11 +1174,16 @@ export function GitPanel({
                   : null,
               ]
                 .filter(Boolean)
-                .join(" · ") || undefined
+                .join(" · ")
+              || (snapshot.upstream
+                ? t("与上游一致，无领先或落后提交。")
+                : t("当前分支未配置上游，无法比较领先/落后。"))
             }
           >
-            {snapshot.ahead > 0 && <span className="git-ahead">↑{snapshot.ahead}</span>}
-            {snapshot.behind > 0 && <span className="git-behind">↓{snapshot.behind}</span>}
+            {/* 恒显：无差异时显示 ↑0/↓0，用斜杠把领先/落后连成一体；只加粗箭头，数字常规字重。 */}
+            <span className="git-ahead"><span className="git-sync-arrow">↑</span>{snapshot.ahead}</span>
+            <span className="git-sync-slash">/</span>
+            <span className="git-behind"><span className="git-sync-arrow">↓</span>{snapshot.behind}</span>
           </span>
           {/* 禁用按钮在 Chromium 下不显示 title，用外层承载原因提示。 */}
           <span className="git-sync-slot" title={fetchBlockReason ?? t("获取（fetch）")}>
@@ -1934,78 +1992,71 @@ export function GitPanel({
             if (event.target === event.currentTarget && !remoteSaving) setRemoteDialog(false);
           }}
         >
-          <form
+          <div
             className="modal git-remote-modal"
             role="dialog"
             aria-modal="true"
             aria-label={t("设置远程地址")}
             aria-busy={remoteSaving}
-            onSubmit={submitRemote}
           >
             <header className="git-sync-head">
               <h2>{t("设置远程地址")}</h2>
             </header>
             <div className="git-remote-body">
-              <label className="git-remote-field">
-                <span>{t("远程名")}</span>
-                {/* 已有远程时只能从列表里选：改的是它的地址，不是再造一个同义远程。 */}
-                {hasRemote ? (
-                  <select
-                    className="git-remote-input"
-                    value={remoteName}
-                    disabled={remoteSaving}
-                    onChange={(event) => {
-                      touchRemote();
-                      const name = event.target.value;
-                      setRemoteName(name);
-                      setRemoteUrl(remotes.find((remote) => remote.name === name)?.url ?? "");
-                    }}
-                  >
+              <div className="git-remote-table-wrap">
+                <table className="git-remote-table">
+                  <thead>
+                    <tr>
+                      <th className="git-remote-col-name">{t("远程名")}</th>
+                      <th className="git-remote-col-url">{t("仓库地址")}</th>
+                      <th className="git-remote-col-actions">
+                        <button
+                          type="button"
+                          className="git-icon-button git-remote-add"
+                          title={t("添加远程")}
+                          aria-label={t("添加远程")}
+                          disabled={busy || remoteSaving || remoteAdding}
+                          onClick={startAdd}
+                        >
+                          <Icon name="plus" size={14} />
+                        </button>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {remotes.length === 0 && (
+                      <tr className="git-remote-empty">
+                        <td colSpan={3}>{t("还没有配置远程地址，点右上角 + 添加。")}</td>
+                      </tr>
+                    )}
                     {remotes.map((remote) => (
-                      <option key={remote.name} value={remote.name}>
-                        {remote.name}
-                      </option>
+                      <tr key={remote.name} className="git-remote-row">
+                        <td className="git-remote-col-name">{remote.name}</td>
+                        <td className="git-remote-col-url" title={remote.url}>
+                          {remote.url}
+                        </td>
+                        <td className="git-remote-col-actions">
+                          <button
+                            type="button"
+                            className="git-icon-button git-remote-danger"
+                            title={t("删除")}
+                            aria-label={t("删除远程 {0}", remote.name)}
+                            disabled={busy || remoteSaving}
+                            onClick={() => requestRemove(remote.name)}
+                          >
+                            <Icon name="trash" size={13} />
+                          </button>
+                        </td>
+                      </tr>
                     ))}
-                  </select>
-                ) : (
-                  <input
-                    className="git-remote-input"
-                    value={remoteName}
-                    maxLength={64}
-                    disabled={remoteSaving}
-                    onChange={(event) => {
-                      touchRemote();
-                      setRemoteName(event.target.value);
-                    }}
-                  />
-                )}
-              </label>
-              <label className="git-remote-field">
-                <span>{t("仓库地址")}</span>
-                {/* 地址是必填项；名字可能已经有值，焦点放在更容易改错的地方。 */}
-                <input
-                  className="git-remote-input"
-                  autoFocus
-                  value={remoteUrl}
-                  maxLength={2048}
-                  disabled={remoteSaving}
-                  placeholder="https://example.com/repo.git"
-                  onChange={(event) => {
-                    touchRemote();
-                    setRemoteUrl(event.target.value);
-                  }}
-                />
-              </label>
+                </tbody>
+              </table>
+              </div>
               {remoteError && (
                 <p className="git-remote-error" role="alert">
                   {remoteError}
                 </p>
               )}
-              <p className="git-remote-hint">
-                {hasRemote
-                  ? t("只修改远程地址，不会自动推送。")
-                  : t("只写入远程地址，不会自动推送；首次推送时会同时设置上游分支。")}
-              </p>
             </div>
             <footer className="modal-footer">
               <button
@@ -2014,17 +2065,132 @@ export function GitPanel({
                 disabled={remoteSaving}
                 onClick={() => setRemoteDialog(false)}
               >
+                {t("关闭")}
+              </button>
+            </footer>
+          </div>
+        </div>
+      )}
+
+      {/* 删除确认：独立叠在主窗口之上，确认后才真正调用 store.removeRemote。 */}
+      {remoteDialog && pendingRemove && (
+        <div
+          className="modal-backdrop git-remote-confirm-backdrop"
+          role="presentation"
+          onClick={(event) => {
+            if (event.target === event.currentTarget && !remoteSaving) setPendingRemove(null);
+          }}
+        >
+          <div
+            className="modal git-remote-confirm"
+            role="alertdialog"
+            aria-modal="true"
+            aria-label={t("删除远程")}
+          >
+            <header className="git-sync-head">
+              <h2>{t("删除远程")}</h2>
+            </header>
+            <div className="git-remote-body">
+              <p className="git-remote-confirm-text">
+                {t("确定删除远程「{0}」吗？该操作不可撤销。", pendingRemove)}
+              </p>
+            </div>
+            <footer className="modal-footer">
+              <button
+                type="button"
+                className="button ghost"
+                disabled={remoteSaving}
+                onClick={cancelRemove}
+              >
                 {t("取消")}
               </button>
               <button
-                type="submit"
-                className="button primary"
-                disabled={remoteSaving || busy || !remoteName.trim() || !remoteUrl.trim()}
+                type="button"
+                className="button danger"
+                disabled={remoteSaving || busy}
+                onClick={confirmRemove}
               >
-                {remoteSaving ? t("保存中…") : t("保存")}
+                {remoteSaving ? t("删除中…") : t("删除")}
               </button>
             </footer>
-          </form>
+          </div>
+        </div>
+      )}
+
+      {/* 添加远程：叠在主窗口之上的独立窗口，远程名 + 仓库地址两个输入栏，确定/取消。 */}
+      {remoteDialog && remoteAdding && (
+        <div
+          className="modal-backdrop git-remote-add-backdrop"
+          role="presentation"
+          onClick={(event) => {
+            if (event.target === event.currentTarget && !remoteSaving) cancelAdd();
+          }}
+        >
+          <div
+            className="modal git-remote-add"
+            role="dialog"
+            aria-modal="true"
+            aria-label={t("添加远程")}
+            aria-busy={remoteSaving}
+          >
+            <header className="git-sync-head">
+              <h2>{t("添加远程")}</h2>
+            </header>
+            <div className="git-remote-add-body">
+              <label className="git-remote-field">
+                <span className="git-remote-field-label">{t("远程名")}</span>
+                <input
+                  className="git-remote-input"
+                  autoFocus
+                  value={draftName}
+                  maxLength={64}
+                  placeholder="origin"
+                  disabled={remoteSaving}
+                  onChange={(event) => {
+                    touchRemote();
+                    setDraftName(event.target.value);
+                  }}
+                />
+              </label>
+              <label className="git-remote-field">
+                <span className="git-remote-field-label">{t("仓库地址")}</span>
+                <input
+                  className="git-remote-input"
+                  value={draftUrl}
+                  maxLength={2048}
+                  placeholder="https://example.com/repo.git"
+                  disabled={remoteSaving}
+                  onChange={(event) => {
+                    touchRemote();
+                    setDraftUrl(event.target.value);
+                  }}
+                />
+              </label>
+              {remoteError && (
+                <p className="git-remote-error" role="alert">
+                  {remoteError}
+                </p>
+              )}
+            </div>
+            <footer className="modal-footer">
+              <button
+                type="button"
+                className="button ghost"
+                disabled={remoteSaving}
+                onClick={cancelAdd}
+              >
+                {t("取消")}
+              </button>
+              <button
+                type="button"
+                className="button primary"
+                disabled={remoteSaving || busy || !draftName.trim() || !draftUrl.trim()}
+                onClick={submitAdd}
+              >
+                {remoteSaving ? t("保存中…") : t("确定")}
+              </button>
+            </footer>
+          </div>
         </div>
       )}
     </div>

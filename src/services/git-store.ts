@@ -243,6 +243,15 @@ export class GitStore {
     );
   }
 
+  /** 删除一个已配置的远程；失败交给调用方就地显示（如「远程不存在」）。 */
+  async removeRemote(name: string): Promise<void> {
+    await this.operate(
+      "设置远程地址",
+      async (root) => window.panda.git.removeRemote({ root, name }),
+      { inlineError: false },
+    );
+  }
+
   async checkout(branch: string, create = false): Promise<void> {
     await this.operate("切换分支", async (root) =>
       window.panda.git.checkout({ root, branch, create }),

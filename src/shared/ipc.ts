@@ -506,6 +506,11 @@ export const ipcRequestSchemas = {
     name: z.string().trim().min(1).max(64),
     url: z.string().trim().min(1).max(2048),
   }),
+  "git:removeRemote": z.object({
+    root: z.string().min(1),
+    /** 已存在的远程名；不重新校验字符集，名字不存在时由主进程归一化为「远程不存在」。 */
+    name: z.string().trim().min(1).max(64),
+  }),
   "git:log": z.object({
     root: z.string().min(1),
     limit: z.number().int().min(1).max(200),
@@ -605,6 +610,7 @@ export interface IpcResponseMap {
   "git:push": GitSnapshot;
   "git:addRemote": GitSnapshot;
   "git:setRemoteUrl": GitSnapshot;
+  "git:removeRemote": GitSnapshot;
   "git:log": GitCommit[];
   "git:commitDetail": GitCommitDetail;
   "git:fileLog": GitCommit[];
@@ -669,6 +675,7 @@ export interface PandaApi {
     push(request: { root: string; setUpstream: boolean; force?: boolean }): Promise<GitSnapshot>;
     addRemote(request: { root: string; name: string; url: string }): Promise<GitSnapshot>;
     setRemoteUrl(request: { root: string; name: string; url: string }): Promise<GitSnapshot>;
+    removeRemote(request: { root: string; name: string }): Promise<GitSnapshot>;
     log(request: { root: string; limit: number; skip?: number }): Promise<GitCommit[]>;
     commitDetail(request: { root: string; hash: string }): Promise<GitCommitDetail>;
     fileLog(request: { path: string; limit: number; skip?: number }): Promise<GitCommit[]>;

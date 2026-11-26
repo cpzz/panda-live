@@ -5422,17 +5422,127 @@ body.resizing * {
   padding: 16px 18px;
 }
 
+/* 远程地址表格：远程名 | 仓库地址 | 行操作（删除）。 */
+/* 列表区定宽（随窗口 420px）定高：预留表头 + 4 行高度，超过 4 行纵向滚动。 */
+/* 行高固定 30px（padding 6*2 + line-height 18）+ 1px 边框 = 31px/行；5 行 = 155px。 */
+.git-remote-table-wrap {
+  max-height: 155px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.git-remote-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.git-remote-table th,
+.git-remote-table td {
+  padding: 6px 8px;
+  line-height: 18px;
+  text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--border);
+}
+
+/* 表头吸顶：滚动时列名与「添加远程」按钮始终可见。 */
+.git-remote-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface);
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 11px;
+}
+
+/* 远程名定宽不换行；地址等宽、超长省略，全文保留在 title。 */
+.git-remote-col-name {
+  width: 110px;
+  max-width: 140px;
+  white-space: nowrap;
+}
+
+.git-remote-col-url {
+  min-width: 0;
+  font-family: ui-monospace, Consolas, monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 行操作列右对齐；图标按钮小一号，按钮之间留缝。 */
+/* 用更高特异性覆盖 .git-remote-table th/td 的左对齐（含表头里的「添加远程」按钮）。 */
+.git-remote-col-actions {
+  white-space: nowrap;
+}
+
+.git-remote-table th.git-remote-col-actions,
+.git-remote-table td.git-remote-col-actions {
+  text-align: right;
+}
+
+.git-remote-col-actions .git-icon-button {
+  width: 22px;
+  height: 22px;
+}
+
+.git-remote-col-actions .button + .button {
+  margin-left: 6px;
+}
+
+/* 删除图标悬停转红，强化破坏性操作的可辨识。 */
+.git-remote-danger:hover:not(:disabled) {
+  color: var(--danger);
+}
+
+/* 空仓库：单行占位提示。 */
+.git-remote-empty td {
+  color: var(--muted);
+  text-align: center;
+  padding: 14px 8px;
+}
+
+/* 添加远程窗口：独立叠在主窗口之上，含远程名/仓库地址两个输入栏与确定/取消。 */
+.git-remote-add-backdrop {
+  z-index: 21;
+}
+
+.git-remote-add {
+  width: min(380px, 92vw);
+}
+
+.git-remote-add-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 18px;
+}
+
 .git-remote-field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  font-size: 12px;
+  gap: 4px;
+}
+
+.git-remote-field-label {
   color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .git-remote-field .git-remote-input {
+  height: 28px;
+}
+
+/* 表格内输入框：占满单元格宽度，等宽字体；保存期禁用降透明度。 */
+.git-remote-input {
+  width: 100%;
   height: 26px;
   padding: 0 8px;
+  box-sizing: border-box;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   background: var(--surface);
@@ -5441,18 +5551,28 @@ body.resizing * {
   font-family: ui-monospace, Consolas, monospace;
 }
 
-.git-remote-field .git-remote-input::placeholder {
+.git-remote-input::placeholder {
   color: var(--muted);
 }
 
-/* 远程名下拉：给原生箭头留出位置，避免名字贴到箭头上。 */
-.git-remote-field select.git-remote-input {
-  padding-right: 22px;
+.git-remote-input:disabled {
+  opacity: 0.6;
 }
 
-/* 保存期间字段禁用：自定义了底色，需要显式降透明度，否则看不出已锁定。 */
-.git-remote-field .git-remote-input:disabled {
-  opacity: 0.6;
+/* 删除确认窗口：更窄，叠在主窗口之上（z-index 高于 20 的普通 backdrop）。 */
+.git-remote-confirm-backdrop {
+  z-index: 21;
+}
+
+.git-remote-confirm {
+  width: min(380px, 92vw);
+}
+
+.git-remote-confirm-text {
+  margin: 0;
+  color: var(--fg);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 /* 失败原因就地显示：Git 原始报错可能较长，允许换行、可滚动。 */
@@ -5466,24 +5586,23 @@ body.resizing * {
   overflow-wrap: anywhere;
 }
 
-.git-remote-hint {
-  margin: 0;
-  color: var(--muted);
-  font-size: 12px;
-}
-
 .git-sync-actions {
   display: flex;
   align-items: center;
   gap: 2px;
 }
 
-/* 领先/落后计数整组靠左；右侧 auto 边距把同步按钮组推到最右（无计数时按钮仍靠右）。 */
+/* 领先/落后计数整组靠左；右侧 auto 边距把同步按钮组推到最右。 */
+/* 恒显 ↑N/↓N：三项之间不留 gap，斜杠把领先/落后紧连成一体。 */
 .git-sync-stats {
   display: flex;
   align-items: center;
-  gap: 6px;
   margin-right: auto;
+}
+
+.git-sync-slash {
+  color: var(--muted);
+  font-size: 11px;
 }
 
 /* 工具栏独占一行后靠右收拢；按钮比面板里的常规图标按钮小一号，避免一行五个显得笨重。 */
@@ -5509,6 +5628,13 @@ body.resizing * {
 .git-behind {
   color: var(--muted);
   font-size: 11px;
+}
+
+/* 只加粗箭头，数字保持常规字重。 */
+/* 箭头字形常回退到无粗体权重的符号字体，font-weight 不生效，用轻微同色 text-shadow 兜底增厚描边。 */
+.git-sync-arrow {
+  font-weight: 700;
+  text-shadow: 0 0 0.4px currentColor;
 }
 
 .git-error {
