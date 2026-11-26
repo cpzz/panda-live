@@ -36,8 +36,6 @@ interface WorkspacePanelProps {
   tab: SidebarTab;
   /** 请求切换侧栏标签。 */
   onTabChange(tab: SidebarTab): void;
-  /** 点击 tab 栏右端的折叠按钮。 */
-  onCollapse(): void;
   /** 复制路径等操作的成功/失败提示。 */
   onNotice(kind: "info" | "error", message: string): void;
 }
@@ -341,7 +339,6 @@ export function WorkspacePanel({
   sourceControlCount,
   tab,
   onTabChange,
-  onCollapse,
   onNotice,
 }: WorkspacePanelProps) {
   const state = useSyncExternalStore(store.subscribe, store.getState);
@@ -620,15 +617,6 @@ export function WorkspacePanel({
               </button>
             )}
           </div>
-          <button
-            type="button"
-            className="icon-button sidebar-collapse-button"
-            aria-label={t("折叠工作区")}
-            data-tip={t("折叠工作区")}
-            onClick={onCollapse}
-          >
-            <Icon name="sidebar-close" size={14} />
-          </button>
         </div>
 
         {tab === "files" ? (
@@ -842,56 +830,5 @@ export function WorkspacePanel({
         </div>
       )}
     </>
-  );
-}
-
-/** 侧栏折叠时显示的竖列图标栏：顶部按钮展开侧栏，其余图标展开并切换到对应标签。 */
-export function SidebarRail({
-  activeTab,
-  showSourceControl,
-  sourceControlCount = 0,
-  onExpand,
-  onSelect,
-}: {
-  activeTab: SidebarTab;
-  showSourceControl: boolean;
-  sourceControlCount?: number;
-  onExpand(): void;
-  onSelect(tab: SidebarTab): void;
-}) {
-  const tabs: { key: SidebarTab; label: string }[] = [
-    { key: "files", label: t("工作区") },
-    { key: "outline", label: t("大纲") },
-  ];
-  if (showSourceControl) tabs.push({ key: "source-control", label: t("Git") });
-
-  return (
-    <nav className="sidebar-rail" aria-label={t("侧栏视图")}>
-      <button
-        type="button"
-        className="sidebar-rail-button sidebar-rail-expand"
-        aria-label={t("展开工作区")}
-        data-tip={t("展开工作区")}
-        onClick={onExpand}
-      >
-        <Icon name="sidebar-open" size={14} />
-      </button>
-      {tabs.map(({ key, label }) => (
-        <button
-          key={key}
-          type="button"
-          className={activeTab === key ? "sidebar-rail-button active" : "sidebar-rail-button"}
-          aria-label={label}
-          aria-pressed={activeTab === key}
-          data-tip={label}
-          onClick={() => onSelect(key)}
-        >
-          <Icon name={SIDEBAR_TAB_ICON[key]} size={14} />
-          {key === "source-control" && sourceControlCount > 0 && (
-            <span className="sidebar-rail-badge">{sourceControlCount}</span>
-          )}
-        </button>
-      ))}
-    </nav>
   );
 }

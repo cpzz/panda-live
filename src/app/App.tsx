@@ -72,7 +72,7 @@ import { DIAGRAM_OPEN_EVENT } from "../render/markdown/diagram-preview";
 import { PerformanceOverlay } from "./PerformanceOverlay";
 import { ProblemPanel } from "./ProblemPanel";
 import { SettingsDialog } from "./SettingsDialog";
-import { SidebarRail, WorkspacePanel, type SidebarTab } from "./WorkspacePanel";
+import { SIDEBAR_TAB_ICON, WorkspacePanel, type SidebarTab } from "./WorkspacePanel";
 import { GitPanel } from "./GitPanel";
 import { WysiwygPane } from "./WysiwygPane";
 import { GitPane } from "./GitPane";
@@ -2516,6 +2516,49 @@ export function App() {
           <PandaMark size={19} />
           <span className="brand-name">{t("Panda Live")}</span>
         </div>
+        {/* 折叠/展开边栏：单一开关，图标随状态切换；用 | 与品牌名分隔。 */}
+        <span className="toolbar-divider" aria-hidden="true" />
+        <button
+          type="button"
+          className="icon-button toolbar-icon"
+          aria-label={workspace.visible ? t("折叠工作区") : t("展开工作区")}
+          data-tip={workspace.visible ? t("折叠工作区") : t("展开工作区")}
+          onClick={() => workspaces.setVisible(!workspace.visible)}
+        >
+          <Icon name={workspace.visible ? "sidebar-close" : "sidebar-open"} />
+        </button>
+        {/* 边栏折叠时，把各标签图标移到开关后，用 | 分隔；点图标展开并切换到对应标签。 */}
+        {!workspace.visible && (
+          <>
+            <span className="toolbar-divider" aria-hidden="true" />
+            {(["files", "outline", "source-control"] as const).map((key) => {
+              const label =
+                key === "files" ? t("工作区") : key === "outline" ? t("大纲") : t("Git");
+              const count = key === "source-control" ? gitState.snapshot?.changes.length ?? 0 : 0;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  className={
+                    sidebarTab === key
+                      ? "icon-button toolbar-icon toolbar-tab active"
+                      : "icon-button toolbar-icon toolbar-tab"
+                  }
+                  aria-label={label}
+                  aria-pressed={sidebarTab === key}
+                  data-tip={label}
+                  onClick={() => {
+                    setSidebarTab(key);
+                    workspaces.setVisible(true);
+                  }}
+                >
+                  <Icon name={SIDEBAR_TAB_ICON[key]} />
+                  {count > 0 && <span className="toolbar-tab-badge">{count}</span>}
+                </button>
+              );
+            })}
+          </>
+        )}
         <div className="toolbar-spacer" />
         <div className={active?.dirty ? "toolbar-doc dirty" : "toolbar-doc"}>
           <span className="toolbar-doc-dot" aria-hidden="true" />
@@ -2612,7 +2655,6 @@ export function App() {
               sourceControlCount={gitState.snapshot?.changes.length ?? 0}
               tab={sidebarTab}
               onTabChange={setSidebarTab}
-              onCollapse={() => workspaces.setVisible(false)}
             />
             <div
               className="resizer sidebar-resizer"
@@ -2622,18 +2664,7 @@ export function App() {
               onPointerDown={beginSidebarResize}
             />
           </>
-        ) : (
-          <SidebarRail
-            activeTab={sidebarTab}
-            showSourceControl
-            sourceControlCount={gitState.snapshot?.changes.length ?? 0}
-            onExpand={() => workspaces.setVisible(true)}
-            onSelect={(next) => {
-              setSidebarTab(next);
-              workspaces.setVisible(true);
-            }}
-          />
-        )}
+        ) : null}
 
         <div
           className={dropActive ? "editor-area dragging" : "editor-area"}
