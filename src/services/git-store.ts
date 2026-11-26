@@ -205,10 +205,6 @@ export class GitStore {
     );
   }
 
-  async fetch(): Promise<void> {
-    await this.operate("获取", async (root) => window.panda.git.fetch({ root }));
-  }
-
   async pull(strategy?: GitPullStrategy): Promise<void> {
     await this.operate(
       "拉取",

@@ -68,14 +68,12 @@ describe("设置合并", () => {
     const merged = mergeSettings({
       git: {
         pullStrategy: "rebase",
-        fetchPrune: false,
         networkTimeoutSeconds: 5,
         autoRefresh: "60s",
         historyPageSize: 100,
       },
     });
     expect(merged.git.pullStrategy).toBe("rebase");
-    expect(merged.git.fetchPrune).toBe(false);
     expect(merged.git.networkTimeoutSeconds).toBe(30);
     expect(merged.git.autoRefresh).toBe("60s");
     expect(merged.git.historyPageSize).toBe(100);
@@ -83,14 +81,12 @@ describe("设置合并", () => {
     const invalid = mergeSettings({
       git: {
         pullStrategy: "squash",
-        fetchPrune: "yes",
         networkTimeoutSeconds: 99_999,
         autoRefresh: "always",
         historyPageSize: 75,
       },
     });
     expect(invalid.git.pullStrategy).toBe("rebase");
-    expect(invalid.git.fetchPrune).toBe(true);
     expect(invalid.git.networkTimeoutSeconds).toBe(600);
     expect(invalid.git.autoRefresh).toBe("focus");
     expect(invalid.git.historyPageSize).toBe(50);

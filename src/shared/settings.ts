@@ -73,9 +73,7 @@ export interface Settings {
      * `config` 执行裸 `git pull`（遵循用户 Git 配置），`rebase` 执行 `git pull --rebase`。
      */
     pullStrategy: GitPullStrategy;
-    /** 获取时是否清理远程已删除的分支（`fetch --prune`）。 */
-    fetchPrune: boolean;
-    /** fetch / pull / push 的超时（秒）。 */
+    /** pull / push 的超时（秒）。 */
     networkTimeoutSeconds: number;
     /** 仓库状态自动刷新时机。 */
     autoRefresh: GitAutoRefresh;
@@ -112,7 +110,6 @@ export const DEFAULT_SETTINGS: Settings = {
   git: {
     command: "git",
     pullStrategy: "rebase",
-    fetchPrune: true,
     networkTimeoutSeconds: 120,
     autoRefresh: "focus",
     historyPageSize: 50,
@@ -246,8 +243,6 @@ export function mergeSettings(raw: unknown): Settings {
         ["config", "rebase"] as const,
         DEFAULT_SETTINGS.git.pullStrategy,
       ),
-      fetchPrune:
-        typeof git.fetchPrune === "boolean" ? git.fetchPrune : DEFAULT_SETTINGS.git.fetchPrune,
       networkTimeoutSeconds: pickNumber(
         git.networkTimeoutSeconds,
         DEFAULT_SETTINGS.git.networkTimeoutSeconds,

@@ -401,14 +401,8 @@ export function GitPanel({
         : snapshot.upstream && snapshot.ahead === 0
           ? t("没有需要推送的提交")
           : null;
-  const fetchBlockReason = !snapshot
-    ? t("请先打开一个 Git 仓库")
-    : !hasRemote
-      ? t("仓库没有配置远程地址，无法获取。")
-      : null;
   const canPull = Boolean(snapshot && !pullBlockReason);
   const canPush = Boolean(snapshot && !pushBlockReason);
-  const canFetch = Boolean(snapshot && !fetchBlockReason);
   const groups = useMemo(
     () => ({
       conflicts: changes.filter((change) => change.conflicted),
@@ -1186,18 +1180,6 @@ export function GitPanel({
             <span className="git-behind"><span className="git-sync-arrow">↓</span>{snapshot.behind}</span>
           </span>
           {/* 禁用按钮在 Chromium 下不显示 title，用外层承载原因提示。 */}
-          <span className="git-sync-slot" title={fetchBlockReason ?? t("获取（fetch）")}>
-            <button
-              type="button"
-              className="git-icon-button"
-              title={fetchBlockReason ?? t("获取（fetch）")}
-              aria-label={t("获取")}
-              disabled={busy || !canFetch}
-              onClick={() => void store.fetch().catch(() => undefined)}
-            >
-              <Icon name="arrow-down" size={12} />
-            </button>
-          </span>
           <span className="git-sync-slot" title={pullBlockReason ?? t("拉取（git pull）")}>
             <button
               type="button"

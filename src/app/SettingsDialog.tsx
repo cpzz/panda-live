@@ -386,14 +386,6 @@ export function SettingsDialog({
                   {t("，不会附加任何参数。")}
                 </p>
                 <label className="settings-row">
-                  <span>{t("获取时清理已删除的远程分支")}</span>
-                  <input
-                    type="checkbox"
-                    checked={draft.git.fetchPrune}
-                    onChange={(event) => patch("git", { fetchPrune: event.target.checked })}
-                  />
-                </label>
-                <label className="settings-row">
                   <span>{t("网络操作超时（秒）")}</span>
                   <input
                     type="number"
@@ -407,7 +399,7 @@ export function SettingsDialog({
                   />
                 </label>
                 <p className="settings-note">
-                  {t("用于 fetch / pull / push；大仓库或慢网络可调大。")}
+                  {t("用于 pull / push；大仓库或慢网络可调大。")}
                 </p>
                 <label className="settings-row">
                   <span>{t("自动刷新仓库状态")}</span>

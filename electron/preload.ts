@@ -52,7 +52,6 @@ const api: PandaApi = {
     branches: (request) => invoke("git:branches", request),
     checkout: (request) => invoke("git:checkout", request),
     deleteBranch: (request) => invoke("git:deleteBranch", request),
-    fetch: (request) => invoke("git:fetch", request),
     pull: (request) => invoke("git:pull", request),
     push: (request) => invoke("git:push", request),
     addRemote: (request) => invoke("git:addRemote", request),

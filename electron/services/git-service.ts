@@ -250,7 +250,7 @@ export class GitService {
       inRepo: true,
       root,
       ...parseGitStatus(status.stdout),
-      // 只读本地配置，随状态一起刷新；界面据此判断能否 fetch / pull / push。
+      // 只读本地配置，随状态一起刷新；界面据此判断能否 pull / push。
       remotes: parseGitRemoteList(remoteList.stdout),
       operation: await detectOperation(gitDir.stdout.trim()),
     };
@@ -368,21 +368,6 @@ export class GitService {
     const command = parseGitCommand(commandLine);
     await runGit(["check-ref-format", "--branch", branch], root, command);
     await runGit(["branch", "-d", branch], root, command);
-    return this.snapshot(root, commandLine);
-  }
-
-  /** 网络操作选项：获取是否 prune、超时毫秒数，均由设置传入。 */
-  async fetch(
-    root: string,
-    commandLine?: string,
-    options: { prune?: boolean; timeoutMs?: number } = {},
-  ): Promise<GitSnapshot> {
-    const command = parseGitCommand(commandLine);
-    // 显式传 --no-prune，保证应用设置优先于用户 Git 配置中的 fetch.prune。
-    const args = options.prune === false ? ["fetch", "--no-prune"] : ["fetch", "--prune"];
-    await runGit(args, root, command, {
-      timeout: options.timeoutMs ?? GIT_NETWORK_TIMEOUT_MS,
-    });
     return this.snapshot(root, commandLine);
   }
 

@@ -477,7 +477,6 @@ export const ipcRequestSchemas = {
     create: z.boolean(),
   }),
   "git:deleteBranch": z.object({ root: z.string().min(1), branch: z.string().min(1).max(255) }),
-  "git:fetch": z.object({ root: z.string().min(1) }),
   "git:pull": z.object({
     root: z.string().min(1),
     /** 本次拉取是否改用变基：省略或 config 表示普通 git pull，rebase 表示 git pull --rebase。 */
@@ -605,7 +604,6 @@ export interface IpcResponseMap {
   "git:branches": GitBranch[];
   "git:checkout": GitSnapshot;
   "git:deleteBranch": GitSnapshot;
-  "git:fetch": GitSnapshot;
   "git:pull": GitSnapshot;
   "git:push": GitSnapshot;
   "git:addRemote": GitSnapshot;
@@ -670,7 +668,6 @@ export interface PandaApi {
     branches(request: { root: string }): Promise<GitBranch[]>;
     checkout(request: { root: string; branch: string; create: boolean }): Promise<GitSnapshot>;
     deleteBranch(request: { root: string; branch: string }): Promise<GitSnapshot>;
-    fetch(request: { root: string }): Promise<GitSnapshot>;
     pull(request: { root: string; strategy?: GitPullStrategy }): Promise<GitSnapshot>;
     push(request: { root: string; setUpstream: boolean; force?: boolean }): Promise<GitSnapshot>;
     addRemote(request: { root: string; name: string; url: string }): Promise<GitSnapshot>;

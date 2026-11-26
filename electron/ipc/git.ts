@@ -122,16 +122,6 @@ export function registerGitHandlers({
     return operation(() => git.deleteBranch(root, request.branch, command()));
   });
 
-  handle("git:fetch", async (request): Promise<GitSnapshot> => {
-    const root = await assertRoot(request.root);
-    return operation(() =>
-      git.fetch(root, command(), {
-        prune: gitSettings().fetchPrune,
-        timeoutMs: networkTimeout(),
-      }),
-    );
-  });
-
   handle("git:pull", async (request): Promise<GitSnapshot> => {
     const root = await assertRoot(request.root);
     return operation(() =>

@@ -68,9 +68,8 @@ test("M39：源代码管理变更、提交与分支", async () => {
     await expect(changeRow).toHaveCount(1);
     await expect(changeRow.locator(".git-change-status")).toHaveText("M");
 
-    // 这个仓库没有 remote：联网按钮直接置灰，配置入口在工具栏（与同步按钮用竖线分隔）。
+    // 这个仓库没有 remote：推送按钮直接置灰，配置入口在工具栏（与同步按钮用竖线分隔）。
     await expect(page.getByRole("button", { name: "推送", exact: true })).toBeDisabled();
-    await expect(page.getByRole("button", { name: "获取", exact: true })).toBeDisabled();
 
     // 首次配置远程：名字默认 origin，保存后推送按钮恢复可用。
     await page.getByRole("button", { name: "设置远程地址", exact: true }).click();
@@ -169,8 +168,8 @@ test("M39：源代码管理变更、提交与分支", async () => {
   }
 });
 
-/** M39：fetch / pull / push 走本地裸仓库，验证与远程同步。 */
-test("M39：fetch、pull 与 push", async () => {
+/** M39：pull / push 走本地裸仓库，验证与远程同步。 */
+test("M39：pull 与 push", async () => {
   test.setTimeout(180_000);
   const base = await fs.mkdtemp(path.join(os.tmpdir(), "panda-sync-"));
   const repo = path.join(base, "repo");
@@ -210,10 +209,6 @@ test("M39：fetch、pull 与 push", async () => {
     await openFolder(page, app, repo);
     await page.getByRole("tab", { name: "Git", exact: true }).click();
     await expect(page.locator(".git-branch-button")).toContainText("main", { timeout: 20_000 });
-
-    // fetch 后显示落后 1 个提交。
-    await page.getByRole("button", { name: "获取", exact: true }).click();
-    await expect(page.locator(".git-behind")).toHaveText("↓1", { timeout: 30_000 });
 
     // pull 快进到远程提交：打开确认窗口，核对远端/分支后确认。
     await page.getByRole("button", { name: "拉取", exact: true }).click();
