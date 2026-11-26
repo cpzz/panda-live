@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
   pickRemote,
   REMOTE_NAME_PATTERN,
@@ -9,6 +9,7 @@ import {
 import type { GitPullStrategy } from "../shared/settings";
 import type { GitStore, GitStoreState } from "../services/git-store";
 import { describeError } from "../shared/errors";
+import { relativeToRoot } from "../utils/paths";
 import { localeTag, t } from "../i18n";
 import { Icon } from "./icons";
 
@@ -25,8 +26,10 @@ interface GitPanelProps {
   onOpenCompareFile(filePath: string, base: string, target: string | null): void;
   /** 冲突项只打开文件本身：冲突标记需在源码模式处理，不进入只读差异视图。 */
   onOpenConflictFile(path: string): void;
-  /** 仓库内未保存文档数量；>0 时提示 Git 只读取磁盘内容。 */
-  dirtyCount: number;
+  /** 打开未保存文档：只切到编辑器，不保存、不进差异视图（磁盘上仍是旧内容）。 */
+  onOpenDocument(path: string): void;
+  /** 仓库内未保存文档；「未保存」分组据此列出，Git 操作仍只读取磁盘内容。 */
+  dirtyFiles: Array<{ id: string; path: string }>;
   /** 可切换的工作区目录（多根工作区与工作区外的当前文件目录）。 */
   repos: Array<{ path: string; name: string }>;
   selectedRepo: string | null;
@@ -214,6 +217,63 @@ function ChangeRow({
   );
 }
 
+/**
+ * 分组标题：整块可点折叠，右侧可挂一个批量操作（全部暂存 / 全部保存）。
+ * 折叠状态只影响列表，不影响计数与操作。
+ */
+function GroupHeader({
+  label,
+  count,
+  collapsed,
+  onToggle,
+  action,
+}: {
+  label: string;
+  count: number;
+  collapsed: boolean;
+  onToggle(): void;
+  action?: ReactNode;
+}) {
+  return (
+    <header>
+      <button
+        type="button"
+        className="git-group-toggle"
+        aria-expanded={!collapsed}
+        onClick={onToggle}
+      >
+        <Icon name="chevron-down" size={11} />
+        <span>{label}</span>
+        <span className="git-group-count">{count}</span>
+      </button>
+      {action}
+    </header>
+  );
+}
+
+/** 未保存项只有路径：磁盘上是旧内容，因此不提供暂存/放弃等 Git 操作。 */
+function UnsavedRow({ path, onOpen }: { path: string; onOpen(): void }) {
+  return (
+    <div
+      className="git-change-row"
+      title={path}
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return;
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        onOpen();
+      }}
+    >
+      <span className="git-change-status status-modified" title={t("有未保存修改")}>
+        ●
+      </span>
+      <span className="git-change-path">{path}</span>
+    </div>
+  );
+}
+
 /** 源代码管理侧栏：仓库状态、暂存/提交、分支与同步、历史。 */
 export function GitPanel({
   store,
@@ -223,7 +283,8 @@ export function GitPanel({
   onOpenCommitFile,
   onOpenCompareFile,
   onOpenConflictFile,
-  dirtyCount,
+  onOpenDocument,
+  dirtyFiles,
   repos,
   selectedRepo,
   onSelectRepo,
@@ -259,6 +320,8 @@ export function GitPanel({
   const [newBranch, setNewBranch] = useState("");
   const [detailHash, setDetailHash] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
+  /** 折叠的分组 id；缺省即展开。只存内存，切仓库与持续刷新都保留用户的选择。 */
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [baseDraft, setBaseDraft] = useState("HEAD~1");
   const [targetDraft, setTargetDraft] = useState("HEAD");
   const [appliedCompare, setAppliedCompare] = useState({ base: "HEAD~1", target: "HEAD" });
@@ -281,6 +344,29 @@ export function GitPanel({
   const root = snapshot?.root ?? null;
   const changes = snapshot?.changes ?? [];
   const busy = Boolean(state.busy);
+  /** 仓库内未保存文档；数量只用于确认文案，列表本身直接渲染。 */
+  const dirtyCount = dirtyFiles.length;
+  /**
+   * 与 Git 分组一样按路径排序，避免顺序随打开先后跳动。
+   * 用码位比较而不是 localeCompare：Git 的 status 输出就是码位序，
+   * 用本地化排序会让中文文件名在两组里排出不同顺序。
+   */
+  const unsavedFiles = useMemo(
+    () =>
+      dirtyFiles
+        .map((file) => ({
+          ...file,
+          relative: relativeToRoot(file.path, snapshot?.root ?? ""),
+        }))
+        .sort((a, b) => {
+          if (a.relative === b.relative) return 0;
+          return a.relative < b.relative ? -1 : 1;
+        }),
+    [dirtyFiles, snapshot?.root],
+  );
+  /** 分组折叠：缺省展开；只影响列表，不影响计数与批量操作。 */
+  const toggleGroup = (key: string): void =>
+    setCollapsedGroups((prev) => ({ ...prev, [key]: !prev[key] }));
   /** 已配置的远程；为空说明这个仓库只做本地版本管理，联网操作一律不可用。 */
   const remotes = snapshot?.remotes ?? [];
   const hasRemote = remotes.length > 0;
@@ -1120,18 +1206,6 @@ export function GitPanel({
           </button>
         </div>
       )}
-      {dirtyCount > 0 && (
-        <div className="git-dirty-notice">
-          <span>{t("有 {0} 个未保存文档，Git 操作只使用磁盘内容。", dirtyCount)}</span>
-          <button
-            type="button"
-            className="button small"
-            onClick={() => void onSaveAll().catch(() => undefined)}
-          >
-            {t("全部保存")}
-          </button>
-        </div>
-      )}
       {snapshot.operation && (
         <div className="git-operation-notice">
           <span>
@@ -1404,115 +1478,167 @@ export function GitPanel({
             </div>
           </div>
 
-          {changes.length === 0 && !state.loading && (
+          {changes.length === 0 && dirtyFiles.length === 0 && !state.loading && (
             <p className="placeholder git-clean">{t("工作区没有变更")}</p>
           )}
 
           {groups.conflicts.length > 0 && (
             <section className="git-change-group">
-              <header>
-                <span>{t("冲突")}</span>
-                <span className="git-group-count">{groups.conflicts.length}</span>
-              </header>
-              {groups.conflicts.map((change) => (
-                <ChangeRow
-                  key={change.path}
-                  change={change}
-                  onOpen={() => onOpenConflictFile(joinPath(root, change.path))}
-                  onStage={(target) =>
-                    void store.stage(changePaths(target)).catch(() => undefined)
-                  }
-                  disabled={busy}
-                />
-              ))}
+              <GroupHeader
+                label={t("冲突")}
+                count={groups.conflicts.length}
+                collapsed={Boolean(collapsedGroups.conflicts)}
+                onToggle={() => toggleGroup("conflicts")}
+              />
+              {!collapsedGroups.conflicts &&
+                groups.conflicts.map((change) => (
+                  <ChangeRow
+                    key={change.path}
+                    change={change}
+                    onOpen={() => onOpenConflictFile(joinPath(root, change.path))}
+                    onStage={(target) =>
+                      void store.stage(changePaths(target)).catch(() => undefined)
+                    }
+                    disabled={busy}
+                  />
+                ))}
             </section>
           )}
 
-          {groups.staged.length > 0 && (
+          {/* 未保存排在 Git 分组之前：它描述内存状态，其它分组描述磁盘状态。 */}
+          {unsavedFiles.length > 0 && (
             <section className="git-change-group">
-              <header>
-                <span>{t("已暂存")}</span>
-                <span className="git-group-count">{groups.staged.length}</span>
-                <button
-                  type="button"
-                  className="git-group-action"
-                  disabled={busy}
-                  onClick={() =>
-                    void store.unstage(allPaths(groups.staged)).catch(() => undefined)
-                  }
-                >
-                  {t("全部取消暂存")}
-                </button>
-              </header>
-              {groups.staged.map((change) => (
-                <ChangeRow
-                  key={change.path}
-                  change={change}
-                  onOpen={openStagedChange}
-                  onUnstage={(target) =>
-                    void store.unstage(changePaths(target)).catch(() => undefined)
-                  }
-                  disabled={busy}
-                />
-              ))}
-            </section>
-          )}
-
-          {groups.unstaged.length > 0 && (
-            <section className="git-change-group">
-              <header>
-                <span>{t("更改")}</span>
-                <span className="git-group-count">{groups.unstaged.length}</span>
-                <button
-                  type="button"
-                  className="git-group-action"
-                  disabled={busy}
-                  onClick={() =>
-                    void store.stage(allPaths(groups.unstaged)).catch(() => undefined)
-                  }
-                >
-                  {t("全部暂存")}
-                </button>
-              </header>
-              {groups.unstaged.map((change) => (
-                <ChangeRow
-                  key={change.path}
-                  change={change}
-                  onOpen={openWorktreeChange}
-                  onStage={(target) => void store.stage(changePaths(target)).catch(() => undefined)}
-                  onDiscard={(target) => confirmDiscard([target])}
-                  disabled={busy}
-                />
-              ))}
+              <GroupHeader
+                label={t("未保存")}
+                count={unsavedFiles.length}
+                collapsed={Boolean(collapsedGroups.unsaved)}
+                onToggle={() => toggleGroup("unsaved")}
+                action={
+                  <button
+                    type="button"
+                    className="git-group-action"
+                    disabled={busy}
+                    onClick={() => void onSaveAll().catch(() => undefined)}
+                  >
+                    {t("全部保存")}
+                  </button>
+                }
+              />
+              {!collapsedGroups.unsaved &&
+                unsavedFiles.map((file) => (
+                  <UnsavedRow
+                    key={file.id}
+                    path={file.relative}
+                    onOpen={() => onOpenDocument(file.path)}
+                  />
+                ))}
             </section>
           )}
 
           {groups.untracked.length > 0 && (
             <section className="git-change-group">
-              <header>
-                <span>{t("未跟踪")}</span>
-                <span className="git-group-count">{groups.untracked.length}</span>
-                <button
-                  type="button"
-                  className="git-group-action"
-                  disabled={busy}
-                  onClick={() =>
-                    void store.stage(allPaths(groups.untracked)).catch(() => undefined)
-                  }
-                >
-                  {t("全部暂存")}
-                </button>
-              </header>
-              {groups.untracked.map((change) => (
-                <ChangeRow
-                  key={change.path}
-                  change={change}
-                  onOpen={openWorktreeChange}
-                  onStage={(target) => void store.stage(changePaths(target)).catch(() => undefined)}
-                  onDiscard={(target) => confirmDiscard([target])}
-                  disabled={busy}
-                />
-              ))}
+              <GroupHeader
+                label={t("未跟踪")}
+                count={groups.untracked.length}
+                collapsed={Boolean(collapsedGroups.untracked)}
+                onToggle={() => toggleGroup("untracked")}
+                action={
+                  <button
+                    type="button"
+                    className="git-group-action"
+                    disabled={busy}
+                    onClick={() =>
+                      void store.stage(allPaths(groups.untracked)).catch(() => undefined)
+                    }
+                  >
+                    {t("全部暂存")}
+                  </button>
+                }
+              />
+              {!collapsedGroups.untracked &&
+                groups.untracked.map((change) => (
+                  <ChangeRow
+                    key={change.path}
+                    change={change}
+                    onOpen={openWorktreeChange}
+                    onStage={(target) =>
+                      void store.stage(changePaths(target)).catch(() => undefined)
+                    }
+                    onDiscard={(target) => confirmDiscard([target])}
+                    disabled={busy}
+                  />
+                ))}
+            </section>
+          )}
+
+          {groups.unstaged.length > 0 && (
+            <section className="git-change-group">
+              <GroupHeader
+                label={t("更改")}
+                count={groups.unstaged.length}
+                collapsed={Boolean(collapsedGroups.unstaged)}
+                onToggle={() => toggleGroup("unstaged")}
+                action={
+                  <button
+                    type="button"
+                    className="git-group-action"
+                    disabled={busy}
+                    onClick={() =>
+                      void store.stage(allPaths(groups.unstaged)).catch(() => undefined)
+                    }
+                  >
+                    {t("全部暂存")}
+                  </button>
+                }
+              />
+              {!collapsedGroups.unstaged &&
+                groups.unstaged.map((change) => (
+                  <ChangeRow
+                    key={change.path}
+                    change={change}
+                    onOpen={openWorktreeChange}
+                    onStage={(target) =>
+                      void store.stage(changePaths(target)).catch(() => undefined)
+                    }
+                    onDiscard={(target) => confirmDiscard([target])}
+                    disabled={busy}
+                  />
+                ))}
+            </section>
+          )}
+
+          {groups.staged.length > 0 && (
+            <section className="git-change-group">
+              <GroupHeader
+                label={t("已暂存")}
+                count={groups.staged.length}
+                collapsed={Boolean(collapsedGroups.staged)}
+                onToggle={() => toggleGroup("staged")}
+                action={
+                  <button
+                    type="button"
+                    className="git-group-action"
+                    disabled={busy}
+                    onClick={() =>
+                      void store.unstage(allPaths(groups.staged)).catch(() => undefined)
+                    }
+                  >
+                    {t("全部取消暂存")}
+                  </button>
+                }
+              />
+              {!collapsedGroups.staged &&
+                groups.staged.map((change) => (
+                  <ChangeRow
+                    key={change.path}
+                    change={change}
+                    onOpen={openStagedChange}
+                    onUnstage={(target) =>
+                      void store.unstage(changePaths(target)).catch(() => undefined)
+                    }
+                    disabled={busy}
+                  />
+                ))}
             </section>
           )}
         </div>

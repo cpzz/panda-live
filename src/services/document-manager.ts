@@ -371,9 +371,17 @@ export class DocumentManager {
     this.notify(kind, message, false);
   }
 
-  /** 仓库内未保存文档数量；Git 操作只读取磁盘内容。 */
-  dirtyCountInRoot(root: string): number {
-    return this.state.documents.filter((doc) => doc.dirty && doc.path && isUnderRoot(doc.path, root)).length;
+  /**
+   * 仓库内未保存文档的路径清单，供侧栏 Git 面板的「未保存」分组列出。
+   * 只读状态快照，不触发保存；Git 操作仍只使用磁盘内容。
+   */
+  dirtyDocumentsInRoot(root: string): Array<{ id: string; path: string }> {
+    const result: Array<{ id: string; path: string }> = [];
+    for (const doc of this.state.documents) {
+      if (!doc.dirty || !doc.path || !isUnderRoot(doc.path, root)) continue;
+      result.push({ id: doc.id, path: doc.path });
+    }
+    return result;
   }
 
   /** 保存仓库内所有未保存文档；任一保存失败时返回 false。 */

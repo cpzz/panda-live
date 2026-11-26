@@ -1734,7 +1734,11 @@ export function App() {
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [noticesOpen]);
   const gitRoot = gitState.snapshot?.root ?? null;
-  const gitDirtyCount = gitRoot ? manager.dirtyCountInRoot(gitRoot) : 0;
+  // 只在文档集合或仓库根变化时重算，避免每次 App 渲染都全量扫描，也让下游 GitPanel 的 useMemo 真正命中。
+  const gitDirtyFiles = useMemo(
+    () => (gitRoot ? manager.dirtyDocumentsInRoot(gitRoot) : []),
+    [manager, gitRoot, state.documents],
+  );
   const previousDirtyRef = useRef<Map<string, boolean>>(new Map());
   // 文档从“未保存”变为“已保存”时刷新 Git 状态，覆盖保存/自动保存。
   useEffect(() => {
@@ -2585,7 +2589,7 @@ export function App() {
                 <GitPanel
                   store={git}
                   state={gitState}
-                  dirtyCount={gitDirtyCount}
+                  dirtyFiles={gitDirtyFiles}
                   pullStrategy={settings.git.pullStrategy}
                   onRecord={(kind, message) => manager.recordNotice(kind, message)}
                   repos={gitRepoOptions}
@@ -2598,6 +2602,7 @@ export function App() {
                     return saved;
                   }}
                   onOpenFile={(filePath) => openGitFile(filePath, "buffer")}
+                  onOpenDocument={(filePath) => void manager.openPath(filePath).catch(() => undefined)}
                   onOpenStagedFile={(filePath) => openGitFile(filePath, "index")}
                   onOpenCommitFile={(shortHash, file) => openCommitFile(shortHash, file)}
                   onOpenCompareFile={openCompareFile}

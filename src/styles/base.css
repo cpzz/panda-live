@@ -5512,7 +5512,6 @@ body.resizing * {
   flex: 1;
 }
 
-.git-dirty-notice,
 .git-operation-notice {
   display: flex;
   align-items: center;
@@ -5525,7 +5524,6 @@ body.resizing * {
   font-size: 11px;
 }
 
-.git-dirty-notice span,
 .git-operation-notice span {
   flex: 1;
 }
@@ -5611,6 +5609,42 @@ body.resizing * {
   height: 24px;
   color: var(--muted);
   font-size: 11px;
+}
+
+/* 分组标题整体可点折叠：按钮占满标题行，右侧留给批量操作。 */
+.git-group-toggle {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.git-group-toggle:hover {
+  color: var(--fg);
+}
+
+.git-group-toggle:focus-visible {
+  border-radius: 2px;
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.git-group-toggle svg {
+  flex: 0 0 auto;
+  transition: transform 120ms ease;
+}
+
+.git-group-toggle[aria-expanded="false"] svg {
+  transform: rotate(-90deg);
 }
 
 .git-group-count {

@@ -29,6 +29,9 @@ async function initRepo(dir: string): Promise<void> {
 }
 
 async function openFolder(page: import("@playwright/test").Page, app: import("@playwright/test").ElectronApplication, dir: string): Promise<void> {
+  // 快捷键由渲染层 keydown 监听与 App 注入的 openWorkspaceFolder 处理；
+  // firstWindow 返回时 React 可能尚未挂载，先等根节点出现，避免按键被丢弃。
+  await page.locator(".app").waitFor();
   await app.evaluate(({ dialog }, target) => {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
   }, dir);
@@ -703,6 +706,15 @@ test("M39：对比基线选择器与文件历史分页", async () => {
     await expect(dirtyPopover).toContainText("未暂存更改");
     await expect(dirtyPopover).toContainText("已暂存更改");
     await expect(dirtyPopover).toContainText("此文件的提交历史");
+
+    // 侧栏「未保存」分组列出编辑器里尚未落盘的文档，替代原来的常驻提示条。
+    await page.keyboard.press("Escape");
+    // dirty.md 磁盘上有改动，Git 标签带变更数角标，可达名称形如 "Git N"；
+    // 依赖 getByRole 对 name 的默认子串匹配（非精确），故用 "Git" 仍能命中。
+    await page.getByRole("tab", { name: "Git" }).click();
+    const unsavedGroup = page.locator(".git-change-group").filter({ hasText: "未保存" });
+    await expect(unsavedGroup).toContainText("dirty.md");
+    await expect(unsavedGroup.getByRole("button", { name: "全部保存" })).toBeVisible();
   } finally {
     await app.close();
     await fs.rm(repo, { recursive: true, force: true });
